@@ -452,7 +452,10 @@ export default function CampaignsNew() {
     }
   }, [currentStep, watchGender, watchAgeMin, watchAgeMax, watchRegions, isMaptics, advancedTargetingKey]);
 
-  const costPerMessage = 50;
+  // 메시지 유형별 단가
+  const MESSAGE_PRICES = { LMS: 100, MMS: 120, RCS: 100 };
+  const messageType = selectedTemplate?.messageType || 'LMS';
+  const costPerMessage = MESSAGE_PRICES[messageType as keyof typeof MESSAGE_PRICES] || 100;
   const estimatedCost = watchTargetCount * costPerMessage;
   const userBalance = parseFloat(user?.balance as string || "0");
 

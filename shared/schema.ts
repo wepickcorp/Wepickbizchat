@@ -13,6 +13,20 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// 메시지 유형별 단가 (원)
+export const MESSAGE_PRICES = {
+  LMS: 100,
+  MMS: 120,
+  RCS: 100, // RCS는 LMS와 동일
+} as const;
+
+export type MessageType = keyof typeof MESSAGE_PRICES;
+
+// 메시지 유형에 따른 단가 반환 함수
+export function getMessagePrice(messageType: string): number {
+  return MESSAGE_PRICES[messageType as MessageType] || MESSAGE_PRICES.LMS;
+}
+
 // Session storage table for Replit Auth
 export const sessions = pgTable(
   "sessions",
@@ -131,7 +145,7 @@ export const campaigns = pgTable("campaigns", {
   
   // 예산
   budget: decimal("budget", { precision: 12, scale: 0 }).notNull(),
-  costPerMessage: decimal("cost_per_message", { precision: 10, scale: 0 }).default("50"),
+  costPerMessage: decimal("cost_per_message", { precision: 10, scale: 0 }).default("100"),
   
   // BizChat 연동
   bizchatCampaignId: varchar("bizchat_campaign_id", { length: 100 }),

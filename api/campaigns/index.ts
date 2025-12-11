@@ -951,8 +951,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (template.status !== 'approved') return res.status(400).json({ error: 'Template must be approved' });
 
+      // 메시지 유형별 단가
+      const MESSAGE_PRICES: Record<string, number> = { LMS: 100, MMS: 120, RCS: 100 };
+      const costPerMessage = MESSAGE_PRICES[template.messageType] || 100;
+      
       const userBalance = parseFloat(user.balance || '0');
-      const estimatedCost = data.targetCount * 50;
+      const estimatedCost = data.targetCount * costPerMessage;
       if (userBalance < estimatedCost) return res.status(400).json({ error: '잔액이 부족합니다' });
 
       // 지오펜스 선택 여부 먼저 확인 (ATS vs Maptics 분기)

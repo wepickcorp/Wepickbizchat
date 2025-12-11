@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
-import { pgTable, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, decimal, serial, varchar } from 'drizzle-orm/pg-core';
 
 neonConfig.fetchConnectionCache = true;
 
@@ -10,14 +10,36 @@ const campaigns = pgTable('campaigns', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
+  messageType: varchar('message_type', { length: 10 }),
   bizchatCampaignId: text('bizchat_campaign_id'),
   statusCode: integer('status_code').default(0),
   status: text('status').default('temp_registered'),
   stateReason: text('state_reason'),
   sentCount: integer('sent_count').default(0),
   successCount: integer('success_count').default(0),
+  costPerMessage: decimal('cost_per_message', { precision: 10, scale: 0 }).default('100'),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+const users = pgTable('users', {
+  id: varchar('id').primaryKey(),
+  balance: decimal('balance', { precision: 12, scale: 0 }).default('0'),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+const transactions = pgTable('transactions', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  type: text('type').notNull(),
+  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+  balanceAfter: decimal('balance_after', { precision: 12, scale: 2 }).notNull(),
+  description: text('description'),
+  referenceId: text('reference_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// 메시지 유형별 단가
+const MESSAGE_PRICES: Record<string, number> = { LMS: 100, MMS: 120, RCS: 100 };
 
 function getDb() {
   const dbUrl = process.env.DATABASE_URL;
@@ -141,6 +163,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .where(eq(campaigns.id, campaign.id));
 
     console.log(`[Callback] Updated campaign ${campaign.id}: ${statusInfo.status} (state=${payload.state})`);
+
+    // 발송 완료(state=40) 시 비용 차감
+    if (payload.state === 40) {
+      try {
+        // 중복 차감 방지: 트랜잭션 테이블에서 이미 차감 기록이 있는지 확인
+        const existingSpend = await db.select()
+          .from(transactions)
+          .where(eq(transactions.referenceId, campaign.id));
+        
+        const alreadyCharged = existingSpend.some(t => t.type === 'spend');
+        
+        if (alreadyCharged) {
+          console.log(`[Callback] Skipping duplicate charge for campaign ${campaign.id} (already charged)`);
+        } else {
+          // 사용자 정보 조회
+          const userResult = await db.select().from(users).where(eq(users.id, campaign.userId));
+          if (userResult.length > 0) {
+            const user = userResult[0];
+            const currentBalance = parseFloat(user.balance as string || '0');
+            
+            // 실제 발송 건수 기준으로 비용 계산
+            const sentCount = campaign.successCount || campaign.sentCount || 0;
+            const messageType = campaign.messageType || 'LMS';
+            const costPerMessage = MESSAGE_PRICES[messageType] || MESSAGE_PRICES.LMS;
+            const totalCost = sentCount * costPerMessage;
+            
+            if (totalCost > 0 && currentBalance > 0) {
+              // 실제 차감 금액은 잔액을 초과할 수 없음
+              const actualDeduction = Math.min(totalCost, currentBalance);
+              const newBalance = currentBalance - actualDeduction;
+              
+              // 트랜잭션 먼저 기록 (중복 방지의 핵심)
+              await db.insert(transactions).values({
+                userId: campaign.userId,
+                type: 'spend',
+                amount: (-actualDeduction).toString(),
+                balanceAfter: newBalance.toString(),
+                description: `캠페인 발송 비용 (${campaign.name})`,
+                referenceId: campaign.id,
+              });
+              
+              // 잔액 차감
+              await db.update(users).set({
+                balance: newBalance.toString(),
+                updatedAt: new Date(),
+              }).where(eq(users.id, campaign.userId));
+              
+              console.log(`[Callback] Deducted ${actualDeduction} KRW from user ${campaign.userId} for campaign ${campaign.id} (${sentCount} messages × ${costPerMessage} KRW)`);
+              
+              if (actualDeduction < totalCost) {
+                console.warn(`[Callback] Insufficient balance: charged ${actualDeduction} of ${totalCost} KRW`);
+              }
+            } else if (totalCost === 0) {
+              console.log(`[Callback] No charge needed for campaign ${campaign.id} (0 messages sent)`);
+            }
+          }
+        }
+      } catch (deductError) {
+        console.error('[Callback] Error deducting balance:', deductError);
+        // 비용 차감 실패해도 상태 업데이트는 성공으로 처리
+      }
+    }
 
     // BizChat에 HTTP 200 응답 필수
     return res.status(200).json({
