@@ -1,0 +1,57 @@
+URL	/api/v1/ats/rpt/area				
+Description	"지역별 분석 리포트.
+ATS 로 발송된 캠페인에 대해서 사용 가능 하며, 발송 익일 부터 조회 가능 하며 캠페인 시작 시간 +96 시간 까지 업데이트 된다."				
+Method	POST				
+Header	Authorization: {token}				
+					
+Request					
+In Type	Parameter	Mandatory	Data Type	Value(Example)	Description
+Query Parameter	tid	Y	string	"1740622942946"	transaction ID
+Body	id	Y	string	"0d976e4b3fa2391ea7e5340b854c4cf7"	캠페인 아이디
+Example(Query paramter)	tid=1740622942946				
+Example(Body)	"{
+    ""id"" : ""0d976e4b3fa2391ea7e5340b854c4cf7""
+}"				
+					
+Response					
+구분	Parameter	Mandatory	Data Type	Value(Example)	Description
+Body	tid	Y	string	"1740621753572"	request 시 사용한 tid 값
+	code	Y	string	"S000001"	API 성공, 실패 코드
+	msg	Y	string	"Success"	API 성공, 실패 메시지
+	data	Y	object	{}	
+	data.list	Y	object array	[]	리포트 데이터. 데이터가 없으면 empty array 가 리턴 된다.
+	data.list[].area	N	string	"서울"	지역명(추정 집주소, 시도 단위, 예시. 경기, 부산, 경북,…)
+	data.list[].rcsReactCnt	N	number	0	RCS 반응 카운트
+	data.list[].rcsReactRatio	N	string	"0.0"	RCS 반응률
+	data.list[].rcsSuccessCnt	N	number	0	RCS 발송 성공 카운트
+	data.list[].vmgReactCnt	N	number	0	VMG(일반 메시지) 반응 카운트
+	data.list[].vmgReactRatio	N	string	"0.0"	VMG(일반 메시지) 반응률
+	data.list[].vmgSuccessCnt	N	number	0	VMG(일반 메시지) 발송 성공 카운트
+	data.list[].totReactCnt	N	number	0	전체 반응 카운트
+	data.list[].totReactRatio	N	string	"0.0"	전체 반응률
+	data.list[].totRewardCnt	N	number	0	전체 리워드 카운트
+	data.list[].totRewardRatio	N	string	"0.0"	전체 리워드 반응률
+	data.list[].totSuccessCnt	N	number	0	전체 발송 성공 카운트
+Example	"{
+    ""tid"": ""1740622942946"",
+    ""code"": ""S000001"",
+    ""msg"": ""Success"",
+    ""data"": {
+        ""list"": [
+            {
+                ""area"": ""서울"",
+                ""rcsReactCnt"": 429,
+                ""rcsReactRatio"": ""0.9"",
+                ""rcsSuccessCnt"": 50261,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 33889,
+                ""totReactCnt"": 429,
+                ""totReactRatio"": ""0.5"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 84150
+            }
+        ]
+    }
+}"				

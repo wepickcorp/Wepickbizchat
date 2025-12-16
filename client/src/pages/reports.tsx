@@ -10,7 +10,9 @@ import {
   Calendar,
   RefreshCw,
   Loader2,
-  Eye
+  Eye,
+  Users,
+  MapPin
 } from "lucide-react";
 import { useState } from "react";
 import { formatNumber, formatDateTime, formatCurrency } from "@/lib/authUtils";
@@ -36,6 +38,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -65,6 +68,31 @@ interface BizChatStatsData {
   rcsMsgReadRatio: string;
 }
 
+interface GenderAgeReportItem {
+  age: string;
+  sexCd: string;
+  totSuccessCnt: number;
+  totReactCnt: number;
+  totReactRatio: string;
+  rcsSuccessCnt: number;
+  rcsReactCnt: number;
+  rcsReactRatio: string;
+  vmgSuccessCnt: number;
+  vmgReactCnt: number;
+  vmgReactRatio: string;
+}
+
+interface AreaReportItem {
+  area: string;
+  totSuccessCnt: number;
+  totReactCnt: number;
+  totReactRatio: string;
+  rcsSuccessCnt: number;
+  rcsReactCnt: number;
+  vmgSuccessCnt: number;
+  vmgReactCnt: number;
+}
+
 export default function Reports() {
   const [periodFilter, setPeriodFilter] = useState<string>("all");
   const { toast } = useToast();
@@ -72,6 +100,11 @@ export default function Reports() {
   const [campaignStats, setCampaignStats] = useState<BizChatStatsData | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("basic");
+  const [genderAgeData, setGenderAgeData] = useState<GenderAgeReportItem[]>([]);
+  const [areaData, setAreaData] = useState<AreaReportItem[]>([]);
+  const [isLoadingGenderAge, setIsLoadingGenderAge] = useState(false);
+  const [isLoadingArea, setIsLoadingArea] = useState(false);
 
   const { data: campaigns, isLoading } = useQuery<CampaignWithReport[]>({
     queryKey: ["/api/campaigns?includeReports=true"],
@@ -136,6 +169,94 @@ export default function Reports() {
     } finally {
       setIsLoadingStats(false);
     }
+  };
+
+  const fetchGenderAgeReport = async (campaignId: string) => {
+    setIsLoadingGenderAge(true);
+    setGenderAgeData([]);
+    try {
+      const response = await apiRequest("POST", "/api/bizchat/reports/gender-age", { campaignId });
+      const data = await response.json();
+      if (data.success && data.data?.list) {
+        setGenderAgeData(data.data.list);
+      } else if (data.error) {
+        toast({
+          title: "성별/연령대 분석 조회 실패",
+          description: data.error,
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "성별/연령대 분석 조회 실패",
+        description: "서버와 통신하는 중 오류가 발생했어요.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingGenderAge(false);
+    }
+  };
+
+  const fetchAreaReport = async (campaignId: string) => {
+    setIsLoadingArea(true);
+    setAreaData([]);
+    try {
+      const response = await apiRequest("POST", "/api/bizchat/reports/area", { campaignId });
+      const data = await response.json();
+      if (data.success && data.data?.list) {
+        setAreaData(data.data.list);
+      } else if (data.error) {
+        toast({
+          title: "지역별 분석 조회 실패",
+          description: data.error,
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "지역별 분석 조회 실패",
+        description: "서버와 통신하는 중 오류가 발생했어요.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingArea(false);
+    }
+  };
+
+  const isAtsEligible = (campaign: CampaignWithReport | null): boolean => {
+    if (!campaign) return false;
+    return campaign.rcvType === 0 && (campaign.status === 'completed' || campaign.status === 'stopped');
+  };
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (!selectedCampaign) return;
+    
+    if (tab === "gender-age" && !isLoadingGenderAge) {
+      if (isAtsEligible(selectedCampaign)) {
+        fetchGenderAgeReport(selectedCampaign.id);
+      }
+    }
+    if (tab === "area" && !isLoadingArea) {
+      if (isAtsEligible(selectedCampaign)) {
+        fetchAreaReport(selectedCampaign.id);
+      }
+    }
+  };
+
+  const getGenderAgeChartData = () => {
+    const ageGroups = ["~10대", "20대", "30대", "40대", "50대", "60대~"];
+    return ageGroups.map(age => {
+      const male = genderAgeData.find(d => d.age === age && d.sexCd === "1");
+      const female = genderAgeData.find(d => d.age === age && d.sexCd === "2");
+      return {
+        age,
+        남성: male?.totSuccessCnt || 0,
+        여성: female?.totSuccessCnt || 0,
+        남성반응률: parseFloat(male?.totReactRatio || "0"),
+        여성반응률: parseFloat(female?.totReactRatio || "0"),
+      };
+    });
   };
 
   return (
@@ -379,116 +500,296 @@ export default function Reports() {
         </CardContent>
       </Card>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={isDialogOpen} onOpenChange={(open) => {
+        setIsDialogOpen(open);
+        if (!open) {
+          setActiveTab("basic");
+          setGenderAgeData([]);
+          setAreaData([]);
+        }
+      }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-primary" />
-              BizChat 실시간 통계
+              캠페인 상세 분석
             </DialogTitle>
             <DialogDescription>
-              {selectedCampaign?.name} · 통계는 5분 주기로 갱신됩니다
+              {selectedCampaign?.name} · ATS 캠페인은 성별/연령대 및 지역별 분석이 가능해요
             </DialogDescription>
           </DialogHeader>
 
-          {isLoadingStats ? (
-            <div className="py-8 flex flex-col items-center justify-center gap-4">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-muted-foreground">BizChat 통계를 조회하고 있어요...</p>
-            </div>
-          ) : campaignStats ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-4">
-                <div className="text-center p-3 bg-muted rounded-lg">
-                  <p className="text-2xl font-bold text-primary">
-                    {formatNumber(campaignStats.mdnCnt || 0)}
-                  </p>
-                  <p className="text-tiny text-muted-foreground">발송 대상자</p>
-                </div>
-                <div className="text-center p-3 bg-muted rounded-lg">
-                  <p className="text-2xl font-bold text-chart-4">
-                    {formatNumber(campaignStats.sendTryCnt || 0)}
-                  </p>
-                  <p className="text-tiny text-muted-foreground">발송 시도</p>
-                </div>
-                <div className="text-center p-3 bg-muted rounded-lg">
-                  <p className="text-2xl font-bold text-success">
-                    {formatNumber(campaignStats.msgRecvCnt || 0)}
-                  </p>
-                  <p className="text-tiny text-muted-foreground">수신 성공</p>
-                </div>
-                <div className="text-center p-3 bg-muted rounded-lg">
-                  <p className="text-2xl font-bold text-destructive">
-                    {formatNumber(campaignStats.msgNotRecvCnt || 0)}
-                  </p>
-                  <p className="text-tiny text-muted-foreground">수신 실패</p>
-                </div>
-              </div>
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="basic" className="gap-1" data-testid="tab-basic-stats">
+                <BarChart3 className="h-4 w-4" />
+                기본 통계
+              </TabsTrigger>
+              <TabsTrigger value="gender-age" className="gap-1" data-testid="tab-gender-age">
+                <Users className="h-4 w-4" />
+                성별/연령대
+              </TabsTrigger>
+              <TabsTrigger value="area" className="gap-1" data-testid="tab-area">
+                <MapPin className="h-4 w-4" />
+                지역별
+              </TabsTrigger>
+            </TabsList>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="p-4 bg-muted/50 rounded-lg border space-y-2">
-                  <h4 className="font-medium text-small flex items-center gap-2">
-                    메시지 유형별 수신
-                  </h4>
-                  <div className="flex justify-between text-small">
-                    <span className="text-muted-foreground">RCS 수신</span>
-                    <span className="font-medium">{formatNumber(campaignStats.rcsMsgRecvCnt || 0)}명</span>
-                  </div>
-                  <div className="flex justify-between text-small">
-                    <span className="text-muted-foreground">일반(VMG) 수신</span>
-                    <span className="font-medium">{formatNumber(campaignStats.vmgMsgRecvCnt || 0)}명</span>
-                  </div>
+            <TabsContent value="basic" className="mt-4">
+              {isLoadingStats ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-muted-foreground">BizChat 통계를 조회하고 있어요...</p>
                 </div>
-                <div className="p-4 bg-muted/50 rounded-lg border space-y-2">
-                  <h4 className="font-medium text-small flex items-center gap-2">
-                    제외 현황
-                  </h4>
-                  <div className="flex justify-between text-small">
-                    <span className="text-muted-foreground">타 캠페인 수신자</span>
-                    <span className="font-medium">{formatNumber(campaignStats.dupExcludeCnt || 0)}명</span>
+              ) : campaignStats ? (
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <p className="text-2xl font-bold text-primary">
+                        {formatNumber(campaignStats.mdnCnt || 0)}
+                      </p>
+                      <p className="text-tiny text-muted-foreground">발송 대상자</p>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <p className="text-2xl font-bold text-chart-4">
+                        {formatNumber(campaignStats.sendTryCnt || 0)}
+                      </p>
+                      <p className="text-tiny text-muted-foreground">발송 시도</p>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <p className="text-2xl font-bold text-success">
+                        {formatNumber(campaignStats.msgRecvCnt || 0)}
+                      </p>
+                      <p className="text-tiny text-muted-foreground">수신 성공</p>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <p className="text-2xl font-bold text-destructive">
+                        {formatNumber(campaignStats.msgNotRecvCnt || 0)}
+                      </p>
+                      <p className="text-tiny text-muted-foreground">수신 실패</p>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-small">
-                    <span className="text-muted-foreground">광고 수신 미동의</span>
-                    <span className="font-medium">{formatNumber(campaignStats.adRcvExcludeCnt || 0)}명</span>
-                  </div>
-                </div>
-              </div>
 
-              <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <h4 className="font-medium text-small mb-3 flex items-center gap-2">
-                  <MousePointerClick className="h-4 w-4 text-primary" />
-                  반응 통계
-                </h4>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-primary">{campaignStats.msgReactRatio || '0'}%</p>
-                    <p className="text-tiny text-muted-foreground">전체 반응률</p>
-                    <p className="text-tiny text-muted-foreground">{formatNumber(campaignStats.msgReactCnt || 0)}명</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="p-4 bg-muted/50 rounded-lg border space-y-2">
+                      <h4 className="font-medium text-small">메시지 유형별 수신</h4>
+                      <div className="flex justify-between text-small">
+                        <span className="text-muted-foreground">RCS 수신</span>
+                        <span className="font-medium">{formatNumber(campaignStats.rcsMsgRecvCnt || 0)}명</span>
+                      </div>
+                      <div className="flex justify-between text-small">
+                        <span className="text-muted-foreground">일반(VMG) 수신</span>
+                        <span className="font-medium">{formatNumber(campaignStats.vmgMsgRecvCnt || 0)}명</span>
+                      </div>
+                    </div>
+                    <div className="p-4 bg-muted/50 rounded-lg border space-y-2">
+                      <h4 className="font-medium text-small">제외 현황</h4>
+                      <div className="flex justify-between text-small">
+                        <span className="text-muted-foreground">타 캠페인 수신자</span>
+                        <span className="font-medium">{formatNumber(campaignStats.dupExcludeCnt || 0)}명</span>
+                      </div>
+                      <div className="flex justify-between text-small">
+                        <span className="text-muted-foreground">광고 수신 미동의</span>
+                        <span className="font-medium">{formatNumber(campaignStats.adRcvExcludeCnt || 0)}명</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-chart-5">{campaignStats.rcsMsgReactRatio || '0'}%</p>
-                    <p className="text-tiny text-muted-foreground">RCS 반응률</p>
-                    <p className="text-tiny text-muted-foreground">{formatNumber(campaignStats.rcsMsgReactCnt || 0)}명</p>
+
+                  <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+                    <h4 className="font-medium text-small mb-3 flex items-center gap-2">
+                      <MousePointerClick className="h-4 w-4 text-primary" />
+                      반응 통계
+                    </h4>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-primary">{campaignStats.msgReactRatio || '0'}%</p>
+                        <p className="text-tiny text-muted-foreground">전체 반응률</p>
+                        <p className="text-tiny text-muted-foreground">{formatNumber(campaignStats.msgReactCnt || 0)}명</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-chart-5">{campaignStats.rcsMsgReactRatio || '0'}%</p>
+                        <p className="text-tiny text-muted-foreground">RCS 반응률</p>
+                        <p className="text-tiny text-muted-foreground">{formatNumber(campaignStats.rcsMsgReactCnt || 0)}명</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-chart-3">{campaignStats.vmgMsgReactRatio || '0'}%</p>
+                        <p className="text-tiny text-muted-foreground">일반 반응률</p>
+                        <p className="text-tiny text-muted-foreground">{formatNumber(campaignStats.vmgMsgReactCnt || 0)}명</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-chart-3">{campaignStats.vmgMsgReactRatio || '0'}%</p>
-                    <p className="text-tiny text-muted-foreground">일반 반응률</p>
-                    <p className="text-tiny text-muted-foreground">{formatNumber(campaignStats.vmgMsgReactCnt || 0)}명</p>
+
+                  <div className="flex justify-between items-center text-tiny text-muted-foreground">
+                    <span>통계 수집일: {campaignStats.statDate ? `${campaignStats.statDate.slice(0,4)}-${campaignStats.statDate.slice(4,6)}-${campaignStats.statDate.slice(6,8)}` : '-'}</span>
+                    <Badge variant="outline">5분 주기 갱신</Badge>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>통계 데이터를 가져오지 못했어요</p>
+                </div>
+              )}
+            </TabsContent>
 
-              <div className="flex justify-between items-center text-tiny text-muted-foreground">
-                <span>통계 수집일: {campaignStats.statDate ? `${campaignStats.statDate.slice(0,4)}-${campaignStats.statDate.slice(4,6)}-${campaignStats.statDate.slice(6,8)}` : '-'}</span>
-                <Badge variant="outline">5분 주기 갱신</Badge>
-              </div>
-            </div>
-          ) : (
-            <div className="py-8 text-center text-muted-foreground">
-              <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>통계 데이터를 가져오지 못했어요</p>
-            </div>
-          )}
+            <TabsContent value="gender-age" className="mt-4">
+              {!isAtsEligible(selectedCampaign) ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>성별/연령대별 분석을 사용할 수 없어요</p>
+                  <p className="text-tiny mt-1">
+                    {selectedCampaign?.rcvType !== 0 
+                      ? "ATS 타겟팅 캠페인만 조회할 수 있어요." 
+                      : "캠페인 발송이 완료된 후 익일부터 조회할 수 있어요."}
+                  </p>
+                </div>
+              ) : isLoadingGenderAge ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-muted-foreground">성별/연령대별 분석을 조회하고 있어요...</p>
+                </div>
+              ) : genderAgeData.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-muted/50 rounded-lg border">
+                    <h4 className="font-medium text-small mb-4">연령대별 발송 성공 수</h4>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={getGenderAgeChartData()} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <XAxis dataKey="age" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip 
+                          formatter={(value: number) => formatNumber(value)}
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="남성" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="여성" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="p-4 bg-muted/50 rounded-lg border">
+                      <h4 className="font-medium text-small mb-3 flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-chart-1"></span>
+                        남성 상세
+                      </h4>
+                      <div className="space-y-2">
+                        {genderAgeData.filter(d => d.sexCd === "1").map(item => (
+                          <div key={item.age} className="flex justify-between text-small">
+                            <span className="text-muted-foreground">{item.age}</span>
+                            <span className="font-medium">
+                              {formatNumber(item.totSuccessCnt)}명 
+                              <span className="text-primary ml-2">({item.totReactRatio}%)</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="p-4 bg-muted/50 rounded-lg border">
+                      <h4 className="font-medium text-small mb-3 flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-chart-2"></span>
+                        여성 상세
+                      </h4>
+                      <div className="space-y-2">
+                        {genderAgeData.filter(d => d.sexCd === "2").map(item => (
+                          <div key={item.age} className="flex justify-between text-small">
+                            <span className="text-muted-foreground">{item.age}</span>
+                            <span className="font-medium">
+                              {formatNumber(item.totSuccessCnt)}명 
+                              <span className="text-primary ml-2">({item.totReactRatio}%)</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-tiny text-muted-foreground">
+                    * ATS 캠페인만 조회 가능하며, 발송 익일부터 조회됩니다. 데이터는 캠페인 시작 후 96시간까지 업데이트됩니다.
+                  </p>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>성별/연령대별 분석 데이터가 없어요</p>
+                  <p className="text-tiny mt-1">ATS 캠페인만 조회 가능하며, 발송 익일부터 조회됩니다.</p>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="area" className="mt-4">
+              {!isAtsEligible(selectedCampaign) ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>지역별 분석을 사용할 수 없어요</p>
+                  <p className="text-tiny mt-1">
+                    {selectedCampaign?.rcvType !== 0 
+                      ? "ATS 타겟팅 캠페인만 조회할 수 있어요." 
+                      : "캠페인 발송이 완료된 후 익일부터 조회할 수 있어요."}
+                  </p>
+                </div>
+              ) : isLoadingArea ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-muted-foreground">지역별 분석을 조회하고 있어요...</p>
+                </div>
+              ) : areaData.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-muted/50 rounded-lg border">
+                    <h4 className="font-medium text-small mb-4">지역별 발송 성공 수</h4>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart 
+                        data={areaData.slice(0, 10)} 
+                        layout="vertical"
+                        margin={{ top: 10, right: 30, left: 40, bottom: 0 }}
+                      >
+                        <XAxis type="number" tick={{ fontSize: 12 }} />
+                        <YAxis type="category" dataKey="area" tick={{ fontSize: 12 }} width={50} />
+                        <Tooltip 
+                          formatter={(value: number) => formatNumber(value)}
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                          }}
+                        />
+                        <Bar dataKey="totSuccessCnt" name="발송 성공" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="p-4 bg-muted/50 rounded-lg border">
+                    <h4 className="font-medium text-small mb-3">전체 지역 현황</h4>
+                    <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 max-h-[200px] overflow-y-auto">
+                      {areaData.map(item => (
+                        <div key={item.area} className="flex justify-between text-small p-2 bg-background rounded">
+                          <span className="text-muted-foreground">{item.area}</span>
+                          <span className="font-medium">
+                            {formatNumber(item.totSuccessCnt)}명
+                            <span className="text-primary ml-2">({item.totReactRatio}%)</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-tiny text-muted-foreground">
+                    * ATS 캠페인만 조회 가능하며, 발송 익일부터 조회됩니다. 데이터는 캠페인 시작 후 96시간까지 업데이트됩니다.
+                  </p>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>지역별 분석 데이터가 없어요</p>
+                  <p className="text-tiny mt-1">ATS 캠페인만 조회 가능하며, 발송 익일부터 조회됩니다.</p>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>

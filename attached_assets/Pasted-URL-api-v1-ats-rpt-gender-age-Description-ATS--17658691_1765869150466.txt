@@ -1,0 +1,224 @@
+URL	/api/v1/ats/rpt/gender/age				
+Description	"성별/연령대별 분석 리포트.
+ATS 로 발송된 캠페인에 대해서 사용 가능 하며, 발송 익일 부터 조회 가능 하며 캠페인 시작 시간 +96 시간 까지 업데이트 된다."				
+Method	POST				
+Header	Authorization: {token}				
+					
+Request					
+In Type	Parameter	Mandatory	Data Type	Value(Example)	Description
+Query Parameter	tid	Y	string	"1740621753572"	transaction ID
+Body	id	Y	string	"acb1505415d4388ea3f9bae6e6a8df97"	캠페인 아이디
+Example(Query paramter)	tid=1740621753572				
+Example(Body)	"{
+    ""id"" : ""acb1505415d4388ea3f9bae6e6a8df97""
+}"				
+					
+Response					
+구분	Parameter	Mandatory	Data Type	Value(Example)	Description
+Body	tid	Y	string	"1740621753572"	request 시 사용한 tid 값
+	code	Y	string	"S000001"	API 성공, 실패 코드
+	msg	Y	string	"Success"	API 성공, 실패 메시지
+	data	Y	object	{}	
+	data.list	Y	object array	[]	리포트 데이터
+	data.list[].age	Y	string	"~10대"	연령대
+	data.list[].sexCd	Y	string	"1"	성별. 1: 남성, 2: 여성
+	data.list[].rcsReactCnt	Y	number	0	RCS 반응 카운트
+	data.list[].rcsReactRatio	Y	string	"0.0"	RCS 반응률
+	data.list[].rcsSuccessCnt	Y	number	0	RCS 발송 성공 카운트
+	data.list[].vmgReactCnt	Y	number	0	VMG(일반 메시지) 반응 카운트
+	data.list[].vmgReactRatio	Y	string	"0.0"	VMG(일반 메시지) 반응률
+	data.list[].vmgSuccessCnt	Y	number	0	VMG(일반 메시지) 발송 성공 카운트
+	data.list[].totReactCnt	Y	number	0	전체 반응 카운트
+	data.list[].totReactRatio	Y	string	"0.0"	전체 반응률
+	data.list[].totRewardCnt	Y	number	0	전체 리워드 카운트
+	data.list[].totRewardRatio	Y	string	"0.0"	전체 리워드 반응률
+	data.list[].totSuccessCnt	Y	number	0	전체 발송 성공 카운트
+Example	"{
+    ""tid"": ""1740621753572"",
+    ""code"": ""S000001"",
+    ""msg"": ""Success"",
+    ""data"": {
+        ""list"": [
+            {
+                ""age"": ""~10대"",
+                ""sexCd"": ""1"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""20대"",
+                ""sexCd"": ""1"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""30대"",
+                ""sexCd"": ""1"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""40대"",
+                ""sexCd"": ""1"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""50대"",
+                ""sexCd"": ""1"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""60대~"",
+                ""sexCd"": ""1"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""~10대"",
+                ""sexCd"": ""2"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""20대"",
+                ""sexCd"": ""2"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""30대"",
+                ""sexCd"": ""2"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""40대"",
+                ""sexCd"": ""2"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""50대"",
+                ""sexCd"": ""2"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            },
+            {
+                ""age"": ""60대~"",
+                ""sexCd"": ""2"",
+                ""rcsReactCnt"": 0,
+                ""rcsReactRatio"": ""0.0"",
+                ""rcsSuccessCnt"": 0,
+                ""vmgReactCnt"": 0,
+                ""vmgReactRatio"": ""0.0"",
+                ""vmgSuccessCnt"": 0,
+                ""totReactCnt"": 0,
+                ""totReactRatio"": ""0.0"",
+                ""totRewardCnt"": 0,
+                ""totRewardRatio"": ""0.0"",
+                ""totSuccessCnt"": 0
+            }
+        ]
+    }
+}"				
