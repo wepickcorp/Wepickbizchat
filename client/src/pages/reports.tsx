@@ -93,6 +93,17 @@ interface AreaReportItem {
   vmgReactCnt: number;
 }
 
+interface PeriodReportItem {
+  dt: string;
+  rcsReactCnt: number;
+  rcsSuccessCnt: number;
+  vmgReactCnt: number;
+  vmgSuccessCnt: number;
+  totReactCnt: number;
+  totReactRatio: string;
+  totSuccessCnt: number;
+}
+
 export default function Reports() {
   const [periodFilter, setPeriodFilter] = useState<string>("all");
   const { toast } = useToast();
@@ -103,8 +114,10 @@ export default function Reports() {
   const [activeTab, setActiveTab] = useState("basic");
   const [genderAgeData, setGenderAgeData] = useState<GenderAgeReportItem[]>([]);
   const [areaData, setAreaData] = useState<AreaReportItem[]>([]);
+  const [periodData, setPeriodData] = useState<PeriodReportItem[]>([]);
   const [isLoadingGenderAge, setIsLoadingGenderAge] = useState(false);
   const [isLoadingArea, setIsLoadingArea] = useState(false);
+  const [isLoadingPeriod, setIsLoadingPeriod] = useState(false);
 
   const { data: campaigns, isLoading } = useQuery<CampaignWithReport[]>({
     queryKey: ["/api/campaigns?includeReports=true"],
@@ -223,6 +236,32 @@ export default function Reports() {
     }
   };
 
+  const fetchPeriodReport = async (campaignId: string) => {
+    setIsLoadingPeriod(true);
+    setPeriodData([]);
+    try {
+      const response = await apiRequest("POST", "/api/bizchat/reports/period", { campaignId });
+      const data = await response.json();
+      if (data.success && data.data?.list) {
+        setPeriodData(data.data.list);
+      } else if (data.error) {
+        toast({
+          title: "일자별 분석 조회 실패",
+          description: data.error,
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "일자별 분석 조회 실패",
+        description: "서버와 통신하는 중 오류가 발생했어요.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingPeriod(false);
+    }
+  };
+
   const isAtsEligible = (campaign: CampaignWithReport | null): boolean => {
     if (!campaign) return false;
     return campaign.rcvType === 0 && (campaign.status === 'completed' || campaign.status === 'stopped');
@@ -240,6 +279,11 @@ export default function Reports() {
     if (tab === "area" && !isLoadingArea) {
       if (isAtsEligible(selectedCampaign)) {
         fetchAreaReport(selectedCampaign.id);
+      }
+    }
+    if (tab === "period" && !isLoadingPeriod) {
+      if (isAtsEligible(selectedCampaign)) {
+        fetchPeriodReport(selectedCampaign.id);
       }
     }
   };
@@ -506,6 +550,7 @@ export default function Reports() {
           setActiveTab("basic");
           setGenderAgeData([]);
           setAreaData([]);
+          setPeriodData([]);
         }
       }}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
@@ -520,18 +565,22 @@ export default function Reports() {
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="basic" className="gap-1" data-testid="tab-basic-stats">
                 <BarChart3 className="h-4 w-4" />
-                기본 통계
+                기본
               </TabsTrigger>
               <TabsTrigger value="gender-age" className="gap-1" data-testid="tab-gender-age">
                 <Users className="h-4 w-4" />
-                성별/연령대
+                성별/연령
               </TabsTrigger>
               <TabsTrigger value="area" className="gap-1" data-testid="tab-area">
                 <MapPin className="h-4 w-4" />
                 지역별
+              </TabsTrigger>
+              <TabsTrigger value="period" className="gap-1" data-testid="tab-period">
+                <Calendar className="h-4 w-4" />
+                일자별
               </TabsTrigger>
             </TabsList>
 
@@ -785,6 +834,89 @@ export default function Reports() {
                 <div className="py-8 text-center text-muted-foreground">
                   <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>지역별 분석 데이터가 없어요</p>
+                  <p className="text-tiny mt-1">ATS 캠페인만 조회 가능하며, 발송 익일부터 조회됩니다.</p>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="period" className="mt-4">
+              {!isAtsEligible(selectedCampaign) ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>일자별 분석을 사용할 수 없어요</p>
+                  <p className="text-tiny mt-1">
+                    {selectedCampaign?.rcvType !== 0 
+                      ? "ATS 타겟팅 캠페인만 조회할 수 있어요." 
+                      : "캠페인 발송이 완료된 후 익일부터 조회할 수 있어요."}
+                  </p>
+                </div>
+              ) : isLoadingPeriod ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-muted-foreground">일자별 분석을 조회하고 있어요...</p>
+                </div>
+              ) : periodData.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-muted/50 rounded-lg border">
+                    <h4 className="font-medium text-small mb-4">일자별 발송 현황</h4>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={periodData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <XAxis dataKey="dt" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip 
+                          formatter={(value: number, name: string) => [formatNumber(value), name === 'rcsSuccessCnt' ? 'RCS 성공' : name === 'vmgSuccessCnt' ? 'VMG 성공' : name]}
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="rcsSuccessCnt" name="RCS 발송" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="vmgSuccessCnt" name="VMG 발송" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+                    <h4 className="font-medium text-small mb-3 flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                      일자별 상세 현황
+                    </h4>
+                    <div className="max-h-[200px] overflow-y-auto">
+                      <table className="w-full text-small">
+                        <thead className="sticky top-0 bg-primary/5">
+                          <tr className="text-muted-foreground">
+                            <th className="text-left p-2">날짜</th>
+                            <th className="text-right p-2">RCS</th>
+                            <th className="text-right p-2">VMG</th>
+                            <th className="text-right p-2">전체</th>
+                            <th className="text-right p-2">반응률</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {periodData.map(item => (
+                            <tr key={item.dt} className="border-t border-border/50">
+                              <td className="p-2 font-medium">{item.dt}</td>
+                              <td className="text-right p-2">{formatNumber(item.rcsSuccessCnt)}</td>
+                              <td className="text-right p-2">{formatNumber(item.vmgSuccessCnt)}</td>
+                              <td className="text-right p-2 font-medium">{formatNumber(item.totSuccessCnt)}</td>
+                              <td className="text-right p-2 text-primary font-medium">{item.totReactRatio}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <p className="text-tiny text-muted-foreground">
+                    * ATS 캠페인만 조회 가능하며, 발송 익일부터 조회됩니다. 데이터는 캠페인 시작 후 96시간까지 업데이트됩니다.
+                  </p>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>일자별 분석 데이터가 없어요</p>
                   <p className="text-tiny mt-1">ATS 캠페인만 조회 가능하며, 발송 익일부터 조회됩니다.</p>
                 </div>
               )}
