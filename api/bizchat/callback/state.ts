@@ -164,8 +164,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log(`[Callback] Updated campaign ${campaign.id}: ${statusInfo.status} (state=${payload.state})`);
 
-    // 발송 완료(state=40) 시 비용 차감
-    if (payload.state === 40) {
+    // 발송 완료(state=40) 또는 중단(state=35) 시 비용 차감
+    if (payload.state === 40 || payload.state === 35) {
       try {
         // 중복 차감 방지: 트랜잭션 테이블에서 이미 차감 기록이 있는지 확인
         const existingSpend = await db.select()

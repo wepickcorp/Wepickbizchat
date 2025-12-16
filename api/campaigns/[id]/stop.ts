@@ -162,10 +162,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 로컬 DB 상태 업데이트
+    // 로컬 DB 상태 업데이트 (BizChat 규격: state=35는 중단)
     const updatedResult = await db.update(campaigns)
       .set({ 
-        statusCode: 91, 
+        statusCode: 35, 
         status: 'stopped',
         updatedAt: new Date()
       })

@@ -12,8 +12,8 @@ export const CAMPAIGN_STATUS = {
   SEND_PREPARATION: 20,
   IN_PROGRESS: 30,
   COMPLETED: 40,
+  STOPPED: 35,
   CANCELLED: 90,
-  STOPPED: 91,
 } as const;
 
 // 삭제 가능 상태 (BizChat API 규격)
