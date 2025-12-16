@@ -109,10 +109,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.redirect(302, errorUrl.toString());
     }
 
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
-    const kispgPaymentUrl = isProduction 
+    // KISPG_USE_PROD=true 설정 시에만 운영 API 사용, 기본값은 테스트 API
+    const useProductionApi = process.env.KISPG_USE_PROD === 'true';
+    const kispgPaymentUrl = useProductionApi 
       ? 'https://api.kispg.co.kr/v2/payment'
       : 'https://testapi.kispg.co.kr/v2/payment';
+    
+    console.log('[KISPG Callback] Using payment API:', kispgPaymentUrl);
+    console.log('[KISPG Callback] tid:', tid);
+    console.log('[KISPG Callback] amt:', amt);
 
     const d = new Date();
     const p = (n: number) => String(n).padStart(2, '0');

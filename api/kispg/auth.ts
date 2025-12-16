@@ -74,10 +74,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const returnUrl = `${baseUrl}/api/kispg/callback`;
 
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
-    const kispgAuthUrl = isProduction 
+    // KISPG_USE_PROD=true 설정 시에만 운영 API 사용, 기본값은 테스트 API
+    const useProductionApi = process.env.KISPG_USE_PROD === 'true';
+    const kispgAuthUrl = useProductionApi 
       ? 'https://api.kispg.co.kr/v2/auth'
       : 'https://testapi.kispg.co.kr/v2/auth';
+    
+    console.log('[KISPG Auth] Using API:', kispgAuthUrl);
+    console.log('[KISPG Auth] MID:', mid);
+    console.log('[KISPG Auth] ediDate:', ediDate);
+    console.log('[KISPG Auth] goodsAmt:', goodsAmt);
 
     const userAgent = req.headers['user-agent'] || '';
     const isMobile = /Mobile|Android|iPhone|iPad/i.test(userAgent);
