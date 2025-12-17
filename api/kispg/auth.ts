@@ -66,13 +66,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const goodsAmt = amount.toString();
     const encData = generateEncData(mid, ediDate, goodsAmt, merchantKey);
 
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.REPLIT_DOMAINS?.split(',')[0]
-        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-        : 'http://localhost:5000';
-
-    const returnUrl = `${baseUrl}/api/kispg/callback`;
+    // KISPG_RETURN_URL 환경변수가 설정된 경우 우선 사용 (KIS PG에 등록된 URL과 일치해야 함)
+    let returnUrl = process.env.KISPG_RETURN_URL;
+    
+    if (!returnUrl) {
+      const baseUrl = process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.REPLIT_DOMAINS?.split(',')[0]
+          ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+          : 'http://localhost:5000';
+      returnUrl = `${baseUrl}/api/kispg/callback`;
+    }
+    
+    console.log('[KISPG Auth] returnUrl:', returnUrl);
 
     // KISPG_USE_PROD=true 설정 시에만 운영 API 사용, 기본값은 테스트 API
     const useProductionApi = process.env.KISPG_USE_PROD === 'true';
