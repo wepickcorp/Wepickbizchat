@@ -97,9 +97,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const mallNm = '(주)위픽코퍼레이션';
     const mchtNm = mallNm;
 
+    // channel: 0001 (WEB), 0002 (mobile) - KIS PG 필수 파라미터
+    const channel = isMobile ? '0002' : '0001';
+
     const authParams = {
       payMethod: 'CARD',
       model: isMobile ? 'MOB' : 'WEB',
+      channel,
       trxCd: '0',
       mid,
       mallNm,
@@ -117,6 +121,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       payReqType: '1',
       charset: 'UTF-8',
     };
+    
+    console.log('[KISPG Auth] channel:', channel);
+    console.log('[KISPG Auth] model:', isMobile ? 'MOB' : 'WEB');
 
     return res.status(200).json({
       success: true,
