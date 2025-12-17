@@ -14,96 +14,139 @@ import {
   Gift,
   TrendingUp,
   Database,
-  FileText,
   Clock,
-  Layers
+  Layers,
+  Store,
+  Building2,
+  Stethoscope,
+  HelpCircle,
+  Megaphone,
+  UserCheck,
+  PiggyBank,
+  LineChart
 } from "lucide-react";
 import logoImage from "@assets/위픽xSKT 로고_1764247660608.png";
+
+const painPoints = [
+  {
+    icon: Megaphone,
+    title: "전단지, 현수막 효과가 없어요",
+    description: "돈만 쓰고 손님은 안 와요",
+  },
+  {
+    icon: UserCheck,
+    title: "우리 고객이 될 사람을 찾고 싶어요",
+    description: "아무에게나 보내는 광고는 그만",
+  },
+  {
+    icon: PiggyBank,
+    title: "광고비는 쓰는데 효과를 모르겠어요",
+    description: "어디서 손님이 왔는지 알 수가 없어요",
+  },
+  {
+    icon: LineChart,
+    title: "쉽고 빠르게 광고하고 싶어요",
+    description: "복잡한 건 딱 질색이에요",
+  },
+];
 
 const features = [
   {
     icon: Target,
-    title: "정교한 타겟팅",
-    description: "SKT 광고 수신 동의자 1,600만 고객 데이터를 활용한 정교한 타겟팅. 성별, 나이, 위치, 앱/웹 사용 이력 등 다양한 데이터 활용",
+    title: "딱 맞는 고객만 찾아드려요",
+    description: "1,600만 SKT 고객 중에서 우리 가게에 올 것 같은 사람만 골라서 보내요. 성별, 나이, 사는 곳, 관심사까지 다 알 수 있어요.",
   },
   {
     icon: BarChart3,
-    title: "정밀한 리포트",
-    description: "메시지 수신 및 반응 고객의 인구통계 분석, 관심사 분석, 기존 캠페인과 비교 분석 리포트 제공",
+    title: "누가 봤는지 다 알려드려요",
+    description: "내 광고를 본 사람이 누군지, 뭘 눌렀는지 한눈에 볼 수 있어요. 다음 광고는 더 잘 할 수 있겠죠?",
   },
   {
     icon: Shield,
-    title: "높은 신뢰도",
-    description: "RCS 브랜드 홈, 발신자 인증 마크, 철저한 메시지 검수, 중복 발송 제한을 통한 고객 피로도 관리",
+    title: "스팸 아니에요, 진짜 광고예요",
+    description: "SKT 인증 마크가 붙어서 신뢰도가 달라요. 발신자 번호도 인증되어 있어서 고객이 안심하고 열어봐요.",
   },
   {
     icon: Layers,
-    title: "다양한 RCS 타입",
-    description: "스탠다드, 슬라이드, 이미지 강조형, 상품소개 세로형, 배너형 등 콘텐츠에 맞게 선택 가능",
+    title: "예쁜 문자로 보내요",
+    description: "그냥 글자만 있는 문자 말고, 사진도 넣고 버튼도 넣을 수 있어요. 보는 사람도 누르고 싶어져요.",
   },
   {
     icon: Zap,
-    title: "API 연동 서비스",
-    description: "타겟팅 시스템, RCS/MMS 발송, 리워드 적립, URL 분석 등 핵심 기능을 API로 연동하여 자사 플랫폼에서 직접 사용 가능",
+    title: "5분이면 광고 완성",
+    description: "어렵지 않아요. 누가 받을지 고르고, 뭘 보낼지 쓰고, 보내기만 하면 끝이에요.",
   },
   {
     icon: Gift,
-    title: "강력한 마케팅 서포트",
-    description: "네이버페이, OK캐쉬백 리워드로 반응률 20% 상승. 채널믹스, O2O 마케팅, AI 메시지 생성 기능 지원",
+    title: "네이버페이 리워드로 효과 UP",
+    description: "광고 보면 네이버페이 포인트를 주니까 사람들이 더 잘 봐요. 반응률이 20%나 올라가요.",
   },
 ];
 
 const targetingFeatures = [
   {
     icon: Users,
-    title: "인구통계학적 정보",
-    description: "성별, 나이 등 Demographic 데이터",
+    title: "이런 사람한테만",
+    description: "30대 여성, 40대 남성 등 원하는 고객층만 골라요",
   },
   {
     icon: Smartphone,
-    title: "앱/웹 접속 이력",
-    description: "금융, 쇼핑, 생활 등 카테고리별 접속 이력",
+    title: "이런 걸 좋아하는 사람",
+    description: "쇼핑 좋아하는 사람, 부동산 관심 있는 사람 등",
   },
   {
     icon: MapPin,
-    title: "위치/이동 특성",
-    description: "추정 거주지, 직장 주소, 이동 수단, 출퇴근 정보",
+    title: "우리 동네 사람만",
+    description: "내 가게 근처에 사는 사람, 일하는 사람만 골라요",
   },
   {
     icon: Database,
-    title: "예측 모델",
-    description: "머신러닝 기반 이사/출국 확률, 부모 추정, 1인 가구 등",
+    title: "우리 고객이 될 확률 높은 사람",
+    description: "AI가 분석해서 반응할 것 같은 사람을 찾아줘요",
   },
 ];
 
-const marketingSupport = [
+const useCases = [
   {
-    icon: Gift,
-    title: "리워드 기능",
-    description: "네이버페이, OK캐쉬백, 11pay 등 리워드로 반응률 20% 상승",
+    icon: Store,
+    title: "자영업자",
+    subtitle: "매장 사장님",
+    examples: [
+      "오픈 기념 할인 이벤트 알리기",
+      "재방문 고객 쿠폰 발송",
+      "신메뉴 출시 홍보",
+    ],
+    color: "bg-orange-500",
   },
   {
-    icon: TrendingUp,
-    title: "채널 믹스",
-    description: "비즈챗 웹보드(MAU 50만명) 동시 노출로 광고 효과 20% 상승",
+    icon: Building2,
+    title: "분양대행사",
+    subtitle: "분양 상담원",
+    examples: [
+      "분양 관심 고객 타겟 광고",
+      "모델하우스 방문 유도",
+      "청약 일정 안내 발송",
+    ],
+    color: "bg-blue-500",
   },
   {
-    icon: Clock,
-    title: "실시간 타겟팅",
-    description: "특정 앱 실행, 특정 번호 통화 시 실시간 광고 발송 가능",
-  },
-  {
-    icon: FileText,
-    title: "AI 메시지 생성",
-    description: "초보 마케터를 위한 AI 자동 캠페인 메시지 생성 기능",
+    icon: Stethoscope,
+    title: "병원",
+    subtitle: "원장님",
+    examples: [
+      "건강검진 시즌 홍보",
+      "신규 진료과목 안내",
+      "휴진 및 진료시간 알림",
+    ],
+    color: "bg-emerald-500",
   },
 ];
 
 const stats = [
-  { value: "1,600만+", label: "SKT 광고 수신 동의 고객" },
-  { value: "20%", label: "리워드 반응률 상승" },
-  { value: "10만원", label: "최소 시작 금액" },
-  { value: "실시간", label: "성과 리포트" },
+  { value: "1,600만", label: "받을 수 있는 사람" },
+  { value: "20%", label: "리워드 시 반응률 UP" },
+  { value: "10만원", label: "부터 시작 가능" },
+  { value: "실시간", label: "결과 확인" },
 ];
 
 export default function Landing() {
@@ -113,7 +156,7 @@ export default function Landing() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-3">
             <img src={logoImage} alt="wepick x SKT 로고" className="h-10 w-auto" />
-            <span className="font-bold text-lg">wepickbizchat</span>
+            <span className="font-bold text-lg">비즈챗</span>
           </div>
           <div className="flex items-center gap-4">
             <Button asChild data-testid="button-login-header">
@@ -122,6 +165,7 @@ export default function Landing() {
           </div>
         </div>
       </header>
+
       <main>
         <section className="relative overflow-hidden py-20 md:py-32">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/10" />
@@ -129,26 +173,27 @@ export default function Landing() {
             <div className="max-w-3xl mx-auto text-center">
               <div className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-1.5 text-small text-accent-foreground mb-6">
                 <Zap className="h-4 w-4 text-primary" />
-                SK텔레콤 제휴 마케팅 메시징 서비스
+                SK텔레콤 공식 광고 서비스
               </div>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-                <span className="text-primary">1,600만</span> SKT 고객에게
+                내 고객이 될 사람에게만
                 <br />
-                정확히 타겟팅해서 보내요
+                <span className="text-primary">딱 맞게</span> 보내요
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-                SKT 고객 타겟팅 시스템과 RCS 문자 메시징 기반으로
-                원하는 고객에게 마케팅 캠페인을 진행할 수 있는 제휴 마케팅 서비스입니다.
+                전단지 돌리느라 고생하셨죠?
+                <br />
+                이제 SKT 1,600만 고객 중에서 우리 가게 올 것 같은 사람만 골라서 문자 보내세요.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button size="lg" asChild className="gap-2" data-testid="button-start-now">
                   <a href="/auth">
-                    지금 시작하기
+                    무료로 시작하기
                     <ArrowRight className="h-4 w-4" />
                   </a>
                 </Button>
                 <Button size="lg" variant="outline" asChild data-testid="button-learn-more">
-                  <a href="#features">자세히 알아보기</a>
+                  <a href="#pain-points">어떻게 하는 건가요?</a>
                 </Button>
               </div>
             </div>
@@ -172,14 +217,40 @@ export default function Landing() {
           </div>
         </section>
 
+        <section id="pain-points" className="py-20 bg-gradient-to-b from-background to-accent/20">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                이런 고민 있으시죠?
+              </h2>
+              <p className="text-lg text-muted-foreground">
+                그렇다면 <span className="text-primary font-semibold">비즈챗</span>으로 해결하세요
+              </p>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+              {painPoints.map((item, index) => (
+                <Card key={index} className="hover-elevate text-center">
+                  <CardContent className="p-6">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 mx-auto mb-4">
+                      <item.icon className="h-7 w-7 text-primary" />
+                    </div>
+                    <h3 className="font-semibold mb-2">{item.title}</h3>
+                    <p className="text-small text-muted-foreground">{item.description}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section id="features" className="py-20">
           <div className="container mx-auto px-4">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                비즈챗을 왜 이용해야 할까요?
+                비즈챗은 이렇게 도와드려요
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                SKT의 빅데이터와 RCS 메시징으로 효과적인 타겟 마케팅을 경험하세요
+                어렵지 않아요. 진짜로요.
               </p>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -204,10 +275,10 @@ export default function Landing() {
           <div className="container mx-auto px-4">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                정교한 타겟팅 시스템
+                우리 고객 될 사람만 찾아드려요
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                다양한 데이터를 활용하여 원하는 고객을 정확하게 찾아드려요
+                아무에게나 보내면 돈 낭비예요. 받을 사람을 골라서 보내세요.
               </p>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
@@ -228,21 +299,33 @@ export default function Landing() {
           <div className="container mx-auto px-4">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                강력한 마케팅 서포트
+                이런 분들이 쓰고 계세요
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                리워드, 채널믹스, 실시간 타겟팅으로 광고 효과를 극대화하세요
+                우리 같은 분들이 이미 효과 보고 있어요
               </p>
             </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
-              {marketingSupport.map((feature, index) => (
-                <Card key={index} className="hover-elevate">
-                  <CardContent className="p-6">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 mb-4">
-                      <feature.icon className="h-6 w-6 text-primary" />
+            <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+              {useCases.map((useCase, index) => (
+                <Card key={index} className="hover-elevate overflow-hidden">
+                  <div className={`${useCase.color} p-4 text-white`}>
+                    <div className="flex items-center gap-3">
+                      <useCase.icon className="h-8 w-8" />
+                      <div>
+                        <h3 className="font-bold text-lg">{useCase.title}</h3>
+                        <p className="text-sm opacity-90">{useCase.subtitle}</p>
+                      </div>
                     </div>
-                    <h3 className="text-h3 font-semibold mb-2">{feature.title}</h3>
-                    <p className="text-small text-muted-foreground">{feature.description}</p>
+                  </div>
+                  <CardContent className="p-5">
+                    <ul className="space-y-3">
+                      {useCase.examples.map((example, i) => (
+                        <li key={i} className="flex items-start gap-2 text-small">
+                          <CheckCircle2 className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
+                          <span>{example}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </CardContent>
                 </Card>
               ))}
@@ -255,17 +338,17 @@ export default function Landing() {
             <div className="max-w-4xl mx-auto">
               <div className="text-center mb-12">
                 <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                  다양한 RCS 메시지 타입
+                  예쁜 문자로 보내세요
                 </h2>
                 <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                  홍보 콘텐츠에 맞는 메시지 형식을 선택하세요
+                  그냥 글자만 있는 문자 말고, 사진도 버튼도 넣을 수 있어요
                 </p>
               </div>
               <div className="grid md:grid-cols-3 gap-6">
                 {[
-                  { title: "LMS/MMS", desc: "텍스트와 이미지, 버튼으로 구성된 기본 메시지", icon: MessageSquare },
-                  { title: "슬라이드형", desc: "최대 6장까지 슬라이드 형태로 다양한 정보 전달", icon: Layers },
-                  { title: "이미지 강조형", desc: "1:1, 3:4 비율로 이미지를 강조한 레이아웃", icon: Smartphone },
+                  { title: "기본형", desc: "텍스트와 사진, 버튼까지 깔끔하게", icon: MessageSquare },
+                  { title: "슬라이드형", desc: "여러 장 사진을 넘겨볼 수 있어요", icon: Layers },
+                  { title: "이미지 강조형", desc: "사진을 크게 보여주고 싶을 때", icon: Smartphone },
                 ].map((item, index) => (
                   <div key={index} className="text-center p-6 border rounded-lg bg-background">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground mx-auto mb-4">
@@ -285,14 +368,14 @@ export default function Landing() {
             <div className="max-w-4xl mx-auto">
               <div className="text-center mb-12">
                 <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                  간단한 3단계로 캠페인 시작
+                  정말 쉬워요, 3단계면 끝
                 </h2>
               </div>
               <div className="grid md:grid-cols-3 gap-8">
                 {[
-                  { step: "1", title: "템플릿 작성", desc: "메시지 내용을 작성하고 검수 요청해요" },
-                  { step: "2", title: "타겟 설정", desc: "원하는 고객층을 정밀하게 선택해요" },
-                  { step: "3", title: "캠페인 발송", desc: "예산 설정 후 바로 발송해요" },
+                  { step: "1", title: "뭘 보낼지 쓰기", desc: "광고 문구랑 사진 넣으면 돼요" },
+                  { step: "2", title: "누가 받을지 고르기", desc: "우리 고객 될 것 같은 사람 선택해요" },
+                  { step: "3", title: "보내기", desc: "결제하고 발송하면 끝이에요" },
                 ].map((item, index) => (
                   <div key={index} className="text-center">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-lg mx-auto mb-4">
@@ -310,22 +393,19 @@ export default function Landing() {
         <section className="py-20 bg-card">
           <div className="container mx-auto px-4">
             <div className="max-w-3xl mx-auto text-center">
-              <div className="flex justify-center gap-1 mb-4">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <Users key={i} className="h-5 w-5 text-primary" />
-                ))}
-              </div>
+              <HelpCircle className="h-12 w-12 text-primary mx-auto mb-4" />
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                다양한 업종에서 활용 중
+                궁금한 거 있으시죠?
               </h2>
-              <p className="text-lg text-muted-foreground mb-8">
-                교육, 부동산, 금융, 커머스, 지자체 등 다양한 업종에서 비즈챗을 활용하고 있어요
-              </p>
-              <div className="flex flex-wrap justify-center gap-4 mt-8">
-                {["교육/학습", "부동산 분양", "금융/보험", "온라인 커머스", "지자체 행사"].map((item, i) => (
-                  <div key={i} className="flex items-center gap-2 text-small">
-                    <CheckCircle2 className="h-4 w-4 text-success" />
-                    <span>{item}</span>
+              <div className="text-left max-w-2xl mx-auto mt-8 space-y-6">
+                {[
+                  { q: "비용이 얼마나 들어요?", a: "문자 한 통에 100원 정도예요. 10만원부터 시작할 수 있어요." },
+                  { q: "효과가 있을까요?", a: "타겟팅해서 보내니까 전단지보다 효과 좋아요. 누가 봤는지도 다 알 수 있고요." },
+                  { q: "어려운 거 아니에요?", a: "아니요, 5분이면 첫 광고 보낼 수 있어요. 모르는 건 저희가 도와드려요." },
+                ].map((faq, i) => (
+                  <div key={i} className="border-b pb-4">
+                    <h3 className="font-semibold mb-2">{faq.q}</h3>
+                    <p className="text-muted-foreground">{faq.a}</p>
                   </div>
                 ))}
               </div>
@@ -336,10 +416,12 @@ export default function Landing() {
         <section className="py-20 bg-primary text-primary-foreground">
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              지금 바로 시작해보세요
+              고민하지 마세요, 일단 해보세요
             </h2>
             <p className="text-lg opacity-90 mb-8 max-w-xl mx-auto">
-              최소 10만원으로 SKT 1,600만 고객에게 정확한 타겟 광고를 보낼 수 있어요
+              10만원으로 시작해서 효과 있으면 더 하면 되잖아요.
+              <br />
+              우리 가게 손님 될 사람, 지금 찾아보세요.
             </p>
             <Button 
               size="lg" 
@@ -349,13 +431,14 @@ export default function Landing() {
               data-testid="button-cta-start"
             >
               <a href="/auth">
-                무료로 시작하기
+                지금 바로 시작하기
                 <ArrowRight className="h-4 w-4" />
               </a>
             </Button>
           </div>
         </section>
       </main>
+
       <footer className="border-t py-8">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
@@ -364,7 +447,7 @@ export default function Landing() {
               <span className="font-semibold">비즈챗</span>
             </div>
             <p className="text-small text-muted-foreground">
-              © SK Telecom. All rights reserved.
+              SK Telecom. All rights reserved.
             </p>
           </div>
         </div>
