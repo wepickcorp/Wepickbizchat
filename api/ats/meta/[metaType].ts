@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const BIZCHAT_DEV_URL = 'https://gw-dev.bizchat1.co.kr:8443';
-const BIZCHAT_PROD_URL = 'https://gw.bizchat1.co.kr:8443';
+const BIZCHAT_PROD_URL = 'https://gw.bizchat1.co.kr';
 
 function getBizChatUrl() {
   return process.env.BIZCHAT_USE_PROD === 'true' ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
