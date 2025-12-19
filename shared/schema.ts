@@ -51,6 +51,8 @@ export const users = pgTable("users", {
   balance: decimal("balance", { precision: 12, scale: 0 }).default("0"),
   stripeCustomerId: varchar("stripe_customer_id"),
   isVerified: boolean("is_verified").default(false),
+  isMaster: boolean("is_master").default(false),
+  masterResetAt: timestamp("master_reset_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -4,6 +4,12 @@
   "outputDirectory": "dist/public",
   "framework": null,
   "installCommand": "npm install",
+  "crons": [
+    {
+      "path": "/api/internal/master/reset-balance",
+      "schedule": "0 0 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
