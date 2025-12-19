@@ -38,7 +38,7 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
 - **마스터 계정 시스템**: `is_master=true`로 설정된 계정은 매일 자정(UTC) Vercel Cron Job에 의해 광고 캐시가 1억원(100,000,000원)으로 자동 리셋됩니다. 현재 마스터 계정: campaign@wepick.kr. `CRON_SECRET` 환경변수로 Cron API 보안 적용.
 - **관리자 시스템**: 별도의 관리자 인증 체계와 대시보드를 통해 플랫폼 운영을 관리합니다.
   - **관리자 로그인**: `/admin/login` - SHA256 해시 기반 비밀번호 인증
-  - **관리자 계정**: admin@wepick.kr / admin123! (super 권한)
+  - **관리자 계정**: admin2026@wepick.co.kr / admin1234 (super 권한)
   - **권한 체계**: super (전체 권한), cs (고객지원), finance (재무)
   - **환경변수**: `ADMIN_JWT_SECRET`, `ADMIN_SALT`
   - **기능**: 대시보드(/admin), 유저관리(/admin/users), 캠페인모니터링(/admin/campaigns), 결제내역(/admin/transactions), 활동로그(/admin/logs)
