@@ -32,7 +32,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Search, ChevronLeft, ChevronRight, Loader2, Crown, UserX, UserCheck } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Loader2, Crown, UserX, UserCheck, LogIn } from "lucide-react";
 import type { User } from "@shared/schema";
 
 interface UsersResponse {
@@ -115,6 +115,32 @@ export default function AdminUsers() {
     },
     onError: () => {
       toast({ title: "마스터 상태 변경 실패", variant: "destructive" });
+    },
+  });
+
+  const impersonateMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/admin/users/${userId}/impersonate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to impersonate");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "대리 로그인 성공", 
+        description: `${data.user.email}로 접속합니다. 30분 후 자동 만료됩니다.` 
+      });
+      localStorage.setItem("impersonateToken", data.impersonateToken);
+      localStorage.setItem("impersonateUser", JSON.stringify(data.user));
+      window.open("/dashboard", "_blank");
+    },
+    onError: () => {
+      toast({ title: "대리 로그인 실패", variant: "destructive" });
     },
   });
 
@@ -203,6 +229,16 @@ export default function AdminUsers() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => impersonateMutation.mutate(user.id)}
+                              disabled={impersonateMutation.isPending}
+                              title="대리 로그인"
+                              data-testid={`button-impersonate-${user.id}`}
+                            >
+                              <LogIn className="h-4 w-4" />
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"

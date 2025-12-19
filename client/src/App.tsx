@@ -38,6 +38,11 @@ import AdminUsers from "@/pages/admin/users";
 import AdminCampaigns from "@/pages/admin/campaigns";
 import AdminTransactions from "@/pages/admin/transactions";
 import AdminLogs from "@/pages/admin/logs";
+import AdminAnnouncements from "@/pages/admin/announcements";
+import AdminRefunds from "@/pages/admin/refunds";
+import AdminTaxInvoices from "@/pages/admin/tax-invoices";
+import AdminReports from "@/pages/admin/reports";
+import AdminAnalytics from "@/pages/admin/analytics";
 import { AdminLayout } from "@/components/admin-layout";
 
 function navigate(href: string) {
@@ -221,6 +226,11 @@ function Router() {
       <Route path="/admin/users" component={() => <AdminRoute component={AdminUsers} />} />
       <Route path="/admin/campaigns" component={() => <AdminRoute component={AdminCampaigns} />} />
       <Route path="/admin/transactions" component={() => <AdminRoute component={AdminTransactions} />} />
+      <Route path="/admin/announcements" component={() => <AdminRoute component={AdminAnnouncements} />} />
+      <Route path="/admin/refunds" component={() => <AdminRoute component={AdminRefunds} />} />
+      <Route path="/admin/tax-invoices" component={() => <AdminRoute component={AdminTaxInvoices} />} />
+      <Route path="/admin/reports" component={() => <AdminRoute component={AdminReports} />} />
+      <Route path="/admin/analytics" component={() => <AdminRoute component={AdminAnalytics} />} />
       <Route path="/admin/logs" component={() => <AdminRoute component={AdminLogs} />} />
       
       <Route component={() => <ProtectedRoute component={NotFound} />} />
