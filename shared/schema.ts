@@ -540,3 +540,120 @@ export type Admin = typeof admins.$inferSelect;
 export type InsertAdmin = z.infer<typeof insertAdminSchema>;
 export type AdminLog = typeof adminLogs.$inferSelect;
 export type InsertAdminLog = z.infer<typeof insertAdminLogSchema>;
+
+// ============ Admin 2차 기능 Tables ============
+
+// 공지사항 테이블
+export const announcements = pgTable("announcements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title", { length: 200 }).notNull(),
+  content: text("content").notNull(),
+  category: varchar("category", { length: 50 }).default("general").notNull(), // general, update, maintenance, event
+  priority: integer("priority").default(0), // 0=일반, 1=중요, 2=긴급
+  isPublished: boolean("is_published").default(false),
+  isPinned: boolean("is_pinned").default(false),
+  authorId: varchar("author_id").references(() => admins.id).notNull(),
+  publishedAt: timestamp("published_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// 환불 요청 테이블
+export const refunds = pgTable("refunds", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  transactionId: varchar("transaction_id").references(() => transactions.id),
+  amount: decimal("amount", { precision: 12, scale: 0 }).notNull(),
+  reason: text("reason").notNull(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, approved, rejected, completed
+  adminId: varchar("admin_id").references(() => admins.id),
+  adminNote: text("admin_note"),
+  bankName: varchar("bank_name", { length: 50 }),
+  accountNumber: varchar("account_number", { length: 50 }),
+  accountHolder: varchar("account_holder", { length: 50 }),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// 세금계산서 테이블
+export const taxInvoices = pgTable("tax_invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  transactionId: varchar("transaction_id").references(() => transactions.id),
+  invoiceNumber: varchar("invoice_number", { length: 50 }).unique(),
+  issueDate: timestamp("issue_date").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 0 }).notNull(),
+  taxAmount: decimal("tax_amount", { precision: 12, scale: 0 }).notNull(),
+  totalAmount: decimal("total_amount", { precision: 12, scale: 0 }).notNull(),
+  buyerBusinessNumber: varchar("buyer_business_number", { length: 20 }),
+  buyerCompanyName: varchar("buyer_company_name", { length: 100 }),
+  buyerEmail: varchar("buyer_email", { length: 100 }),
+  status: varchar("status", { length: 20 }).default("issued").notNull(), // issued, sent, cancelled
+  pdfUrl: text("pdf_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Relations for new tables
+export const announcementsRelations = relations(announcements, ({ one }) => ({
+  author: one(admins, {
+    fields: [announcements.authorId],
+    references: [admins.id],
+  }),
+}));
+
+export const refundsRelations = relations(refunds, ({ one }) => ({
+  user: one(users, {
+    fields: [refunds.userId],
+    references: [users.id],
+  }),
+  transaction: one(transactions, {
+    fields: [refunds.transactionId],
+    references: [transactions.id],
+  }),
+  admin: one(admins, {
+    fields: [refunds.adminId],
+    references: [admins.id],
+  }),
+}));
+
+export const taxInvoicesRelations = relations(taxInvoices, ({ one }) => ({
+  user: one(users, {
+    fields: [taxInvoices.userId],
+    references: [users.id],
+  }),
+  transaction: one(transactions, {
+    fields: [taxInvoices.transactionId],
+    references: [transactions.id],
+  }),
+}));
+
+// Insert schemas for new tables
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertRefundSchema = createInsertSchema(refunds).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  processedAt: true,
+});
+
+export const insertTaxInvoiceSchema = createInsertSchema(taxInvoices).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types for new tables
+export type Announcement = typeof announcements.$inferSelect;
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+export type Refund = typeof refunds.$inferSelect;
+export type InsertRefund = z.infer<typeof insertRefundSchema>;
+export type TaxInvoice = typeof taxInvoices.$inferSelect;
+export type InsertTaxInvoice = z.infer<typeof insertTaxInvoiceSchema>;

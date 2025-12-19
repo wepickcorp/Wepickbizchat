@@ -9,7 +9,12 @@ import {
   LogOut,
   Shield,
   ChevronLeft,
-  Menu
+  Menu,
+  Bell,
+  RefreshCcw,
+  Receipt,
+  BarChart3,
+  TrendingUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,6 +31,11 @@ const navItems = [
   { href: "/admin/users", icon: Users, label: "광고주 관리" },
   { href: "/admin/campaigns", icon: Megaphone, label: "캠페인" },
   { href: "/admin/transactions", icon: CreditCard, label: "결제 내역" },
+  { href: "/admin/announcements", icon: Bell, label: "공지사항" },
+  { href: "/admin/refunds", icon: RefreshCcw, label: "환불 관리" },
+  { href: "/admin/tax-invoices", icon: Receipt, label: "세금계산서" },
+  { href: "/admin/reports", icon: BarChart3, label: "정산 리포트" },
+  { href: "/admin/analytics", icon: TrendingUp, label: "통계 분석" },
   { href: "/admin/logs", icon: FileText, label: "활동 로그" },
 ];
 
