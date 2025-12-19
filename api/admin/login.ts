@@ -1,15 +1,39 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq } from 'drizzle-orm';
-import { admins, adminLogs } from './lib/schema';
+import { eq, sql } from 'drizzle-orm';
+import { pgTable, text, varchar, timestamp, boolean, jsonb } from 'drizzle-orm/pg-core';
 import crypto from 'crypto';
+
+// Inline schema definitions
+const admins = pgTable("admins", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique().notNull(),
+  passwordHash: varchar("password_hash").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  role: varchar("role", { length: 20 }).default("cs").notNull(),
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+const adminLogs = pgTable("admin_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminId: varchar("admin_id").notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  targetType: varchar("target_type", { length: 50 }),
+  targetId: varchar("target_id"),
+  details: jsonb("details"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 function getDb() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL not configured');
-  const sql = neon(databaseUrl);
-  return drizzle(sql, { schema: { admins, adminLogs } });
+  const sqlClient = neon(databaseUrl);
+  return drizzle(sqlClient, { schema: { admins, adminLogs } });
 }
 
 function hashPassword(password: string): string {

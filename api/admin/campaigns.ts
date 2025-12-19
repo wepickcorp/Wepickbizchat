@@ -2,14 +2,71 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { sql, ilike, eq, or, desc, and } from 'drizzle-orm';
-import { campaigns, users } from './lib/schema';
-import { verifyAdminToken } from './lib/auth';
+import { pgTable, varchar, timestamp, decimal, boolean, integer } from 'drizzle-orm/pg-core';
+import crypto from 'crypto';
+
+// Inline schema definitions
+const admins = pgTable("admins", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique().notNull(),
+  passwordHash: varchar("password_hash").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  role: varchar("role", { length: 20 }).default("cs").notNull(),
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique(),
+});
+
+const campaigns = pgTable("campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  messageType: varchar("message_type", { length: 10 }).notNull(),
+  status: varchar("status", { length: 20 }).default("temp_registered").notNull(),
+  statusCode: integer("status_code").default(0).notNull(),
+  targetCount: integer("target_count").default(0).notNull(),
+  sentCount: integer("sent_count").default(0),
+  budget: decimal("budget", { precision: 12, scale: 0 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 function getDb() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL not configured');
   const sqlClient = neon(databaseUrl);
   return drizzle(sqlClient);
+}
+
+function verifyToken(token: string): { adminId: string } | null {
+  try {
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+    const { data, signature } = decoded;
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    return { adminId: payload.adminId };
+  } catch { return null; }
+}
+
+async function verifyAdminToken(req: VercelRequest) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.replace('Bearer ', '');
+  const verified = verifyToken(token);
+  if (!verified) return null;
+  try {
+    const db = getDb();
+    const admin = await db.select().from(admins).where(eq(admins.id, verified.adminId)).limit(1);
+    if (admin.length === 0 || !admin[0].isActive) return null;
+    return admin[0];
+  } catch { return null; }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
