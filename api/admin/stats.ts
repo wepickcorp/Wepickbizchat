@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { sql, eq, gte, and } from 'drizzle-orm';
-import { users, campaigns, transactions } from '../../shared/schema';
+import { users, campaigns, transactions } from './lib/schema';
 import { verifyAdminToken } from './lib/auth';
 
 function getDb() {
@@ -40,12 +40,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .where(eq(campaigns.status, 'running'));
     const activeCampaigns = Number(activeCampaignsResult?.count || 0);
 
-    const [revenueTodayResult] = await db.select({ sum: sql<number>`COALESCE(SUM(amount), 0)` })
+    const [revenueTodayResult] = await db.select({ sum: sql<number>`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` })
       .from(transactions)
       .where(and(eq(transactions.type, 'charge'), gte(transactions.createdAt, today)));
     const revenueToday = Number(revenueTodayResult?.sum || 0);
 
-    const [totalRevenueResult] = await db.select({ sum: sql<number>`COALESCE(SUM(amount), 0)` })
+    const [totalRevenueResult] = await db.select({ sum: sql<number>`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` })
       .from(transactions)
       .where(eq(transactions.type, 'charge'));
     const totalRevenue = Number(totalRevenueResult?.sum || 0);

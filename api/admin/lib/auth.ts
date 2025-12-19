@@ -2,7 +2,7 @@ import type { VercelRequest } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
-import { admins } from '../../../shared/schema';
+import { admins } from './schema';
 import crypto from 'crypto';
 
 export function verifyToken(token: string): { adminId: string } | null {

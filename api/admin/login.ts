@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
-import { admins, adminLogs } from '../../shared/schema';
+import { admins, adminLogs } from './lib/schema';
 import crypto from 'crypto';
 
 function getDb() {
@@ -13,7 +13,7 @@ function getDb() {
 }
 
 function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + process.env.ADMIN_SALT || 'wepick-admin-salt').digest('hex');
+  return crypto.createHash('sha256').update(password + (process.env.ADMIN_SALT || 'wepick-admin-salt')).digest('hex');
 }
 
 function generateToken(adminId: string): string {

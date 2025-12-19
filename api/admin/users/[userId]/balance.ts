@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
-import { users, transactions, adminLogs } from '../../../../shared/schema';
+import { users, transactions, adminLogs } from '../../lib/schema';
 import { verifyAdminToken, getClientIp } from '../../lib/auth';
 
 function getDb() {

@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { sql, ilike, eq, or, desc } from 'drizzle-orm';
-import { campaigns, users } from '../../shared/schema';
+import { sql, ilike, eq, or, desc, and } from 'drizzle-orm';
+import { campaigns, users } from './lib/schema';
 import { verifyAdminToken } from './lib/auth';
 
 function getDb() {
@@ -29,22 +29,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const limitNum = Math.min(100, parseInt(limit as string));
     const offset = (pageNum - 1) * limitNum;
 
-    let baseQuery = db.select({
-      id: campaigns.id,
-      name: campaigns.name,
-      messageType: campaigns.messageType,
-      status: campaigns.status,
-      statusCode: campaigns.statusCode,
-      targetCount: campaigns.targetCount,
-      sentCount: campaigns.sentCount,
-      budget: campaigns.budget,
-      createdAt: campaigns.createdAt,
-      userId: campaigns.userId,
-      userEmail: users.email,
-    })
-    .from(campaigns)
-    .leftJoin(users, eq(campaigns.userId, users.id));
-
     const conditions = [];
     
     if (search) {
@@ -58,16 +42,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       conditions.push(eq(campaigns.status, status as string));
     }
 
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
     const [countResult] = await db.select({ count: sql<number>`count(*)` })
       .from(campaigns)
       .leftJoin(users, eq(campaigns.userId, users.id))
-      .where(conditions.length > 0 ? sql`${conditions.map(c => c).join(' AND ')}` : undefined);
+      .where(whereClause);
 
-    const campaignsList = await baseQuery
-      .where(conditions.length > 0 ? sql`${conditions.map(c => c).join(' AND ')}` : undefined)
-      .orderBy(desc(campaigns.createdAt))
-      .limit(limitNum)
-      .offset(offset);
+    const campaignsList = await db.select({
+      id: campaigns.id,
+      name: campaigns.name,
+      messageType: campaigns.messageType,
+      status: campaigns.status,
+      statusCode: campaigns.statusCode,
+      targetCount: campaigns.targetCount,
+      sentCount: campaigns.sentCount,
+      budget: campaigns.budget,
+      createdAt: campaigns.createdAt,
+      userId: campaigns.userId,
+      userEmail: users.email,
+    })
+    .from(campaigns)
+    .leftJoin(users, eq(campaigns.userId, users.id))
+    .where(whereClause)
+    .orderBy(desc(campaigns.createdAt))
+    .limit(limitNum)
+    .offset(offset);
 
     return res.status(200).json({
       campaigns: campaignsList,
