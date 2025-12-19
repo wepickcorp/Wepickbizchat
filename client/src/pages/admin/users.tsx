@@ -69,27 +69,31 @@ export default function AdminUsers() {
 
   const adjustBalanceMutation = useMutation({
     mutationFn: async ({ userId, amount, reason }: { userId: string; amount: number; reason: string }) => {
+      const token = localStorage.getItem("adminToken");
       const res = await fetch(`/api/admin/users/${userId}/balance`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${adminToken}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ amount, reason }),
       });
+      const data = await res.json();
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to adjust balance");
+        throw new Error(data.error || "잔액 조정에 실패했습니다");
       }
-      return res.json();
+      return data;
     },
-    onSuccess: () => {
-      toast({ title: "잔액 조정 완료", description: "잔액이 성공적으로 조정되었습니다" });
+    onSuccess: (data) => {
+      toast({ 
+        title: "잔액 조정 완료", 
+        description: `잔액이 ₩${Number(data.previousBalance).toLocaleString()}에서 ₩${Number(data.newBalance).toLocaleString()}으로 변경되었습니다` 
+      });
       setBalanceDialogOpen(false);
       setBalanceAmount("");
       setBalanceReason("");
       setSelectedUser(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", { search, page }] });
     },
     onError: (error: Error) => {
       toast({ title: "잔액 조정 실패", description: error.message, variant: "destructive" });
