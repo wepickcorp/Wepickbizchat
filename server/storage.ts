@@ -9,6 +9,8 @@ import {
   files,
   geofences,
   atsMetaCache,
+  refunds,
+  taxInvoices,
   type User,
   type UpsertUser,
   type Campaign,
@@ -29,6 +31,10 @@ import {
   type InsertGeofence,
   type AtsMetaCache,
   type InsertAtsMetaCache,
+  type Refund,
+  type InsertRefund,
+  type TaxInvoice,
+  type InsertTaxInvoice,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -110,6 +116,17 @@ export interface IStorage {
   getAtsMetaByType(metaType: string): Promise<AtsMetaCache[]>;
   upsertAtsMeta(data: InsertAtsMetaCache): Promise<AtsMetaCache>;
   clearAtsMetaByType(metaType: string): Promise<void>;
+  
+  // Refunds
+  getRefunds(userId: string): Promise<Refund[]>;
+  getRefund(id: string): Promise<Refund | undefined>;
+  createRefund(refund: InsertRefund): Promise<Refund>;
+  getPendingRefundByUser(userId: string): Promise<Refund | undefined>;
+  
+  // Tax Invoices
+  getTaxInvoices(userId: string): Promise<TaxInvoice[]>;
+  getTaxInvoice(id: string): Promise<TaxInvoice | undefined>;
+  createTaxInvoice(invoice: InsertTaxInvoice): Promise<TaxInvoice>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -529,6 +546,54 @@ export class DatabaseStorage implements IStorage {
 
   async clearAtsMetaByType(metaType: string): Promise<void> {
     await db.delete(atsMetaCache).where(eq(atsMetaCache.metaType, metaType));
+  }
+
+  // Refunds
+  async getRefunds(userId: string): Promise<Refund[]> {
+    const result = await db
+      .select()
+      .from(refunds)
+      .where(eq(refunds.userId, userId))
+      .orderBy(desc(refunds.createdAt));
+    return result;
+  }
+
+  async getRefund(id: string): Promise<Refund | undefined> {
+    const [refund] = await db.select().from(refunds).where(eq(refunds.id, id));
+    return refund || undefined;
+  }
+
+  async createRefund(refundData: InsertRefund): Promise<Refund> {
+    const [refund] = await db.insert(refunds).values(refundData).returning();
+    return refund;
+  }
+
+  async getPendingRefundByUser(userId: string): Promise<Refund | undefined> {
+    const [refund] = await db
+      .select()
+      .from(refunds)
+      .where(and(eq(refunds.userId, userId), eq(refunds.status, 'pending')));
+    return refund || undefined;
+  }
+
+  // Tax Invoices
+  async getTaxInvoices(userId: string): Promise<TaxInvoice[]> {
+    const result = await db
+      .select()
+      .from(taxInvoices)
+      .where(eq(taxInvoices.userId, userId))
+      .orderBy(desc(taxInvoices.createdAt));
+    return result;
+  }
+
+  async getTaxInvoice(id: string): Promise<TaxInvoice | undefined> {
+    const [invoice] = await db.select().from(taxInvoices).where(eq(taxInvoices.id, id));
+    return invoice || undefined;
+  }
+
+  async createTaxInvoice(invoiceData: InsertTaxInvoice): Promise<TaxInvoice> {
+    const [invoice] = await db.insert(taxInvoices).values(invoiceData).returning();
+    return invoice;
   }
 }
 

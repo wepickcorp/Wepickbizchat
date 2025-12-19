@@ -581,6 +581,132 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================================
+  // Refunds API - 환불 신청
+  // ============================================================
+  app.get("/api/refunds", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const refundList = await storage.getRefunds(userId);
+      res.json(refundList);
+    } catch (error) {
+      console.error("Error fetching refunds:", error);
+      res.status(500).json({ error: "환불 내역 조회 중 오류가 발생했습니다" });
+    }
+  });
+
+  app.post("/api/refunds", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const user = await storage.getUser(userId);
+
+      if (!user) {
+        return res.status(404).json({ error: "사용자를 찾을 수 없습니다" });
+      }
+
+      const { amount, reason, bankName, accountNumber, accountHolder } = req.body;
+
+      const numAmount = Number(amount);
+      if (isNaN(numAmount) || numAmount < 10000) {
+        return res.status(400).json({ error: "환불 금액은 최소 10,000원 이상이어야 합니다" });
+      }
+      if (!reason || reason.trim().length < 5) {
+        return res.status(400).json({ error: "환불 사유를 5자 이상 입력해주세요" });
+      }
+      if (!bankName || !accountNumber || !accountHolder) {
+        return res.status(400).json({ error: "계좌 정보를 모두 입력해주세요" });
+      }
+
+      const currentBalance = Number(user.balance || 0);
+      if (numAmount > currentBalance) {
+        return res.status(400).json({ error: "환불 금액이 현재 잔액보다 많습니다" });
+      }
+
+      const pendingRefund = await storage.getPendingRefundByUser(userId);
+      if (pendingRefund) {
+        return res.status(400).json({ error: "이미 처리 중인 환불 신청이 있습니다" });
+      }
+
+      const newRefund = await storage.createRefund({
+        userId,
+        amount: String(numAmount),
+        reason: reason.trim(),
+        bankName,
+        accountNumber,
+        accountHolder,
+        status: "pending",
+      });
+
+      res.status(201).json({
+        success: true,
+        refund: newRefund,
+        message: "환불 신청이 접수되었습니다. 영업일 기준 3-5일 내 처리됩니다.",
+      });
+    } catch (error) {
+      console.error("Error creating refund:", error);
+      res.status(500).json({ error: "환불 신청 중 오류가 발생했습니다" });
+    }
+  });
+
+  // ============================================================
+  // Tax Invoices API - 세금계산서 신청
+  // ============================================================
+  app.get("/api/tax-invoices", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const invoiceList = await storage.getTaxInvoices(userId);
+      res.json(invoiceList);
+    } catch (error) {
+      console.error("Error fetching tax invoices:", error);
+      res.status(500).json({ error: "세금계산서 내역 조회 중 오류가 발생했습니다" });
+    }
+  });
+
+  app.post("/api/tax-invoices", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const { amount, buyerBusinessNumber, buyerCompanyName, buyerEmail } = req.body;
+
+      const numAmount = Number(amount);
+      if (isNaN(numAmount) || numAmount < 1000) {
+        return res.status(400).json({ error: "발행 금액은 최소 1,000원 이상이어야 합니다" });
+      }
+      if (!buyerBusinessNumber || buyerBusinessNumber.replace(/-/g, '').length !== 10) {
+        return res.status(400).json({ error: "올바른 사업자등록번호를 입력해주세요 (10자리)" });
+      }
+      if (!buyerCompanyName || buyerCompanyName.trim().length < 2) {
+        return res.status(400).json({ error: "상호명을 입력해주세요" });
+      }
+      if (!buyerEmail || !buyerEmail.includes('@')) {
+        return res.status(400).json({ error: "올바른 이메일 주소를 입력해주세요" });
+      }
+
+      const taxAmount = Math.floor(numAmount * 0.1);
+      const totalAmount = numAmount + taxAmount;
+
+      const newInvoice = await storage.createTaxInvoice({
+        userId,
+        issueDate: new Date(),
+        amount: String(numAmount),
+        taxAmount: String(taxAmount),
+        totalAmount: String(totalAmount),
+        buyerBusinessNumber: buyerBusinessNumber.replace(/-/g, ''),
+        buyerCompanyName: buyerCompanyName.trim(),
+        buyerEmail: buyerEmail.trim(),
+        status: "requested",
+      });
+
+      res.status(201).json({
+        success: true,
+        taxInvoice: newInvoice,
+        message: "세금계산서 발행 신청이 접수되었습니다. 영업일 기준 1-2일 내 발행됩니다.",
+      });
+    } catch (error) {
+      console.error("Error creating tax invoice:", error);
+      res.status(500).json({ error: "세금계산서 신청 중 오류가 발생했습니다" });
+    }
+  });
+
   app.post("/api/targeting/estimate", isAuthenticated, async (req, res) => {
     try {
       const { gender, ageMin: rawAgeMin, ageMax: rawAgeMax, regions } = req.body;
