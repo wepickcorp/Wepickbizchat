@@ -9,8 +9,15 @@ import {
   ArrowDownRight,
   RefreshCw,
   Plus,
-  Loader2
+  Loader2,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  BanknoteIcon
 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency, formatDateTime } from "@/lib/authUtils";
 import { StatsCard } from "@/components/stats-card";
@@ -21,6 +28,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -30,11 +40,49 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Transaction } from "@shared/schema";
+import type { Transaction, Refund } from "@shared/schema";
 import { useLocation } from "wouter";
+
+const refundSchema = z.object({
+  amount: z.string().min(1, "환불 금액을 입력해주세요"),
+  reason: z.string().min(5, "환불 사유를 5자 이상 입력해주세요"),
+  bankName: z.string().min(1, "은행을 선택해주세요"),
+  accountNumber: z.string().min(10, "계좌번호를 입력해주세요"),
+  accountHolder: z.string().min(2, "예금주명을 입력해주세요"),
+});
+
+type RefundFormData = z.infer<typeof refundSchema>;
+
+const banks = [
+  "KB국민은행", "신한은행", "우리은행", "하나은행", "SC제일은행",
+  "NH농협은행", "IBK기업은행", "카카오뱅크", "토스뱅크", "케이뱅크",
+  "새마을금고", "수협은행", "대구은행", "부산은행", "광주은행",
+];
+
+const refundStatusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Clock }> = {
+  pending: { label: "처리 대기", variant: "secondary", icon: Clock },
+  approved: { label: "승인됨", variant: "outline", icon: CheckCircle2 },
+  completed: { label: "환불 완료", variant: "default", icon: CheckCircle2 },
+  rejected: { label: "거절됨", variant: "destructive", icon: XCircle },
+};
 
 const chargeAmounts = [100000, 300000, 500000, 1000000];
 
@@ -44,7 +92,42 @@ export default function Billing() {
   const [chargeAmount, setChargeAmount] = useState<number>(100000);
   const [customAmount, setCustomAmount] = useState<string>("");
   const [isChargeDialogOpen, setIsChargeDialogOpen] = useState(false);
+  const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false);
   const [, setLocation] = useLocation();
+
+  const refundForm = useForm<RefundFormData>({
+    resolver: zodResolver(refundSchema),
+    defaultValues: {
+      amount: "",
+      reason: "",
+      bankName: "",
+      accountNumber: "",
+      accountHolder: "",
+    },
+  });
+
+  const { data: refunds, isLoading: refundsLoading } = useQuery<Refund[]>({
+    queryKey: ["/api/refunds"],
+  });
+
+  const refundMutation = useMutation({
+    mutationFn: async (data: RefundFormData) => {
+      const res = await apiRequest("POST", "/api/refunds", {
+        ...data,
+        amount: Number(data.amount.replace(/,/g, '')),
+      });
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "환불 신청 완료", description: data.message });
+      setIsRefundDialogOpen(false);
+      refundForm.reset();
+      queryClient.invalidateQueries({ queryKey: ["/api/refunds"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "환불 신청 실패", description: error.message, variant: "destructive" });
+    },
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -335,83 +418,277 @@ export default function Billing() {
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>거래 내역</CardTitle>
-          <CardDescription>잔액 충전 및 사용 내역이에요</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center justify-between py-4 border-b last:border-0">
-                  <div className="flex items-center gap-4">
-                    <Skeleton className="h-10 w-10 rounded-full" />
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-3 w-24" />
+      <Tabs defaultValue="transactions" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="transactions" data-testid="tab-transactions">거래 내역</TabsTrigger>
+          <TabsTrigger value="refunds" data-testid="tab-refunds">환불 신청</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="transactions" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>거래 내역</CardTitle>
+              <CardDescription>잔액 충전 및 사용 내역이에요</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="flex items-center justify-between py-4 border-b last:border-0">
+                      <div className="flex items-center gap-4">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-5 w-24" />
                     </div>
-                  </div>
-                  <Skeleton className="h-5 w-24" />
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : transactions && transactions.length > 0 ? (
-            <div className="space-y-1">
-              {transactions.map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="flex items-center justify-between py-4 px-2 rounded-lg hover-elevate -mx-2 border-b last:border-0"
-                  data-testid={`row-transaction-${transaction.id}`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-full",
-                      transaction.type === 'charge' ? "bg-success/10" :
-                      transaction.type === 'usage' ? "bg-primary/10" : "bg-chart-4/10"
-                    )}>
-                      {getTransactionIcon(transaction.type)}
+              ) : transactions && transactions.length > 0 ? (
+                <div className="space-y-1">
+                  {transactions.map((transaction) => (
+                    <div
+                      key={transaction.id}
+                      className="flex items-center justify-between py-4 px-2 rounded-lg hover-elevate -mx-2 border-b last:border-0"
+                      data-testid={`row-transaction-${transaction.id}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "flex h-10 w-10 items-center justify-center rounded-full",
+                          transaction.type === 'charge' ? "bg-success/10" :
+                          transaction.type === 'usage' ? "bg-primary/10" : "bg-chart-4/10"
+                        )}>
+                          {getTransactionIcon(transaction.type)}
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {getTransactionLabel(transaction.type)}
+                            {transaction.description && ` - ${transaction.description}`}
+                          </p>
+                          <p className="text-small text-muted-foreground">
+                            {formatDateTime(transaction.createdAt!)}
+                            {transaction.paymentMethod && ` · ${transaction.paymentMethod}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className={cn(
+                          "font-medium",
+                          transaction.type === 'charge' ? "text-success" :
+                          transaction.type === 'refund' ? "text-chart-4" : "text-foreground"
+                        )}>
+                          {transaction.type === 'charge' || transaction.type === 'refund' ? '+' : '-'}
+                          {formatCurrency(Math.abs(parseFloat(transaction.amount as string)))}
+                        </p>
+                        <p className="text-small text-muted-foreground">
+                          잔액 {formatCurrency(transaction.balanceAfter)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">
-                        {getTransactionLabel(transaction.type)}
-                        {transaction.description && ` - ${transaction.description}`}
-                      </p>
-                      <p className="text-small text-muted-foreground">
-                        {formatDateTime(transaction.createdAt!)}
-                        {transaction.paymentMethod && ` · ${transaction.paymentMethod}`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className={cn(
-                      "font-medium",
-                      transaction.type === 'charge' ? "text-success" :
-                      transaction.type === 'refund' ? "text-chart-4" : "text-foreground"
-                    )}>
-                      {transaction.type === 'charge' || transaction.type === 'refund' ? '+' : '-'}
-                      {formatCurrency(Math.abs(parseFloat(transaction.amount as string)))}
-                    </p>
-                    <p className="text-small text-muted-foreground">
-                      잔액 {formatCurrency(transaction.balanceAfter)}
-                    </p>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              icon={CreditCard}
-              title="거래 내역이 없어요"
-              description="잔액을 충전하면 여기에 거래 내역이 표시돼요"
-              action={{
-                label: "잔액 충전하기",
-                onClick: () => setIsChargeDialogOpen(true),
-              }}
-            />
-          )}
-        </CardContent>
-      </Card>
+              ) : (
+                <EmptyState
+                  icon={CreditCard}
+                  title="거래 내역이 없어요"
+                  description="잔액을 충전하면 여기에 거래 내역이 표시돼요"
+                  action={{
+                    label: "잔액 충전하기",
+                    onClick: () => setIsChargeDialogOpen(true),
+                  }}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="refunds" className="mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <BanknoteIcon className="h-5 w-5" />
+                  환불 신청
+                </CardTitle>
+                <CardDescription>잔액 환불을 신청하고 진행 상황을 확인해요</CardDescription>
+              </div>
+              <Dialog open={isRefundDialogOpen} onOpenChange={setIsRefundDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" data-testid="button-request-refund">
+                    <Plus className="h-4 w-4" />
+                    환불 신청
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle>환불 신청</DialogTitle>
+                    <DialogDescription>
+                      현재 잔액: {formatCurrency(balance)} | 영업일 기준 3-5일 내 처리됩니다
+                    </DialogDescription>
+                  </DialogHeader>
+                  <Form {...refundForm}>
+                    <form onSubmit={refundForm.handleSubmit((data) => refundMutation.mutate(data))} className="space-y-4">
+                      <FormField
+                        control={refundForm.control}
+                        name="amount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>환불 금액 (원)</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                placeholder="50,000"
+                                data-testid="input-refund-amount"
+                                onChange={(e) => {
+                                  const value = e.target.value.replace(/[^0-9]/g, '');
+                                  field.onChange(Number(value).toLocaleString());
+                                }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={refundForm.control}
+                        name="reason"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>환불 사유</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                {...field}
+                                placeholder="환불 사유를 입력해주세요"
+                                data-testid="input-refund-reason"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={refundForm.control}
+                        name="bankName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>은행</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-bank">
+                                  <SelectValue placeholder="은행을 선택해주세요" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {banks.map((bank) => (
+                                  <SelectItem key={bank} value={bank}>{bank}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={refundForm.control}
+                        name="accountNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>계좌번호</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                placeholder="- 없이 입력"
+                                data-testid="input-account-number"
+                                onChange={(e) => field.onChange(e.target.value.replace(/[^0-9]/g, ''))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={refundForm.control}
+                        name="accountHolder"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>예금주</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="홍길동" data-testid="input-account-holder" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <DialogFooter className="pt-4">
+                        <Button type="button" variant="outline" onClick={() => setIsRefundDialogOpen(false)}>
+                          취소
+                        </Button>
+                        <Button type="submit" disabled={refundMutation.isPending} data-testid="button-submit-refund">
+                          {refundMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                          신청하기
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {refundsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : !refunds || refunds.length === 0 ? (
+                <EmptyState
+                  icon={BanknoteIcon}
+                  title="환불 신청 내역이 없어요"
+                  description="환불을 신청하면 여기에 표시됩니다"
+                />
+              ) : (
+                <div className="space-y-3">
+                  {refunds.map((refund) => {
+                    const status = refundStatusConfig[refund.status] || refundStatusConfig.pending;
+                    const StatusIcon = status.icon;
+                    return (
+                      <div
+                        key={refund.id}
+                        className="flex items-center justify-between p-4 border rounded-lg"
+                        data-testid={`row-refund-${refund.id}`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                            <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{formatCurrency(Number(refund.amount))} 환불 신청</p>
+                            <p className="text-small text-muted-foreground">
+                              {refund.createdAt ? formatDateTime(refund.createdAt) : "-"}
+                              {refund.bankName && ` · ${refund.bankName}`}
+                            </p>
+                            {refund.adminNote && (
+                              <p className="text-small text-muted-foreground mt-1">
+                                관리자 메모: {refund.adminNote}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Badge variant={status.variant} className="gap-1">
+                          <StatusIcon className="h-3 w-3" />
+                          {status.label}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

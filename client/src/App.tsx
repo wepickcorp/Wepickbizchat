@@ -28,6 +28,8 @@ import CampaignsNew from "@/pages/campaigns-new";
 import SendHistory from "@/pages/send-history";
 import SenderNumbers from "@/pages/sender-numbers";
 import Billing from "@/pages/billing";
+import TaxInvoices from "@/pages/tax-invoices";
+import Announcements from "@/pages/announcements";
 import Reports from "@/pages/reports";
 import TestCampaign from "@/pages/test-campaign";
 import NotFound from "@/pages/not-found";
@@ -218,6 +220,8 @@ function Router() {
       <Route path="/send-history" component={() => <ProtectedRoute component={SendHistory} />} />
       <Route path="/sender-numbers" component={() => <ProtectedRoute component={SenderNumbers} />} />
       <Route path="/billing" component={() => <ProtectedRoute component={Billing} />} />
+      <Route path="/tax-invoices" component={() => <ProtectedRoute component={TaxInvoices} />} />
+      <Route path="/announcements" component={() => <ProtectedRoute component={Announcements} />} />
       <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
       
       {/* Admin Routes */}

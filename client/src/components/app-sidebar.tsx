@@ -8,6 +8,8 @@ import {
   FilePlus,
   History,
   Phone,
+  Receipt,
+  Bell,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -79,6 +81,16 @@ const subNavItems = [
     title: "잔액 관리",
     url: "/billing",
     icon: Wallet,
+  },
+  {
+    title: "세금계산서",
+    url: "/tax-invoices",
+    icon: Receipt,
+  },
+  {
+    title: "공지사항",
+    url: "/announcements",
+    icon: Bell,
   },
   {
     title: "리포트",
