@@ -4,6 +4,11 @@
   "outputDirectory": "dist/public",
   "framework": null,
   "installCommand": "npm install",
+  "functions": {
+    "api/admin/**/*.ts": {
+      "includeFiles": "api/admin/lib/**"
+    }
+  },
   "crons": [
     {
       "path": "/api/internal/master/reset-balance",
