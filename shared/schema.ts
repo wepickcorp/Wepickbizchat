@@ -475,3 +475,68 @@ export const TEMPLATE_STATUS = {
   APPROVED: { status: 'approved', label: '승인됨' },
   REJECTED: { status: 'rejected', label: '반려됨' },
 } as const;
+
+// ============ Admin System Tables ============
+
+// Admin roles
+export const ADMIN_ROLES = {
+  SUPER: { role: 'super', label: '슈퍼 어드민', permissions: ['*'] },
+  CS: { role: 'cs', label: 'CS 어드민', permissions: ['users:read', 'users:update', 'campaigns:read', 'transactions:read', 'logs:read'] },
+  FINANCE: { role: 'finance', label: '재무 어드민', permissions: ['users:read', 'transactions:*', 'logs:read'] },
+} as const;
+
+// Admin users table
+export const admins = pgTable("admins", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique().notNull(),
+  passwordHash: varchar("password_hash").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  role: varchar("role", { length: 20 }).default("cs").notNull(),
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Admin activity logs
+export const adminLogs = pgTable("admin_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminId: varchar("admin_id").references(() => admins.id).notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  targetType: varchar("target_type", { length: 50 }),
+  targetId: varchar("target_id"),
+  details: jsonb("details"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Admin relations
+export const adminsRelations = relations(admins, ({ many }) => ({
+  logs: many(adminLogs),
+}));
+
+export const adminLogsRelations = relations(adminLogs, ({ one }) => ({
+  admin: one(admins, {
+    fields: [adminLogs.adminId],
+    references: [admins.id],
+  }),
+}));
+
+// Admin insert schemas
+export const insertAdminSchema = createInsertSchema(admins).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastLoginAt: true,
+});
+
+export const insertAdminLogSchema = createInsertSchema(adminLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Admin types
+export type Admin = typeof admins.$inferSelect;
+export type InsertAdmin = z.infer<typeof insertAdminSchema>;
+export type AdminLog = typeof adminLogs.$inferSelect;
+export type InsertAdminLog = z.infer<typeof insertAdminLogSchema>;
