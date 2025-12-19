@@ -11,6 +11,7 @@ import {
   atsMetaCache,
   refunds,
   taxInvoices,
+  agencies,
   type User,
   type UpsertUser,
   type Campaign,
@@ -37,7 +38,7 @@ import {
   type InsertTaxInvoice,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lte, inArray } from "drizzle-orm";
 
 export interface CreditBalanceResult {
   success: boolean;
@@ -127,6 +128,19 @@ export interface IStorage {
   getTaxInvoices(userId: string): Promise<TaxInvoice[]>;
   getTaxInvoice(id: string): Promise<TaxInvoice | undefined>;
   createTaxInvoice(invoice: InsertTaxInvoice): Promise<TaxInvoice>;
+  
+  // Agency Portal
+  getActiveAgencies(): Promise<{ id: string; name: string }[]>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getAgencyByUserId(userId: string): Promise<{ id: string; name: string; contactName: string | null; contactEmail: string | null; isActive: boolean } | undefined>;
+  getAgencyStats(agencyId: string): Promise<{
+    subAccountCount: number;
+    totalSpendThisMonth: number;
+    totalCampaigns: number;
+    activeCampaigns: number;
+    commissionRate: number;
+    estimatedCommission: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -594,6 +608,115 @@ export class DatabaseStorage implements IStorage {
   async createTaxInvoice(invoiceData: InsertTaxInvoice): Promise<TaxInvoice> {
     const [invoice] = await db.insert(taxInvoices).values(invoiceData).returning();
     return invoice;
+  }
+
+  // Agency Portal
+  async getActiveAgencies(): Promise<{ id: string; name: string }[]> {
+    const result = await db
+      .select({
+        id: agencies.id,
+        name: agencies.name,
+      })
+      .from(agencies)
+      .where(eq(agencies.isActive, true));
+    return result;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
+  }
+
+  async getAgencyByUserId(userId: string): Promise<{ id: string; name: string; contactName: string | null; contactEmail: string | null; isActive: boolean } | undefined> {
+    const [agency] = await db
+      .select({
+        id: agencies.id,
+        name: agencies.name,
+        contactName: agencies.contactName,
+        contactEmail: agencies.contactEmail,
+        isActive: agencies.isActive,
+      })
+      .from(agencies)
+      .where(eq(agencies.userId, userId));
+    return agency ? {
+      ...agency,
+      isActive: agency.isActive ?? true,
+    } : undefined;
+  }
+
+  async getAgencyStats(agencyId: string): Promise<{
+    subAccountCount: number;
+    totalSpendThisMonth: number;
+    totalCampaigns: number;
+    activeCampaigns: number;
+    commissionRate: number;
+    estimatedCommission: number;
+  }> {
+    // Get sub-accounts under this agency
+    const subAccounts = await db
+      .select()
+      .from(users)
+      .where(eq(users.agencyId, agencyId));
+    
+    const subAccountIds = subAccounts.map(u => u.id);
+
+    if (subAccountIds.length === 0) {
+      return {
+        subAccountCount: 0,
+        totalSpendThisMonth: 0,
+        totalCampaigns: 0,
+        activeCampaigns: 0,
+        commissionRate: 10,
+        estimatedCommission: 0,
+      };
+    }
+
+    // Calculate this month's spend
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    const usageTransactions = await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          inArray(transactions.userId, subAccountIds),
+          eq(transactions.type, 'usage'),
+          gte(transactions.createdAt, startOfMonth),
+          lte(transactions.createdAt, endOfMonth)
+        )
+      );
+
+    const totalSpendThisMonth = usageTransactions.reduce((sum, t) => {
+      return sum + Math.abs(Number(t.amount || 0));
+    }, 0);
+
+    // Get campaigns
+    const allCampaigns = await db
+      .select()
+      .from(campaigns)
+      .where(inArray(campaigns.userId, subAccountIds));
+
+    const activeCampaigns = allCampaigns.filter(c => 
+      c.statusCode === 30 || c.status === 'running'
+    );
+
+    // Calculate commission rate based on spend tier
+    let commissionRate = 10;
+    if (totalSpendThisMonth >= 100000000) commissionRate = 20;
+    else if (totalSpendThisMonth >= 50000000) commissionRate = 15;
+
+    const estimatedCommission = Math.floor(totalSpendThisMonth * (commissionRate / 100));
+
+    return {
+      subAccountCount: subAccounts.length,
+      totalSpendThisMonth,
+      totalCampaigns: allCampaigns.length,
+      activeCampaigns: activeCampaigns.length,
+      commissionRate,
+      estimatedCommission,
+    };
   }
 }
 

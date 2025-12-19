@@ -8,7 +8,7 @@ interface UseSupabaseAuthReturn {
   isLoading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName?: string, agencyId?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   getAccessToken: () => Promise<string | null>;
 }
@@ -60,13 +60,14 @@ export function useSupabaseAuth(): UseSupabaseAuthReturn {
     return { error: error as Error | null };
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
+  const signUp = useCallback(async (email: string, password: string, fullName?: string, agencyId?: string) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
+          agency_id: agencyId && agencyId !== 'none' ? agencyId : undefined,
         },
       },
     });

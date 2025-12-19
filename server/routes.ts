@@ -1810,5 +1810,101 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // Agency Portal Routes (Development)
+  // ============================================
+  
+  // Get list of active agencies (for signup dropdown)
+  app.get("/api/agencies/list", async (req, res) => {
+    try {
+      const agencies = await storage.getActiveAgencies();
+      res.json({ agencies });
+    } catch (error) {
+      console.error("[Agencies List] Error:", error);
+      res.status(500).json({ error: "대행사 목록 조회 중 오류가 발생했습니다" });
+    }
+  });
+
+  // Agency login
+  app.post("/api/agency/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ error: "이메일과 비밀번호를 입력해주세요" });
+      }
+
+      // For development, simulate Supabase auth and check agency status
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ error: "이메일 또는 비밀번호가 올바르지 않습니다" });
+      }
+
+      if (!user.isAgency) {
+        return res.status(403).json({ error: "대행사 계정이 아닙니다. 일반 로그인을 이용해주세요." });
+      }
+
+      const agency = await storage.getAgencyByUserId(user.id);
+      if (!agency || !agency.isActive) {
+        return res.status(403).json({ error: "비활성화된 대행사 계정입니다" });
+      }
+
+      // Create simple dev token
+      const token = Buffer.from(JSON.stringify({
+        agencyId: agency.id,
+        userId: user.id,
+        email: user.email,
+        agencyName: agency.name,
+        exp: Date.now() + 24 * 60 * 60 * 1000,
+      })).toString("base64");
+
+      res.json({
+        success: true,
+        token,
+        agency: {
+          id: agency.id,
+          name: agency.name,
+          contactName: agency.contactName,
+          contactEmail: agency.contactEmail,
+        },
+        user: {
+          id: user.id,
+          email: user.email,
+          companyName: user.companyName,
+        },
+      });
+    } catch (error) {
+      console.error("[Agency Login] Error:", error);
+      res.status(500).json({ error: "로그인 중 오류가 발생했습니다" });
+    }
+  });
+
+  // Agency stats
+  app.get("/api/agency/stats", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const token = authHeader.replace("Bearer ", "");
+      let payload;
+      try {
+        payload = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
+        if (payload.exp < Date.now()) {
+          return res.status(401).json({ error: "Token expired" });
+        }
+      } catch {
+        return res.status(401).json({ error: "Invalid token" });
+      }
+
+      const stats = await storage.getAgencyStats(payload.agencyId);
+      res.json(stats);
+    } catch (error) {
+      console.error("[Agency Stats] Error:", error);
+      res.status(500).json({ error: "통계 조회 중 오류가 발생했습니다" });
+    }
+  });
+
   return httpServer;
 }

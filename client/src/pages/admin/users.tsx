@@ -32,8 +32,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Search, ChevronLeft, ChevronRight, Loader2, Crown, UserX, UserCheck, LogIn } from "lucide-react";
-import type { User } from "@shared/schema";
+import { Search, ChevronLeft, ChevronRight, Loader2, Crown, UserX, UserCheck, LogIn, Building2 } from "lucide-react";
+import type { User, Agency } from "@shared/schema";
 
 interface UsersResponse {
   users: User[];
@@ -53,6 +53,11 @@ export default function AdminUsers() {
   const [balanceAmount, setBalanceAmount] = useState("");
   const [balanceType, setBalanceType] = useState<"add" | "subtract">("add");
   const [balanceReason, setBalanceReason] = useState("");
+  const [agencyDialogOpen, setAgencyDialogOpen] = useState(false);
+  const [agencyName, setAgencyName] = useState("");
+  const [agencyContactName, setAgencyContactName] = useState("");
+  const [agencyContactPhone, setAgencyContactPhone] = useState("");
+  const [agencyContactEmail, setAgencyContactEmail] = useState("");
 
   const { data, isLoading } = useQuery<UsersResponse>({
     queryKey: ["/api/admin/users", { search, page }],
@@ -148,6 +153,58 @@ export default function AdminUsers() {
     },
   });
 
+  const setAgencyMutation = useMutation({
+    mutationFn: async ({ userId, name, contactName, contactPhone, contactEmail }: { 
+      userId: string; name: string; contactName?: string; contactPhone?: string; contactEmail?: string 
+    }) => {
+      const res = await fetch(`/api/admin/users/${userId}/agency`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ name, contactName, contactPhone, contactEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "대행사 지정에 실패했습니다");
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "대행사 지정 완료", description: "해당 계정이 대행사로 등록되었습니다" });
+      setAgencyDialogOpen(false);
+      setAgencyName("");
+      setAgencyContactName("");
+      setAgencyContactPhone("");
+      setAgencyContactEmail("");
+      setSelectedUser(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "대행사 지정 실패", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const removeAgencyMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/admin/users/${userId}/agency`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "대행사 해제에 실패했습니다");
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "대행사 해제 완료", description: "대행사 등록이 해제되었습니다" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "대행사 해제 실패", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleBalanceSubmit = () => {
     if (!selectedUser || !balanceAmount || !balanceReason) {
       toast({ title: "모든 필드를 입력해주세요", variant: "destructive" });
@@ -159,6 +216,21 @@ export default function AdminUsers() {
       userId: selectedUser.id,
       amount,
       reason: balanceReason,
+    });
+  };
+
+  const handleAgencySubmit = () => {
+    if (!selectedUser || !agencyName) {
+      toast({ title: "대행사명은 필수입니다", variant: "destructive" });
+      return;
+    }
+
+    setAgencyMutation.mutate({
+      userId: selectedUser.id,
+      name: agencyName,
+      contactName: agencyContactName || undefined,
+      contactPhone: agencyContactPhone || undefined,
+      contactEmail: agencyContactEmail || undefined,
     });
   };
 
@@ -219,14 +291,24 @@ export default function AdminUsers() {
                             {user.isMaster && (
                               <Crown className="h-4 w-4 text-yellow-500" />
                             )}
+                            {user.isAgency && (
+                              <Building2 className="h-4 w-4 text-blue-500" />
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>{user.companyName || "-"}</TableCell>
                         <TableCell>₩{Number(user.balance || 0).toLocaleString()}</TableCell>
                         <TableCell>
-                          <Badge variant={user.isVerified ? "default" : "secondary"}>
-                            {user.isVerified ? "인증됨" : "미인증"}
-                          </Badge>
+                          <div className="flex items-center gap-1">
+                            <Badge variant={user.isVerified ? "default" : "secondary"}>
+                              {user.isVerified ? "인증됨" : "미인증"}
+                            </Badge>
+                            {user.isAgency && (
+                              <Badge variant="outline" className="border-blue-500 text-blue-500">
+                                대행사
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           {user.createdAt ? new Date(user.createdAt).toLocaleDateString("ko-KR") : "-"}
@@ -265,6 +347,32 @@ export default function AdminUsers() {
                             >
                               {user.isMaster ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
                             </Button>
+                            {user.isAgency ? (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => removeAgencyMutation.mutate(user.id)}
+                                disabled={removeAgencyMutation.isPending}
+                                data-testid={`button-remove-agency-${user.id}`}
+                              >
+                                <Building2 className="h-4 w-4 mr-1" />
+                                해제
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setAgencyName(user.companyName || "");
+                                  setAgencyDialogOpen(true);
+                                }}
+                                data-testid={`button-set-agency-${user.id}`}
+                              >
+                                <Building2 className="h-4 w-4 mr-1" />
+                                대행사
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -357,6 +465,71 @@ export default function AdminUsers() {
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               확인
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={agencyDialogOpen} onOpenChange={setAgencyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>대행사 지정</DialogTitle>
+            <DialogDescription>
+              {selectedUser?.email}을(를) 대행사 계정으로 등록합니다
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>대행사명 (필수)</Label>
+              <Input
+                placeholder="대행사명을 입력해주세요"
+                value={agencyName}
+                onChange={(e) => setAgencyName(e.target.value)}
+                data-testid="input-agency-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>담당자명</Label>
+              <Input
+                placeholder="담당자 이름"
+                value={agencyContactName}
+                onChange={(e) => setAgencyContactName(e.target.value)}
+                data-testid="input-agency-contact-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>담당자 연락처</Label>
+              <Input
+                placeholder="010-0000-0000"
+                value={agencyContactPhone}
+                onChange={(e) => setAgencyContactPhone(e.target.value)}
+                data-testid="input-agency-contact-phone"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>담당자 이메일</Label>
+              <Input
+                type="email"
+                placeholder="contact@agency.com"
+                value={agencyContactEmail}
+                onChange={(e) => setAgencyContactEmail(e.target.value)}
+                data-testid="input-agency-contact-email"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAgencyDialogOpen(false)}>
+              취소
+            </Button>
+            <Button
+              onClick={handleAgencySubmit}
+              disabled={setAgencyMutation.isPending || !agencyName}
+              data-testid="button-confirm-agency"
+            >
+              {setAgencyMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              대행사 등록
             </Button>
           </DialogFooter>
         </DialogContent>

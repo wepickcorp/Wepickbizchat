@@ -47,6 +47,8 @@ import AdminReports from "@/pages/admin/reports";
 import AdminAnalytics from "@/pages/admin/analytics";
 import { AdminLayout } from "@/components/admin-layout";
 
+import AgencyPortal from "@/pages/agency/index";
+
 function navigate(href: string) {
   window.history.pushState({}, "", href);
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -236,6 +238,10 @@ function Router() {
       <Route path="/admin/reports" component={() => <AdminRoute component={AdminReports} />} />
       <Route path="/admin/analytics" component={() => <AdminRoute component={AdminAnalytics} />} />
       <Route path="/admin/logs" component={() => <AdminRoute component={AdminLogs} />} />
+      
+      {/* Agency Portal Routes */}
+      <Route path="/agency/:rest*" component={AgencyPortal} />
+      <Route path="/agency" component={AgencyPortal} />
       
       <Route component={() => <ProtectedRoute component={NotFound} />} />
     </Switch>

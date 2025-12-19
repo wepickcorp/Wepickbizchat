@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +10,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, FileText } from "lucide-react";
+import { Loader2, FileText, Building2 } from "lucide-react";
 import logoUrl from "@assets/위픽xSKT 로고_1764247660608.png";
+
+interface AgencyOption {
+  id: string;
+  name: string;
+}
 
 const TERMS_OF_SERVICE = `위픽 서비스 이용약관 
 
@@ -238,8 +251,13 @@ export default function AuthPage() {
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupName, setSignupName] = useState("");
+  const [selectedAgencyId, setSelectedAgencyId] = useState<string>("");
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [termsDialogOpen, setTermsDialogOpen] = useState(false);
+
+  const { data: agenciesData } = useQuery<{ agencies: AgencyOption[] }>({
+    queryKey: ["/api/agencies/list"],
+  });
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -284,7 +302,7 @@ export default function AuthPage() {
 
     setIsLoading(true);
 
-    const { error } = await signUp(signupEmail, signupPassword, signupName);
+    const { error } = await signUp(signupEmail, signupPassword, signupName, selectedAgencyId || undefined);
 
     if (error) {
       toast({
@@ -402,6 +420,33 @@ export default function AuthPage() {
                     data-testid="input-signup-password"
                   />
                 </div>
+                
+                {agenciesData?.agencies && agenciesData.agencies.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-agency">
+                      <div className="flex items-center gap-1">
+                        <Building2 className="h-4 w-4" />
+                        소속 대행사 (선택사항)
+                      </div>
+                    </Label>
+                    <Select value={selectedAgencyId} onValueChange={setSelectedAgencyId}>
+                      <SelectTrigger id="signup-agency" data-testid="select-signup-agency">
+                        <SelectValue placeholder="대행사를 통해 가입하셨나요?" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">직접 가입 (대행사 없음)</SelectItem>
+                        {agenciesData.agencies.map((agency) => (
+                          <SelectItem key={agency.id} value={agency.id}>
+                            {agency.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      대행사를 통해 가입하시면 대행사 지원을 받을 수 있습니다
+                    </p>
+                  </div>
+                )}
                 
                 <div className="space-y-3 pt-2 border-t">
                   <div className="flex items-start gap-3">
