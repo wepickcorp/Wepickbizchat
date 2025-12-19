@@ -213,6 +213,66 @@ const systemTemplates = [
 무료 수신거부 1504`,
     status: 'approved',
   },
+  {
+    id: randomUUID(),
+    userId: SYSTEM_USER_ID,
+    name: '[교육] 학습 서비스/이벤트 안내 템플릿',
+    messageType: 'LMS',
+    title: '[대상/학년]을 위한 [이벤트명/학습 서비스명] 안내드립니다.',
+    content: `(광고)[SKT] [대상/학년]을 위한 [이벤트명/학습 서비스명] 안내
+
+고객님, 안녕하세요.
+[학습 시기/상황 강조 문구 ex. 성적 격차가 커지는 겨울 방학/새 학기 대비/다가오는 여름 방학 등]
+[교육 브랜드명] [학습 서비스명] [무료 체험/특별 혜택]을 안내드립니다.
+지금 신청하시면 [추가 혜택]도 함께 받아보실 수 있습니다.
+
+▶ [무료 체험/상담하기 신청(이벤트 내용 입력)] + [사은품 요약 문구]
+혜택 자세히 보기(CTA문구 입력): [이벤트 페이지 URL]
+
+■ [월/시즌] [무료 체험/이벤트] 혜택
+
+-기간: [이벤트 기간]
+-대상: 이 문자를 받으신 [학년/연령] 학부모님
+-혜택
+① [학년별 무료 체험 기간/콘텐츠 제공]
+② [기프트 카드/사은품 제공]
+③ [교재/가이드북/설명회/특강 제공]
+④ [기기 배송·회수/추가 비용 무료 등]
+
+[연령/학년]부터 [연령/학년]까지,
+[학년별/과목별] 무료 체험을 지금 신청해 보세요.
+
+■ [교육 브랜드명] 특장점
+
+[강사진/커리큘럼 강점]
+
+[입시/내신/학습 전략 차별점]
+
+[관리 방식: 1:1 코칭, 학습 리포트 등]
+
+[학습 도구: AI 학습, 앱, 콘텐츠 무제한 등]
+
+[성과/신뢰 요소: 누적 회원 수, 교재 판매 부수 등]
+
+■ 유의 사항
+
+[신규 회원 한정/중복 참여 불가 안내]
+
+[사은품 지급 조건 및 일정]
+
+[학습 서비스 이용 조건 관련 안내]
+
+문의처
+
+■ 문의: [교육 브랜드명] 고객센터([전화번호])
+
+※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.
+
+감사합니다.
+
+무료 수신거부 1504`,
+    status: 'approved',
+  },
 ];
 
 async function seedSystemTemplates() {
@@ -246,20 +306,24 @@ async function seedSystemTemplates() {
   console.log('Checking existing system templates...');
   
   const existing = await db.select().from(templates).where(eq(templates.userId, SYSTEM_USER_ID));
+  const existingNames = new Set(existing.map(t => t.name));
   
-  if (existing.length > 0) {
-    console.log(`Found ${existing.length} existing system templates. Deleting...`);
-    await db.delete(templates).where(eq(templates.userId, SYSTEM_USER_ID));
-  }
+  console.log(`Found ${existing.length} existing system templates.`);
 
-  console.log('Inserting system templates...');
+  console.log('Inserting new system templates...');
   
+  let addedCount = 0;
   for (const template of systemTemplates) {
+    if (existingNames.has(template.name)) {
+      console.log(`  - Skipped (already exists): ${template.name}`);
+      continue;
+    }
     await db.insert(templates).values(template);
     console.log(`  ✓ Created: ${template.name}`);
+    addedCount++;
   }
 
-  console.log('\n✅ System templates seeded successfully!');
+  console.log(`\n✅ System templates seeded successfully! (${addedCount} new templates added)`);
 }
 
 seedSystemTemplates().catch(console.error);
