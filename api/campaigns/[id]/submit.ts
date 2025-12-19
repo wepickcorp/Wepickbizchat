@@ -352,13 +352,18 @@ function toUnixTimestamp(date: Date | string | null): number | undefined {
 
 // 한국 시간대(KST, UTC+9) 기준으로 시간 정보 추출
 function getKSTTimeComponents(date: Date): { hours: number; minutes: number; date: Date } {
-  // KST는 UTC+9
-  const kstOffset = 9 * 60; // 분 단위
-  const utcTime = date.getTime() + (date.getTimezoneOffset() * 60 * 1000);
-  const kstTime = new Date(utcTime + (kstOffset * 60 * 1000));
+  // UTC 기준 시간에 9시간을 더해 KST로 변환
+  // getUTCHours()를 사용하여 서버 로컬 시간대와 무관하게 정확한 시간 계산
+  let hours = date.getUTCHours() + 9;
+  if (hours >= 24) hours -= 24;
+  const minutes = date.getUTCMinutes();
+  
+  // KST 기준 Date 객체도 생성 (디버깅 용도)
+  const kstTime = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+  
   return {
-    hours: kstTime.getHours(),
-    minutes: kstTime.getMinutes(),
+    hours,
+    minutes,
     date: kstTime,
   };
 }

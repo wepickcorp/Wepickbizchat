@@ -134,20 +134,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       paymentMethod: 'admin',
     });
 
-    await db.insert(adminLogs).values({
-      adminId: admin.id,
-      action: 'balance_adjust',
-      targetType: 'user',
-      targetId: userId as string,
-      details: { 
-        previousBalance: currentBalance, 
-        newBalance, 
-        amount: numAmount, 
-        reason,
-        userEmail: user.email,
-      },
-      ipAddress: getClientIp(req),
-    });
+    // admin_logs 기록은 실패해도 잔액 조정은 성공으로 처리
+    try {
+      await db.insert(adminLogs).values({
+        adminId: admin.id,
+        action: 'balance_adjust',
+        targetType: 'user',
+        targetId: userId as string,
+        details: { 
+          previousBalance: currentBalance, 
+          newBalance, 
+          amount: numAmount, 
+          reason,
+          userEmail: user.email,
+        },
+        ipAddress: getClientIp(req),
+      });
+    } catch (logError) {
+      console.error('[Admin Balance Adjust] Failed to insert admin log:', logError);
+      // 로그 기록 실패는 무시하고 계속 진행
+    }
 
     return res.status(200).json({
       success: true,
