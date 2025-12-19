@@ -99,10 +99,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { userId } = req.query;
-  const { amount, reason } = req.body;
+  const { amount, reason } = req.body || {};
 
-  if (!userId || typeof amount !== 'number' || !reason) {
-    return res.status(400).json({ error: '필수 값이 누락되었습니다' });
+  const numAmount = Number(amount);
+  if (!userId || isNaN(numAmount) || !reason) {
+    return res.status(400).json({ error: '필수 값이 누락되었습니다 (userId, amount, reason 필요)' });
   }
 
   try {
@@ -114,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const currentBalance = Number(user.balance || 0);
-    const newBalance = currentBalance + amount;
+    const newBalance = currentBalance + numAmount;
 
     if (newBalance < 0) {
       return res.status(400).json({ error: '잔액이 마이너스가 될 수 없습니다' });
@@ -127,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await db.insert(transactions).values({
       userId: userId as string,
       type: 'admin_adjustment',
-      amount: String(amount),
+      amount: String(numAmount),
       balanceAfter: String(newBalance),
       description: `[관리자 조정] ${reason}`,
       paymentMethod: 'admin',
@@ -141,7 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       details: { 
         previousBalance: currentBalance, 
         newBalance, 
-        amount, 
+        amount: numAmount, 
         reason,
         userEmail: user.email,
       },

@@ -149,7 +149,7 @@ export default function AdminCampaigns() {
                             variant="ghost"
                             asChild
                           >
-                            <a href={`/admin/campaigns/${campaign.id}`}>
+                            <a href={`/campaigns/${campaign.id}`} target="_blank" rel="noopener noreferrer">
                               <ExternalLink className="h-4 w-4" />
                             </a>
                           </Button>

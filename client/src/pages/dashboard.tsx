@@ -7,8 +7,13 @@ import {
   MousePointerClick,
   PlusCircle,
   ArrowRight,
-  TrendingUp
+  TrendingUp,
+  Bell,
+  AlertTriangle,
+  Info,
+  X
 } from "lucide-react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency, formatNumber, formatDateTime } from "@/lib/authUtils";
 import { StatsCard } from "@/components/stats-card";
@@ -17,8 +22,18 @@ import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from "recharts";
 import type { Campaign } from "@shared/schema";
+
+interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  type: string;
+  isPinned: boolean;
+  createdAt: string;
+}
 
 interface DashboardStats {
   totalCampaigns: number;
@@ -30,7 +45,8 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, isImpersonating, endImpersonation } = useAuth();
+  const [dismissedAnnouncements, setDismissedAnnouncements] = useState<string[]>([]);
 
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
@@ -40,12 +56,68 @@ export default function Dashboard() {
     queryKey: ["/api/campaigns?limit=5"],
   });
 
+  const { data: announcements } = useQuery<Announcement[]>({
+    queryKey: ["/api/announcements"],
+  });
+
   const displayName = user?.firstName 
     ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}님`
     : '사용자님';
 
+  const getAnnouncementIcon = (type: string) => {
+    switch (type) {
+      case 'warning': return AlertTriangle;
+      case 'urgent': return Bell;
+      default: return Info;
+    }
+  };
+
+  const getAnnouncementVariant = (type: string): "default" | "destructive" => {
+    return type === 'urgent' || type === 'warning' ? 'destructive' : 'default';
+  };
+
+  const visibleAnnouncements = announcements?.filter(a => !dismissedAnnouncements.includes(a.id)) || [];
+
   return (
     <div className="animate-fade-in space-y-8">
+      {isImpersonating && (
+        <Alert variant="destructive" className="border-orange-500 bg-orange-50">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>관리자 대리 로그인 중</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>현재 {user?.email} 계정으로 접속 중입니다. 30분 후 자동 만료됩니다.</span>
+            <Button size="sm" variant="outline" onClick={endImpersonation}>
+              세션 종료
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {visibleAnnouncements.length > 0 && (
+        <div className="space-y-2">
+          {visibleAnnouncements.map((announcement) => {
+            const IconComponent = getAnnouncementIcon(announcement.type);
+            return (
+              <Alert key={announcement.id} variant={getAnnouncementVariant(announcement.type)}>
+                <IconComponent className="h-4 w-4" />
+                <AlertTitle className="flex items-center justify-between">
+                  <span>{announcement.title}</span>
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className="h-6 w-6" 
+                    onClick={() => setDismissedAnnouncements(prev => [...prev, announcement.id])}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </AlertTitle>
+                <AlertDescription>{announcement.content}</AlertDescription>
+              </Alert>
+            );
+          })}
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-display font-bold" data-testid="text-welcome">
