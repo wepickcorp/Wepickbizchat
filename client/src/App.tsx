@@ -32,6 +32,14 @@ import Reports from "@/pages/reports";
 import TestCampaign from "@/pages/test-campaign";
 import NotFound from "@/pages/not-found";
 
+import AdminLogin from "@/pages/admin/login";
+import AdminDashboard from "@/pages/admin/index";
+import AdminUsers from "@/pages/admin/users";
+import AdminCampaigns from "@/pages/admin/campaigns";
+import AdminTransactions from "@/pages/admin/transactions";
+import AdminLogs from "@/pages/admin/logs";
+import { AdminLayout } from "@/components/admin-layout";
+
 function navigate(href: string) {
   window.history.pushState({}, "", href);
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -179,6 +187,14 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   );
 }
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  return (
+    <AdminLayout>
+      <Component />
+    </AdminLayout>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -198,6 +214,15 @@ function Router() {
       <Route path="/sender-numbers" component={() => <ProtectedRoute component={SenderNumbers} />} />
       <Route path="/billing" component={() => <ProtectedRoute component={Billing} />} />
       <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
+      
+      {/* Admin Routes */}
+      <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
+      <Route path="/admin/users" component={() => <AdminRoute component={AdminUsers} />} />
+      <Route path="/admin/campaigns" component={() => <AdminRoute component={AdminCampaigns} />} />
+      <Route path="/admin/transactions" component={() => <AdminRoute component={AdminTransactions} />} />
+      <Route path="/admin/logs" component={() => <AdminRoute component={AdminLogs} />} />
+      
       <Route component={() => <ProtectedRoute component={NotFound} />} />
     </Switch>
   );
