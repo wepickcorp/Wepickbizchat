@@ -38,6 +38,19 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)]
 );
 
+// Agencies table (대행사 계정)
+export const agencies = pgTable("agencies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // 대행사 계정의 user ID
+  name: varchar("name", { length: 200 }).notNull(), // 대행사명
+  contactName: varchar("contact_name", { length: 100 }), // 담당자명
+  contactPhone: varchar("contact_phone", { length: 20 }), // 담당자 연락처
+  contactEmail: varchar("contact_email", { length: 200 }), // 담당자 이메일
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // User storage table for Replit Auth
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -53,6 +66,8 @@ export const users = pgTable("users", {
   isVerified: boolean("is_verified").default(false),
   isMaster: boolean("is_master").default(false),
   masterResetAt: timestamp("master_reset_at"),
+  isAgency: boolean("is_agency").default(false), // 대행사 계정 여부
+  agencyId: varchar("agency_id"), // 소속 대행사 ID (하위 광고주 계정에 설정)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -350,6 +365,28 @@ export const geofencesRelations = relations(geofences, ({ one }) => ({
   }),
 }));
 
+export const agenciesRelations = relations(agencies, ({ one, many }) => ({
+  user: one(users, {
+    fields: [agencies.userId],
+    references: [users.id],
+  }),
+}));
+
+// Monthly Agency Stats (대행사 월별 정산 통계)
+export const monthlyAgencyStats = pgTable("monthly_agency_stats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agencyId: varchar("agency_id").notNull(),
+  yearMonth: varchar("year_month", { length: 7 }).notNull(), // YYYY-MM 형식
+  totalSpend: decimal("total_spend", { precision: 14, scale: 0 }).default("0"), // 하위 계정 총 소진액
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }), // 수수료율 (10%, 15%, 20%)
+  commissionAmount: decimal("commission_amount", { precision: 14, scale: 0 }).default("0"), // 대행 수수료
+  settlementDate: timestamp("settlement_date"), // 정산 예정일 (익월 30일)
+  status: varchar("status", { length: 20 }).default("pending"), // pending, settled
+  settledAt: timestamp("settled_at"), // 실제 정산일
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -415,6 +452,18 @@ export const insertAtsMetaCacheSchema = createInsertSchema(atsMetaCache).omit({
   lastSyncAt: true,
 });
 
+export const insertAgencySchema = createInsertSchema(agencies).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMonthlyAgencyStatsSchema = createInsertSchema(monthlyAgencyStats).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -446,6 +495,12 @@ export type InsertGeofence = z.infer<typeof insertGeofenceSchema>;
 
 export type AtsMetaCache = typeof atsMetaCache.$inferSelect;
 export type InsertAtsMetaCache = z.infer<typeof insertAtsMetaCacheSchema>;
+
+export type Agency = typeof agencies.$inferSelect;
+export type InsertAgency = z.infer<typeof insertAgencySchema>;
+
+export type MonthlyAgencyStats = typeof monthlyAgencyStats.$inferSelect;
+export type InsertMonthlyAgencyStats = z.infer<typeof insertMonthlyAgencyStatsSchema>;
 
 // Campaign with related data
 export type CampaignWithDetails = Campaign & {
