@@ -1207,35 +1207,39 @@ export default function TargetingAdvanced({
 
   useEffect(() => {
     const estimateAudience = async () => {
+      // Maptics 모드에서는 ATS estimate API를 호출하지 않음 (모드 전환 버그 방지)
+      if (currentMode === 'maptics') {
+        console.log('[TargetingAdvanced] Maptics mode - skipping ATS estimate API');
+        // Maptics 모드에서는 지오펜스 개수 기반으로 간단히 추정
+        const geofenceCount = targeting?.geofences?.length ?? 0;
+        setEstimatedCount(geofenceCount > 0 ? geofenceCount * 50000 : 0);
+        setIsEstimating(false);
+        return;
+      }
+      
       setIsEstimating(true);
       try {
-        // 현재 모드에 해당하는 필드만 전송 (BizChat API 규격 준수)
-        const estimatePayload = currentMode === 'maptics'
-          ? {
-              ...basicTargeting,
-              targetingMode: 'maptics',
-              geofences: targeting?.geofences ?? [],
-              // ATS 필드는 빈 배열로 전송하지 않음
-            }
-          : {
-              ...basicTargeting,
-              targetingMode: 'ats',
-              shopping11stCategories: targeting?.shopping11stCategories ?? [],
-              webappCategories: targeting?.webappCategories ?? [],
-              callCategories: targeting?.callCategories ?? [],
-              locations: targeting?.locations ?? [],
-              profiling: targeting?.profiling ?? [],
-              // 지오펜스는 전송하지 않음
-            };
+        // ATS 모드에서만 BizChat ATS mosu API 호출
+        const estimatePayload = {
+          ...basicTargeting,
+          targetingMode: 'ats',
+          shopping11stCategories: targeting?.shopping11stCategories ?? [],
+          webappCategories: targeting?.webappCategories ?? [],
+          callCategories: targeting?.callCategories ?? [],
+          locations: targeting?.locations ?? [],
+          profiling: targeting?.profiling ?? [],
+        };
         
         const res = await apiRequest("POST", "/api/targeting/estimate", estimatePayload);
         const data = await res.json();
         setEstimatedCount(data.estimatedCount || 0);
         
         // ATS 모드일 때 모수 정보를 부모에게 전달 (캠페인 저장에 필요)
-        if (currentMode === 'ats' && data.estimatedCount > 0) {
+        // 중요: targetingMode를 명시적으로 포함하여 모드 리셋 방지
+        if (data.estimatedCount > 0) {
           onTargetingChange({
             ...targeting,
+            targetingMode: 'ats',  // 명시적으로 현재 모드 유지
             sndMosu: data.estimatedCount,
             sndMosuQuery: data.sndMosuQuery || data.query || '',
             sndMosuDesc: data.sndMosuDesc || data.description || '',
