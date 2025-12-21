@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Loader2, ZoomIn, ZoomOut, Locate } from "lucide-react";
+import { Loader2, ZoomIn, ZoomOut, Locate, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { loadKakaoMaps } from "@/lib/kakao-maps";
 
 export interface GeofenceMapTarget {
   address: string;
@@ -50,6 +51,7 @@ export function GeofenceMap({
   const previewCircleRef = useRef<kakao.maps.Circle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const initMap = useCallback(() => {
     if (!mapContainerRef.current || !window.kakao?.maps) return;
@@ -70,30 +72,25 @@ export function GeofenceMap({
   }, [centerLat, centerLng]);
 
   useEffect(() => {
-    if (window.kakao?.maps) {
-      window.kakao.maps.load(() => {
-        initMap();
-      });
-    } else {
-      const checkKakao = setInterval(() => {
-        if (window.kakao?.maps) {
-          clearInterval(checkKakao);
-          window.kakao.maps.load(() => {
-            initMap();
-          });
+    let mounted = true;
+
+    loadKakaoMaps()
+      .then(() => {
+        if (mounted) {
+          initMap();
         }
-      }, 100);
+      })
+      .catch((error) => {
+        console.error('카카오맵 로드 실패:', error);
+        if (mounted) {
+          setLoadError(error.message || '지도를 불러오는데 실패했습니다');
+          setIsLoading(false);
+        }
+      });
 
-      const timeout = setTimeout(() => {
-        clearInterval(checkKakao);
-        setIsLoading(false);
-      }, 5000);
-
-      return () => {
-        clearInterval(checkKakao);
-        clearTimeout(timeout);
-      };
-    }
+    return () => {
+      mounted = false;
+    };
   }, [initMap]);
 
   const getCircleColor = useCallback((id: number) => {
@@ -286,6 +283,16 @@ export function GeofenceMap({
           <div className="flex flex-col items-center gap-2">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <span className="text-sm text-muted-foreground">지도 로딩 중...</span>
+          </div>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
+          <div className="flex flex-col items-center gap-2 text-center px-4">
+            <AlertCircle className="h-8 w-8 text-destructive" />
+            <span className="text-sm text-destructive font-medium">지도 로드 실패</span>
+            <span className="text-xs text-muted-foreground">{loadError}</span>
           </div>
         </div>
       )}
