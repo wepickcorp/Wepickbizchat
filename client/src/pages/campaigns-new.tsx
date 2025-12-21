@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation, useRoute, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Campaign, Targeting } from "@shared/schema";
@@ -126,7 +126,7 @@ export default function CampaignsNew() {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showAdvancedTargeting, setShowAdvancedTargeting] = useState(false);
-  const [advancedTargeting, setAdvancedTargeting] = useState<AdvancedTargetingState>({
+  const [advancedTargeting, setAdvancedTargetingState] = useState<AdvancedTargetingState>({
     targetingMode: 'ats',
     shopping11stCategories: [],
     webappCategories: [],
@@ -142,6 +142,26 @@ export default function CampaignsNew() {
   
   // 타겟팅 모드에 따른 편의 변수
   const isMaptics = advancedTargeting.targetingMode === 'maptics';
+  
+  // 핵심 버그 수정: targetingMode가 누락된 업데이트에서 이전 모드를 보존
+  // 스테일 클로저 문제로 인해 자식 컴포넌트에서 오래된 targeting을 참조할 수 있음
+  const setAdvancedTargeting = useCallback((newState: AdvancedTargetingState | ((prev: AdvancedTargetingState) => AdvancedTargetingState)) => {
+    setAdvancedTargetingState(prev => {
+      const nextState = typeof newState === 'function' ? newState(prev) : newState;
+      // targetingMode가 명시적으로 제공되지 않으면 이전 모드 유지
+      const preservedMode = nextState.targetingMode ?? prev.targetingMode;
+      console.log('[CampaignForm] setAdvancedTargeting:', {
+        prevMode: prev.targetingMode,
+        newMode: nextState.targetingMode,
+        preservedMode,
+        hasGeofences: (nextState.geofences?.length ?? 0) > 0,
+      });
+      return {
+        ...nextState,
+        targetingMode: preservedMode,
+      };
+    });
+  }, []);
   const [useScheduledSend, setUseScheduledSend] = useState(false);
   const [selectedScheduleDate, setSelectedScheduleDate] = useState<Date | null>(null);
   const [selectedScheduleTime, setSelectedScheduleTime] = useState<string | null>(null);
