@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
+import { GeofenceMap, type GeofenceMapItem } from "@/components/geofence-map";
 
 // BizChat 카테고리 타입 (11st, webapp)
 interface BizChatCategory {
@@ -632,6 +633,10 @@ function GeofenceSection({
   const [selectedPOI, setSelectedPOI] = useState<POIResult | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
+  // 지도 관련 상태
+  const [hoveredGeofenceId, setHoveredGeofenceId] = useState<number | null>(null);
+  const [selectedGeofenceId, setSelectedGeofenceId] = useState<number | null>(null);
+
   // 지오펜스 설정
   const [geoName, setGeoName] = useState('');
   const [geoGender, setGeoGender] = useState(0);
@@ -639,6 +644,26 @@ function GeofenceSection({
   const [geoMaxAge, setGeoMaxAge] = useState(50);
   const [geoStayMin, setGeoStayMin] = useState(10);
   const [geoRadius, setGeoRadius] = useState(500);
+
+  // 지오펜스를 지도 형식으로 변환
+  const mapGeofences: GeofenceMapItem[] = savedGeofences.map((geo) => ({
+    id: geo.id,
+    name: geo.name,
+    targets: geo.targets.map((t) => ({
+      address: t.address,
+      lat: t.lat,
+      lon: t.lon,
+      radius: t.radius,
+    })),
+  }));
+
+  // 미리보기용 타겟 (선택된 POI + 현재 반경)
+  const previewTarget = selectedPOI ? {
+    address: selectedPOI.road,
+    lat: selectedPOI.lat,
+    lon: selectedPOI.lon,
+    radius: geoRadius,
+  } : null;
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -754,36 +779,70 @@ function GeofenceSection({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <CardContent className="pt-0 space-y-4">
-            {/* 저장된 지오펜스 목록 */}
-            {savedGeofences.length > 0 && (
+            {/* 지오펜스 목록 + 지도 분할 레이아웃 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* 왼쪽: 저장된 지오펜스 목록 */}
               <div className="space-y-2">
                 <Label className="text-small font-medium">등록된 지오펜스</Label>
-                <div className="space-y-2">
-                  {savedGeofences.map((geo, index) => (
-                    <div
-                      key={geo.id}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                      data-testid={`geofence-saved-${geo.id}`}
-                    >
-                      <div>
-                        <div className="font-medium text-small">{geo.name}</div>
-                        <div className="text-tiny text-muted-foreground">
-                          {geo.targets[0]?.address} · 반경 {geo.targets[0]?.radius}m · 체류 {geo.targets[0]?.stayMin}분
-                        </div>
-                      </div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => removeGeofence(index)}
-                        data-testid={`button-remove-geofence-${geo.id}`}
+                {savedGeofences.length > 0 ? (
+                  <div className="space-y-2">
+                    {savedGeofences.map((geo, index) => (
+                      <div
+                        key={geo.id}
+                        className={cn(
+                          "flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors",
+                          selectedGeofenceId === geo.id 
+                            ? "bg-primary/10 border border-primary/50" 
+                            : hoveredGeofenceId === geo.id 
+                              ? "bg-muted" 
+                              : "bg-muted/50"
+                        )}
+                        data-testid={`geofence-saved-${geo.id}`}
+                        onClick={() => setSelectedGeofenceId(selectedGeofenceId === geo.id ? null : geo.id)}
+                        onMouseEnter={() => setHoveredGeofenceId(geo.id)}
+                        onMouseLeave={() => setHoveredGeofenceId(null)}
                       >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                        <div>
+                          <div className="font-medium text-small">{geo.name}</div>
+                          <div className="text-tiny text-muted-foreground">
+                            {geo.targets[0]?.address} · 반경 {geo.targets[0]?.radius}m · 체류 {geo.targets[0]?.stayMin}분
+                          </div>
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeGeofence(index);
+                          }}
+                          data-testid={`button-remove-geofence-${geo.id}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-small text-muted-foreground p-4 text-center border rounded-lg border-dashed">
+                    아래에서 위치를 검색하여 지오펜스를 추가해주세요
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* 오른쪽: 지도 */}
+              <div className="space-y-2">
+                <Label className="text-small font-medium">지도 미리보기</Label>
+                <GeofenceMap
+                  geofences={mapGeofences}
+                  selectedGeofenceId={selectedGeofenceId}
+                  hoveredGeofenceId={hoveredGeofenceId}
+                  onGeofenceClick={(id) => setSelectedGeofenceId(selectedGeofenceId === id ? null : id)}
+                  onGeofenceHover={setHoveredGeofenceId}
+                  previewTarget={previewTarget}
+                  className="h-[280px]"
+                />
+              </div>
+            </div>
 
             {/* POI 검색 */}
             <div className="space-y-2">
