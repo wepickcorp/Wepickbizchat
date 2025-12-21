@@ -50,3 +50,4 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
 - **PostgreSQL (Neon)**: Main database.
 - **Stripe**: Payment processing for balance charging.
 - **Vercel**: Deployment and serverless function hosting.
+- **Kakao Maps JavaScript SDK**: 지오펜스 타겟팅 지도 시각화. `VITE_KAKAO_MAP_KEY` 환경변수로 API 키 설정. Vercel 배포 시 해당 도메인을 카카오 개발자 콘솔에서 허용해야 합니다.
