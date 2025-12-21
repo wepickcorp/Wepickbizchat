@@ -46,7 +46,7 @@ export function GeofenceMap({
 }: GeofenceMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
-  const circlesRef = useRef<Map<number, kakao.maps.Circle>>(new Map());
+  const circlesRef = useRef<Map<number, kakao.maps.Circle[]>>(new Map());
   const previewCircleRef = useRef<kakao.maps.Circle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
@@ -112,13 +112,18 @@ export function GeofenceMap({
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
 
-    circlesRef.current.forEach((circle) => circle.setMap(null));
+    // 기존 원들 모두 제거
+    circlesRef.current.forEach((circles) => {
+      circles.forEach((circle) => circle.setMap(null));
+    });
     circlesRef.current.clear();
 
     const bounds = new window.kakao.maps.LatLngBounds();
     let hasValidBounds = false;
 
     geofences.forEach((geo) => {
+      const geoCircles: kakao.maps.Circle[] = [];
+
       geo.targets.forEach((target) => {
         if (!target.lat || !target.lon) return;
 
@@ -153,11 +158,15 @@ export function GeofenceMap({
           onGeofenceHover?.(null);
         });
 
-        circlesRef.current.set(geo.id, circle);
+        geoCircles.push(circle);
         bounds.extend(circle.getBounds().getSouthWest());
         bounds.extend(circle.getBounds().getNorthEast());
         hasValidBounds = true;
       });
+
+      if (geoCircles.length > 0) {
+        circlesRef.current.set(geo.id, geoCircles);
+      }
     });
 
     if (hasValidBounds && geofences.length > 0) {
@@ -168,12 +177,14 @@ export function GeofenceMap({
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
 
-    circlesRef.current.forEach((circle, id) => {
+    circlesRef.current.forEach((circles, id) => {
       const colors = getCircleColor(id);
-      circle.setOptions({
-        strokeColor: colors.stroke,
-        fillColor: colors.fill,
-        fillOpacity: colors.fillOpacity,
+      circles.forEach((circle) => {
+        circle.setOptions({
+          strokeColor: colors.stroke,
+          fillColor: colors.fill,
+          fillOpacity: colors.fillOpacity,
+        });
       });
     });
   }, [selectedGeofenceId, hoveredGeofenceId, mapReady, getCircleColor]);
