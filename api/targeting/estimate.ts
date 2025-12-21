@@ -399,8 +399,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const params: TargetingParams = req.body;
+    const params: TargetingParams & { targetingMode?: string; geofences?: unknown[] } = req.body;
     console.log('[Estimate] Request params:', JSON.stringify(params));
+
+    // Maptics 모드에서는 ATS mosu API 호출하지 않음 (지오펜스 기반 추정)
+    if (params.targetingMode === 'maptics') {
+      console.log('[Estimate] Maptics mode - returning geofence-based estimate');
+      const geofenceCount = params.geofences?.length ?? 0;
+      const estimatedCount = geofenceCount > 0 ? geofenceCount * 50000 : 0;
+      
+      return res.status(200).json({
+        estimatedCount,
+        minCount: Math.floor(estimatedCount * 0.8),
+        maxCount: Math.ceil(estimatedCount * 1.2),
+        reachRate: 85,
+        sndMosuQuery: null,
+        sndMosuDesc: `지오펜스 ${geofenceCount}개 타겟`,
+        mosuQuery: null,
+        mosuDesc: `지오펜스 ${geofenceCount}개 타겟`,
+      });
+    }
 
     // ATS mosu 페이로드 생성
     const { payload, desc } = buildATSMosuPayload(params);
