@@ -1252,7 +1252,8 @@ export default function TargetingAdvanced({
       }
     };
 
-    const debounce = setTimeout(estimateAudience, 500);
+    // 디바운스 시간 1000ms로 증가 (성능 최적화 - 빠른 연속 변경 시 불필요한 API 호출 방지)
+    const debounce = setTimeout(estimateAudience, 1000);
     return () => clearTimeout(debounce);
   }, [targeting?.shopping11stCategories, targeting?.webappCategories, targeting?.callCategories, targeting?.locations, targeting?.profiling, targeting?.geofences, basicTargeting, currentMode]);
 

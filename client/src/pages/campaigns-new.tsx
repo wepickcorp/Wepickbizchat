@@ -415,62 +415,26 @@ export default function CampaignsNew() {
     sndMosuDesc?: string;
   }>({});
   
-  // 고급 타겟팅 조건 변경 감지를 위한 키 생성 (객체 비교 대신 문자열 비교)
-  const advancedTargetingKey = JSON.stringify({
-    shopping11stCategories: advancedTargeting.shopping11stCategories,
-    webappCategories: advancedTargeting.webappCategories,
-    callCategories: advancedTargeting.callCategories,
-    locations: advancedTargeting.locations,
-    profiling: advancedTargeting.profiling,
-  });
-
+  // ATS 모수 정보는 targeting-advanced.tsx에서 계산하여 advancedTargeting.sndMosu에 저장됨
+  // 중복 API 호출 방지를 위해 별도의 estimate 호출 제거
+  // advancedTargeting.sndMosu가 업데이트되면 atsData에 동기화
   useEffect(() => {
-    const fetchEstimate = async () => {
-      // Maptics 모드에서는 모수 조회 API가 없으므로 스킵
-      if (isMaptics) {
-        console.log('[Campaign Form] Maptics mode - skipping ATS estimate API');
-        return;
-      }
-      
-      try {
-        const res = await apiRequest("POST", "/api/targeting/estimate", {
-          gender: watchGender,
-          ageMin: watchAgeMin,
-          ageMax: watchAgeMax,
-          regions: watchRegions,
-          // 고급 타겟팅 조건도 포함
-          shopping11stCategories: advancedTargeting.shopping11stCategories,
-          webappCategories: advancedTargeting.webappCategories,
-          callCategories: advancedTargeting.callCategories,
-          locations: advancedTargeting.locations,
-          profiling: advancedTargeting.profiling,
-        });
-        const data = await res.json();
-        setEstimatedAudience({
-          min: data.minCount,
-          estimated: data.estimatedCount,
-          max: data.maxCount,
-          reachRate: data.reachRate,
-        });
-        
-        // ATS 모수 정보를 별도 상태에 저장 (무한 루프 방지)
-        if (data.estimatedCount > 0) {
-          console.log('[Campaign Form] Updating ATS mosu from estimate:', data.estimatedCount);
-          setAtsData({
-            sndMosu: data.estimatedCount,
-            sndMosuQuery: data.sndMosuQuery || data.query,
-            sndMosuDesc: data.sndMosuDesc || data.description,
-          });
-        }
-      } catch (error) {
-        console.error("Failed to fetch targeting estimate:", error);
-      }
-    };
-    
-    if (currentStep === 2) {
-      fetchEstimate();
+    if (advancedTargeting.sndMosu !== undefined) {
+      console.log('[Campaign Form] Syncing ATS mosu from advancedTargeting:', advancedTargeting.sndMosu);
+      setAtsData({
+        sndMosu: advancedTargeting.sndMosu,
+        sndMosuQuery: advancedTargeting.sndMosuQuery,
+        sndMosuDesc: advancedTargeting.sndMosuDesc,
+      });
+      // estimatedAudience도 업데이트
+      setEstimatedAudience(prev => ({
+        ...prev,
+        estimated: advancedTargeting.sndMosu || prev.estimated,
+        min: Math.floor((advancedTargeting.sndMosu || prev.estimated) * 0.8),
+        max: Math.ceil((advancedTargeting.sndMosu || prev.estimated) * 1.2),
+      }));
     }
-  }, [currentStep, watchGender, watchAgeMin, watchAgeMax, watchRegions, isMaptics, advancedTargetingKey]);
+  }, [advancedTargeting.sndMosu, advancedTargeting.sndMosuQuery, advancedTargeting.sndMosuDesc]);
 
   // 메시지 유형별 단가
   const MESSAGE_PRICES = { LMS: 100, MMS: 120, RCS: 100 };
