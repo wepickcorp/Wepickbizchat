@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ShoppingBag,
@@ -1165,6 +1165,20 @@ function ProfilingSection({
   );
 }
 
+// 캐시 타입 정의
+interface EstimateCache {
+  key: string;
+  result: {
+    estimatedCount: number;
+    sndMosuQuery?: string;
+    sndMosuDesc?: string;
+  };
+  timestamp: number;
+}
+
+// 캐시 유효 시간 (5분)
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 export default function TargetingAdvanced({
   targeting,
   onTargetingChange,
@@ -1172,6 +1186,9 @@ export default function TargetingAdvanced({
 }: TargetingAdvancedProps) {
   const [estimatedCount, setEstimatedCount] = useState<number>(0);
   const [isEstimating, setIsEstimating] = useState(false);
+  
+  // 캐시 저장용 ref (리렌더링 방지)
+  const cacheRef = useRef<EstimateCache | null>(null);
 
   // 타겟팅 모드 (기본값: ATS)
   const currentMode = targeting?.targetingMode || 'ats';
@@ -1217,6 +1234,27 @@ export default function TargetingAdvanced({
         return;
       }
       
+      // 캐시 키 생성 (타겟팅 조건 기반)
+      const cacheKey = JSON.stringify({
+        basicTargeting,
+        shopping11stCategories: targeting?.shopping11stCategories ?? [],
+        webappCategories: targeting?.webappCategories ?? [],
+        callCategories: targeting?.callCategories ?? [],
+        locations: targeting?.locations ?? [],
+        profiling: targeting?.profiling ?? [],
+      });
+      
+      // 캐시 확인: 유효한 캐시가 있으면 API 호출 스킵
+      const now = Date.now();
+      if (cacheRef.current && 
+          cacheRef.current.key === cacheKey && 
+          (now - cacheRef.current.timestamp) < CACHE_TTL_MS) {
+        console.log('[TargetingAdvanced] Using cached estimate:', cacheRef.current.result.estimatedCount);
+        setEstimatedCount(cacheRef.current.result.estimatedCount);
+        setIsEstimating(false);
+        return;
+      }
+      
       setIsEstimating(true);
       try {
         // ATS 모드에서만 BizChat ATS mosu API 호출
@@ -1233,6 +1271,18 @@ export default function TargetingAdvanced({
         const res = await apiRequest("POST", "/api/targeting/estimate", estimatePayload);
         const data = await res.json();
         setEstimatedCount(data.estimatedCount || 0);
+        
+        // 캐시에 결과 저장
+        cacheRef.current = {
+          key: cacheKey,
+          result: {
+            estimatedCount: data.estimatedCount || 0,
+            sndMosuQuery: data.sndMosuQuery || data.query || '',
+            sndMosuDesc: data.sndMosuDesc || data.description || '',
+          },
+          timestamp: Date.now(),
+        };
+        console.log('[TargetingAdvanced] Cached estimate result:', data.estimatedCount);
         
         // ATS 모드일 때 모수 정보를 부모에게 전달 (캠페인 저장에 필요)
         // 중요: targetingMode를 명시적으로 포함하여 모드 리셋 방지
