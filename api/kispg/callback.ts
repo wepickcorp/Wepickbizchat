@@ -4,7 +4,7 @@ import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq, desc, sql } from 'drizzle-orm';
 import { pgTable, text, timestamp, numeric, varchar } from 'drizzle-orm/pg-core';
-import { createHash, createHmac } from 'crypto';
+import { createHash } from 'crypto';
 
 neonConfig.fetchConnectionCache = true;
 
@@ -34,15 +34,9 @@ function getDb() {
 }
 
 function generateEncData(mid: string, ediDate: string, goodsAmt: string, merchantKey: string): string {
-  // KIS PG 운영환경: MID + ediDate + 금액을 merchantKey로 HMAC-SHA256 생성
-  const data = mid + ediDate + goodsAmt;
-  
-  try {
-    const keyBuffer = Buffer.from(merchantKey, 'base64');
-    return createHmac('sha256', keyBuffer).update(data, 'utf8').digest('hex');
-  } catch (e) {
-    return createHmac('sha256', merchantKey).update(data, 'utf8').digest('hex');
-  }
+  // KIS PG: SHA256(mid + ediDate + goodsAmt + merchantKey)
+  const data = mid + ediDate + goodsAmt + merchantKey;
+  return createHash('sha256').update(data).digest('hex');
 }
 
 function parseFormBody(body: any): Record<string, string> {
