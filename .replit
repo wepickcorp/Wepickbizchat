@@ -55,3 +55,4 @@ ADMIN_JWT_SECRET = "b17b29c2d5ed6dfec6bd52142d7187aa51ebeda7ddbf1383ea366a217bc4
 ADMIN_SALT = "wepick-bizchat-admin-2024"
 KISPG_USE_PROD = "true"
 KISPG_RETURN_URL = "https://bizchat.wepick.kr/api/kispg/callback"
+SITE_URL = "https://bizchat.wepick.kr"

@@ -77,11 +77,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       encData: receivedEncData,
     } = params;
 
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.REPLIT_DOMAINS?.split(',')[0]
-        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-        : 'http://localhost:5000';
+    const baseUrl = process.env.SITE_URL 
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || (process.env.REPLIT_DOMAINS?.split(',')[0] ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null)
+      || 'http://localhost:5000';
 
     if (resultCd !== '0000') {
       const errorUrl = new URL(`${baseUrl}/billing`);
@@ -201,11 +200,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error) {
     console.error('KISPG callback error:', error);
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.REPLIT_DOMAINS?.split(',')[0]
-        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-        : 'http://localhost:5000';
+    const baseUrl = process.env.SITE_URL 
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || (process.env.REPLIT_DOMAINS?.split(',')[0] ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null)
+      || 'http://localhost:5000';
     
     const errorUrl = new URL(`${baseUrl}/billing`);
     errorUrl.searchParams.set('error', 'true');
