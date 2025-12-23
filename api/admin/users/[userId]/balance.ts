@@ -30,11 +30,10 @@ const transactions = pgTable("transactions", {
   userId: varchar("user_id").notNull(),
   type: varchar("type", { length: 20 }).notNull(),
   amount: decimal("amount", { precision: 12, scale: 0 }).notNull(),
-  balanceAfter: decimal("balance_after", { precision: 12, scale: 0 }),
+  balanceAfter: decimal("balance_after", { precision: 12, scale: 0 }).notNull(),
   description: text("description"),
-  campaignId: varchar("campaign_id"),
-  stripePaymentIntentId: varchar("stripe_payment_intent_id"),
   paymentMethod: varchar("payment_method", { length: 50 }),
+  stripeSessionId: varchar("stripe_session_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -121,20 +120,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: '잔액이 마이너스가 될 수 없습니다' });
     }
 
+    // 핵심 작업: 잔액 업데이트
     await db.update(users)
       .set({ balance: String(newBalance), updatedAt: new Date() })
       .where(eq(users.id, userId as string));
 
-    await db.insert(transactions).values({
-      userId: userId as string,
-      type: 'admin_adjustment',
-      amount: String(numAmount),
-      balanceAfter: String(newBalance),
-      description: `[관리자 조정] ${reason}`,
-      paymentMethod: 'admin',
-    });
+    // 잔액 업데이트 성공 후, 거래 내역 삽입 시도 (실패해도 성공 응답)
+    try {
+      await db.insert(transactions).values({
+        userId: userId as string,
+        type: 'admin_adjustment',
+        amount: String(numAmount),
+        balanceAfter: String(newBalance),
+        description: `[관리자 조정] ${reason}`,
+        paymentMethod: 'admin',
+      });
+    } catch (txError) {
+      console.error('[Admin Balance Adjust] Failed to insert transaction record:', txError);
+      // 거래 기록 실패는 경고만 로깅하고 계속 진행
+    }
 
-    // admin_logs 기록은 실패해도 잔액 조정은 성공으로 처리
+    // admin_logs 기록 (실패해도 성공으로 처리)
     try {
       await db.insert(adminLogs).values({
         adminId: admin.id,
