@@ -8,7 +8,7 @@ const announcements = pgTable("announcements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: varchar("title", { length: 200 }).notNull(),
   content: text("content").notNull(),
-  type: varchar("type", { length: 20 }).default("info").notNull(),
+  category: varchar("category", { length: 50 }).default("general").notNull(),
   isActive: boolean("is_active").default(true),
   isPinned: boolean("is_pinned").default(false),
   startDate: timestamp("start_date"),

@@ -96,15 +96,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[KISPG Auth] ediDate:', ediDate);
     console.log('[KISPG Auth] goodsAmt:', goodsAmt);
 
+    const userAgent = req.headers['user-agent'] || '';
+    const isMobile = /Mobile|Android|iPhone|iPad/i.test(userAgent);
+
     const mallNm = '(주)위픽코퍼레이션';
     const mchtNm = mallNm;
 
-    // MOB 모델 사용 - 전체 페이지 리다이렉트 방식
-    // WEB 모델은 iframe + postMessage 방식이므로 현재 구현에 적합하지 않음
+    // WEB: iframe + postMessage 방식, MOB: 전체 페이지 리다이렉트
+    const model = isMobile ? 'MOB' : 'WEB';
+    const channel = isMobile ? '0002' : '0001';
+
     const authParams = {
       payMethod: 'CARD',
-      model: 'MOB',
-      channel: '0002',
+      model,
+      channel,
       trxCd: '0',
       mid,
       mallNm,
@@ -123,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       charset: 'UTF-8',
     };
     
-    console.log('[KISPG Auth] model: MOB, channel: 0002');
+    console.log('[KISPG Auth] model:', model, 'channel:', channel);
 
     return res.status(200).json({
       success: true,

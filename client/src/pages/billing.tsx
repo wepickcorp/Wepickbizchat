@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   Wallet, 
   CreditCard, 
@@ -196,6 +196,53 @@ export default function Billing() {
     },
   });
 
+  const [showPaymentFrame, setShowPaymentFrame] = useState(false);
+  const paymentFormRef = useRef<HTMLFormElement>(null);
+  const [paymentParams, setPaymentParams] = useState<Record<string, string> | null>(null);
+  const [paymentUrl, setPaymentUrl] = useState<string>('');
+
+  // KIS PG postMessage 리스너
+  useEffect(() => {
+    const handlePaymentMessage = async (e: MessageEvent) => {
+      if (!e.data || typeof e.data !== 'object') return;
+      
+      const { resultCode, data } = e.data;
+      
+      if (resultCode === '0000' && data) {
+        // 결제 성공 - returnUrl로 결과 전송
+        const returnUrl = paymentParams?.returnUrl;
+        if (returnUrl) {
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = returnUrl;
+          form.style.display = 'none';
+          
+          Object.entries(data).forEach(([key, value]) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value as string;
+            form.appendChild(input);
+          });
+          
+          document.body.appendChild(form);
+          form.submit();
+        }
+      } else if (resultCode === 'XXXX') {
+        // 결제 실패
+        setShowPaymentFrame(false);
+        toast({
+          title: "결제 실패",
+          description: data?.resultMsg || "결제가 취소되었습니다",
+          variant: "destructive",
+        });
+      }
+    };
+
+    window.addEventListener('message', handlePaymentMessage);
+    return () => window.removeEventListener('message', handlePaymentMessage);
+  }, [paymentParams, toast]);
+
   const kispgCheckoutMutation = useMutation({
     mutationFn: async (amount: number) => {
       const res = await apiRequest("POST", "/api/kispg/auth", { amount });
@@ -203,23 +250,41 @@ export default function Billing() {
     },
     onSuccess: (data) => {
       if (data.success && data.kispgAuthUrl && data.params) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = data.kispgAuthUrl;
-        form.style.display = 'none';
+        const isMobile = /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+          // 모바일: 전체 페이지 리다이렉트
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = data.kispgAuthUrl;
+          form.style.display = 'none';
 
-        Object.entries(data.params).forEach(([key, value]) => {
-          if (key !== 'userId') {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = key;
-            input.value = value as string;
-            form.appendChild(input);
-          }
-        });
+          Object.entries(data.params).forEach(([key, value]) => {
+            if (key !== 'userId') {
+              const input = document.createElement('input');
+              input.type = 'hidden';
+              input.name = key;
+              input.value = value as string;
+              form.appendChild(input);
+            }
+          });
 
-        document.body.appendChild(form);
-        form.submit();
+          document.body.appendChild(form);
+          form.submit();
+        } else {
+          // PC: iframe + postMessage 방식
+          setPaymentParams(data.params);
+          setPaymentUrl(data.kispgAuthUrl);
+          setShowPaymentFrame(true);
+          setIsChargeDialogOpen(false);
+          
+          // form submit은 iframe이 렌더링된 후 수행
+          setTimeout(() => {
+            if (paymentFormRef.current) {
+              paymentFormRef.current.submit();
+            }
+          }, 100);
+        }
       }
     },
     onError: (error: Error) => {
@@ -689,6 +754,36 @@ export default function Billing() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* KIS PG 결제창 오버레이 (PC용 iframe 방식) */}
+      {showPaymentFrame && paymentParams && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
+          <div className="bg-white rounded-lg w-full max-w-lg h-[600px] relative">
+            <button
+              onClick={() => setShowPaymentFrame(false)}
+              className="absolute top-2 right-2 z-10 p-2 hover:bg-gray-100 rounded-full"
+            >
+              <XCircle className="h-6 w-6 text-gray-500" />
+            </button>
+            <iframe
+              name="kispg_pay_frame"
+              className="w-full h-full rounded-lg"
+              title="KIS PG 결제"
+            />
+          </div>
+          <form
+            ref={paymentFormRef}
+            method="POST"
+            action={paymentUrl}
+            target="kispg_pay_frame"
+            style={{ display: 'none' }}
+          >
+            {Object.entries(paymentParams).map(([key, value]) => (
+              <input key={key} type="hidden" name={key} value={value} />
+            ))}
+          </form>
+        </div>
+      )}
     </div>
   );
 }
