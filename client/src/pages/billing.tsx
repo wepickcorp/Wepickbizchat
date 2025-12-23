@@ -13,7 +13,9 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  BanknoteIcon
+  BanknoteIcon,
+  ShieldCheck,
+  X
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -197,6 +199,7 @@ export default function Billing() {
   });
 
   const [showPaymentFrame, setShowPaymentFrame] = useState(false);
+  const [iframeLoading, setIframeLoading] = useState(true);
   const paymentFormRef = useRef<HTMLFormElement>(null);
   const [paymentParams, setPaymentParams] = useState<Record<string, string> | null>(null);
   const [paymentUrl, setPaymentUrl] = useState<string>('');
@@ -275,6 +278,7 @@ export default function Billing() {
           // PC: iframe + postMessage 방식
           setPaymentParams(data.params);
           setPaymentUrl(data.kispgAuthUrl);
+          setIframeLoading(true);
           setShowPaymentFrame(true);
           setIsChargeDialogOpen(false);
           
@@ -757,20 +761,67 @@ export default function Billing() {
 
       {/* KIS PG 결제창 오버레이 (PC용 iframe 방식) */}
       {showPaymentFrame && paymentParams && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
-          <div className="bg-white rounded-lg w-full max-w-lg h-[600px] relative">
-            <button
-              onClick={() => setShowPaymentFrame(false)}
-              className="absolute top-2 right-2 z-10 p-2 hover:bg-gray-100 rounded-full"
-            >
-              <XCircle className="h-6 w-6 text-gray-500" />
-            </button>
-            <iframe
-              name="kispg_pay_frame"
-              className="w-full h-full rounded-lg"
-              title="KIS PG 결제"
-            />
+        <div 
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowPaymentFrame(false);
+              setIframeLoading(true);
+            }
+          }}
+        >
+          <div className="bg-background rounded-xl w-full max-w-[520px] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-green-100">
+                  <ShieldCheck className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">안전한 결제</h3>
+                  <p className="text-sm text-muted-foreground">
+                    KIS PG 보안결제
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPaymentFrame(false);
+                  setIframeLoading(true);
+                }}
+                className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-muted transition-colors"
+                data-testid="button-close-payment"
+              >
+                <X className="h-5 w-5 text-muted-foreground" />
+              </button>
+            </div>
+            
+            {/* iframe 컨테이너 */}
+            <div className="relative h-[580px] bg-white">
+              {/* 로딩 오버레이 */}
+              {iframeLoading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white z-10">
+                  <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
+                  <p className="text-muted-foreground">결제창을 불러오는 중...</p>
+                </div>
+              )}
+              <iframe
+                name="kispg_pay_frame"
+                className="w-full h-full"
+                title="KIS PG 결제"
+                onLoad={() => setIframeLoading(false)}
+              />
+            </div>
+            
+            {/* 푸터 */}
+            <div className="px-5 py-3 border-t bg-muted/30">
+              <p className="text-xs text-center text-muted-foreground">
+                결제 정보는 암호화되어 안전하게 처리됩니다
+              </p>
+            </div>
           </div>
+          
+          {/* 숨겨진 폼 */}
           <form
             ref={paymentFormRef}
             method="POST"
