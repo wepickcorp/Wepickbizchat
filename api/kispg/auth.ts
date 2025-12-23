@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { createHash } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -20,8 +20,23 @@ async function verifyAuth(req: VercelRequest) {
 }
 
 function generateEncData(mid: string, ediDate: string, goodsAmt: string, merchantKey: string): string {
-  const data = mid + ediDate + goodsAmt + merchantKey;
-  return createHash('sha256').update(data).digest('hex');
+  // KIS PG 운영환경: MID + ediDate + 금액을 merchantKey로 HMAC-SHA256 생성
+  const data = mid + ediDate + goodsAmt;
+  
+  // merchantKey가 Base64로 인코딩된 경우 디코딩하여 사용
+  try {
+    const keyBuffer = Buffer.from(merchantKey, 'base64');
+    const hmacHash = createHmac('sha256', keyBuffer).update(data, 'utf8').digest('hex');
+    console.log('[KISPG] Using HMAC-SHA256 with decoded key');
+    console.log('[KISPG] Data:', data);
+    console.log('[KISPG] Generated encData:', hmacHash);
+    return hmacHash;
+  } catch (e) {
+    // Base64 디코딩 실패 시 원본 키로 HMAC 시도
+    console.log('[KISPG] Fallback to HMAC with raw key');
+    const hmacHash = createHmac('sha256', merchantKey).update(data, 'utf8').digest('hex');
+    return hmacHash;
+  }
 }
 
 function getEdiDate(): string {
