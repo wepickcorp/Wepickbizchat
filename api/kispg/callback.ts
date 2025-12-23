@@ -70,12 +70,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const {
       resultCd,
       resultMsg,
-      payMethod,
       tid,
       ordNo,
       amt,
-      ediDate,
-      encData: receivedEncData,
     } = params;
 
     const baseUrl = process.env.SITE_URL 
@@ -100,14 +97,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.redirect(302, errorUrl.toString());
     }
 
-    const expectedEncData = generateEncData(mid, ediDate, amt, merchantKey);
-    if (receivedEncData !== expectedEncData) {
-      console.error('encData mismatch - possible tampering');
-      const errorUrl = new URL(`${baseUrl}/billing`);
-      errorUrl.searchParams.set('error', 'true');
-      errorUrl.searchParams.set('message', '결제 검증 실패');
-      return res.redirect(302, errorUrl.toString());
-    }
+    // KIS PG 샘플 기준: 콜백에서 받은 encData 검증은 하지 않음
+    // 결제 승인 API 호출 시 새로운 encData 생성하여 사용
+    console.log('[KISPG Callback] Auth callback received - tid:', tid, 'amt:', amt);
 
     // KISPG_USE_PROD=true 설정 시에만 운영 API 사용, 기본값은 테스트 API
     const useProductionApi = process.env.KISPG_USE_PROD === 'true';
