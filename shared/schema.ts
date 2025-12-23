@@ -72,6 +72,26 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// RCS 버튼 타입
+export interface RcsButton {
+  type: "0" | "1" | "2"; // 0: URL연결, 1: 전화걸기, 2: 지도보여주기
+  name: string; // 버튼 텍스트
+  val1: string; // URL/전화번호/위치명
+  val2?: string; // 지도일 때 fallback URL
+  reward?: "1"; // 리워드 적용 여부
+}
+
+// URL 링크 구조
+export interface UrlLinkConfig {
+  list: string[]; // URL 목록 (최대 3개)
+  reward?: number; // 리워드 적용 URL index (0부터)
+}
+
+// RCS 버튼 구조
+export interface RcsButtonsConfig {
+  list: RcsButton[]; // 버튼 목록 (최대 2개)
+}
+
 // Message Templates table (검수용 템플릿)
 export const templates = pgTable("templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -83,6 +103,8 @@ export const templates = pgTable("templates", {
   content: text("content").notNull(),
   imageUrl: text("image_url"), // 미리보기용 URL (base64 또는 외부 URL)
   imageFileId: varchar("image_file_id", { length: 100 }), // BizChat 파일 업로드 후 반환된 ID
+  urlLinks: jsonb("url_links").$type<UrlLinkConfig>(), // MMS/RCS URL 링크 설정
+  buttons: jsonb("buttons").$type<RcsButtonsConfig>(), // RCS 버튼 설정
   status: varchar("status", { length: 20 }).default("draft").notNull(), // draft, pending, approved, rejected
   rejectionReason: text("rejection_reason"),
   submittedAt: timestamp("submitted_at"),

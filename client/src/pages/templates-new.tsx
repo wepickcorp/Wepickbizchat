@@ -19,6 +19,12 @@ import {
   Loader2,
   Info,
   AlertTriangle,
+  Link,
+  Plus,
+  Trash2,
+  Phone,
+  MapPin,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -45,7 +51,15 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import type { Template } from "@shared/schema";
+import type { Template, RcsButton, UrlLinkConfig, RcsButtonsConfig } from "@shared/schema";
+
+const rcsButtonSchema = z.object({
+  type: z.enum(["0", "1", "2"]), // 0: URL연결, 1: 전화걸기, 2: 지도
+  name: z.string().min(1, "버튼 텍스트를 입력해주세요"),
+  val1: z.string().min(1, "버튼 값을 입력해주세요"),
+  val2: z.string().optional(),
+  reward: z.enum(["1"]).optional(),
+});
 
 const templateFormSchema = z.object({
   name: z.string().min(1, "템플릿 이름을 입력해주세요").max(200),
@@ -57,9 +71,22 @@ const templateFormSchema = z.object({
   content: z.string().min(1, "메시지 내용을 입력해주세요").max(2000),
   imageUrl: z.string().optional().or(z.literal("")),
   imageFileId: z.string().optional().or(z.literal("")),
+  urlLinks: z.object({
+    list: z.array(z.string()),
+    reward: z.number().optional(),
+  }).optional(),
+  buttons: z.object({
+    list: z.array(rcsButtonSchema),
+  }).optional(),
 });
 
 type TemplateFormValues = z.infer<typeof templateFormSchema>;
+
+const BUTTON_TYPES = [
+  { value: "0", label: "URL 연결", icon: ExternalLink, placeholder: "https://example.com" },
+  { value: "1", label: "전화 걸기", icon: Phone, placeholder: "02-1234-5678" },
+  { value: "2", label: "지도 보여주기", icon: MapPin, placeholder: "위치명 (예: 강남역)" },
+];
 
 function navigate(href: string) {
   window.history.pushState({}, "", href);
@@ -113,11 +140,23 @@ export default function TemplatesNew() {
       content: "",
       imageUrl: "",
       imageFileId: "",
+      urlLinks: { list: [], reward: undefined },
+      buttons: { list: [] },
     },
   });
 
+  // URL Links 상태 관리
+  const [urlLinks, setUrlLinks] = useState<string[]>([]);
+  const [urlRewardIndex, setUrlRewardIndex] = useState<number | undefined>(undefined);
+
+  // Buttons 상태 관리
+  const [buttons, setButtons] = useState<RcsButton[]>([]);
+
   useEffect(() => {
     if (existingTemplate) {
+      const templateUrlLinks = existingTemplate.urlLinks as UrlLinkConfig | null;
+      const templateButtons = existingTemplate.buttons as RcsButtonsConfig | null;
+      
       form.reset({
         name: existingTemplate.name,
         messageType: existingTemplate.messageType as "LMS" | "MMS" | "RCS",
@@ -126,12 +165,21 @@ export default function TemplatesNew() {
         content: existingTemplate.content,
         imageUrl: existingTemplate.imageUrl || "",
         imageFileId: existingTemplate.imageFileId || "",
+        urlLinks: templateUrlLinks || { list: [], reward: undefined },
+        buttons: templateButtons || { list: [] },
       });
       if (existingTemplate.imageUrl) {
         setImagePreview(existingTemplate.imageUrl);
       }
       if (existingTemplate.imageFileId) {
         setImageFileId(existingTemplate.imageFileId);
+      }
+      if (templateUrlLinks?.list) {
+        setUrlLinks(templateUrlLinks.list);
+        setUrlRewardIndex(templateUrlLinks.reward);
+      }
+      if (templateButtons?.list) {
+        setButtons(templateButtons.list);
       }
       if (isViewMode) {
         setShowPreview(true);
@@ -262,13 +310,15 @@ export default function TemplatesNew() {
   };
 
   const createMutation = useMutation({
-    mutationFn: async (data: TemplateFormValues) => {
+    mutationFn: async (data: TemplateFormValues & { urlLinksData?: UrlLinkConfig; buttonsData?: RcsButtonsConfig }) => {
       const cleanedData = {
         ...data,
         imageUrl: data.imageUrl || undefined,
         imageFileId: data.imageFileId || undefined,
         title: data.title || undefined,
         rcsType: data.messageType === "RCS" ? data.rcsType : undefined,
+        urlLinks: data.urlLinksData?.list?.length ? data.urlLinksData : undefined,
+        buttons: data.buttonsData?.list?.length ? data.buttonsData : undefined,
       };
       return apiRequest("POST", "/api/templates", cleanedData);
     },
@@ -290,13 +340,15 @@ export default function TemplatesNew() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: TemplateFormValues) => {
+    mutationFn: async (data: TemplateFormValues & { urlLinksData?: UrlLinkConfig; buttonsData?: RcsButtonsConfig }) => {
       const cleanedData = {
         ...data,
         imageUrl: data.imageUrl || undefined,
         imageFileId: data.imageFileId || undefined,
         title: data.title || undefined,
         rcsType: data.messageType === "RCS" ? data.rcsType : undefined,
+        urlLinks: data.urlLinksData?.list?.length ? data.urlLinksData : undefined,
+        buttons: data.buttonsData?.list?.length ? data.buttonsData : undefined,
       };
       return apiRequest("PATCH", `/api/templates/${templateId}`, cleanedData);
     },
@@ -319,10 +371,16 @@ export default function TemplatesNew() {
   });
 
   const onSubmit = (data: TemplateFormValues) => {
+    const submitData = {
+      ...data,
+      urlLinksData: urlLinks.length > 0 ? { list: urlLinks, reward: urlRewardIndex } : undefined,
+      buttonsData: buttons.length > 0 ? { list: buttons } : undefined,
+    };
+    
     if (isEditMode && templateId) {
-      updateMutation.mutate(data);
+      updateMutation.mutate(submitData);
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(submitData);
     }
   };
 
@@ -751,6 +809,260 @@ export default function TemplatesNew() {
                           MMS 메시지는 이미지가 필수입니다
                         </AlertDescription>
                       </Alert>
+                    )}
+                  </div>
+                )}
+
+                {/* URL 링크 관리 (MMS/RCS) */}
+                {(watchedValues.messageType === "MMS" || watchedValues.messageType === "RCS") && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <FormLabel className="flex items-center gap-2">
+                        <Link className="h-4 w-4" />
+                        URL 링크 (선택)
+                      </FormLabel>
+                      {urlLinks.length > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          {urlLinks.length}개 설정됨
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    <Alert className="bg-muted/50">
+                      <Info className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        메시지 본문에 <code className="bg-muted px-1 rounded">[URL분석1]</code>, <code className="bg-muted px-1 rounded">[URL분석2]</code> 등의 변수를 삽입하면 실제 발송 시 추적 가능한 단축 URL로 변환됩니다.
+                        {watchedValues.messageType === "RCS" && (() => {
+                          const rcsSpec = RCS_TYPES.find(t => t.value === watchedValues.rcsType);
+                          return rcsSpec ? ` (최대 ${rcsSpec.maxUrlCount}개)` : "";
+                        })()}
+                      </AlertDescription>
+                    </Alert>
+
+                    {!isViewMode && (
+                      <div className="space-y-2">
+                        {urlLinks.map((url, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <Badge variant="secondary" className="shrink-0">
+                              URL{index + 1}
+                            </Badge>
+                            <Input
+                              placeholder="https://example.com/page"
+                              value={url}
+                              onChange={(e) => {
+                                const newLinks = [...urlLinks];
+                                newLinks[index] = e.target.value;
+                                setUrlLinks(newLinks);
+                              }}
+                              className="flex-1"
+                              data-testid={`input-url-${index}`}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const newLinks = urlLinks.filter((_, i) => i !== index);
+                                setUrlLinks(newLinks);
+                                if (urlRewardIndex === index) {
+                                  setUrlRewardIndex(undefined);
+                                } else if (urlRewardIndex !== undefined && urlRewardIndex > index) {
+                                  setUrlRewardIndex(urlRewardIndex - 1);
+                                }
+                              }}
+                              data-testid={`button-remove-url-${index}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        ))}
+                        
+                        {(() => {
+                          const rcsSpec = RCS_TYPES.find(t => t.value === watchedValues.rcsType);
+                          const maxUrls = watchedValues.messageType === "RCS" && rcsSpec ? rcsSpec.maxUrlCount : 3;
+                          return urlLinks.length < maxUrls && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full gap-2"
+                              onClick={() => setUrlLinks([...urlLinks, ""])}
+                              data-testid="button-add-url"
+                            >
+                              <Plus className="h-4 w-4" />
+                              URL 추가
+                            </Button>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {isViewMode && urlLinks.length > 0 && (
+                      <div className="space-y-2">
+                        {urlLinks.map((url, index) => (
+                          <div key={index} className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+                            <Badge variant="secondary" className="shrink-0">URL{index + 1}</Badge>
+                            <span className="text-sm text-muted-foreground truncate">{url || "(비어있음)"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* RCS 버튼 관리 */}
+                {watchedValues.messageType === "RCS" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <FormLabel className="flex items-center gap-2">
+                        <ExternalLink className="h-4 w-4" />
+                        RCS 버튼 (선택)
+                      </FormLabel>
+                      {buttons.length > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          {buttons.length}개 설정됨
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    <Alert className="bg-muted/50">
+                      <Info className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        RCS 메시지 하단에 표시되는 클릭 버튼입니다. URL 연결, 전화 걸기, 지도 보기 중 선택할 수 있어요.
+                        {(() => {
+                          const rcsSpec = RCS_TYPES.find(t => t.value === watchedValues.rcsType);
+                          return rcsSpec ? ` (버튼 텍스트 최대 ${rcsSpec.maxButtonTextLen}자, 최대 2개)` : "";
+                        })()}
+                      </AlertDescription>
+                    </Alert>
+
+                    {!isViewMode && (
+                      <div className="space-y-3">
+                        {buttons.map((button, index) => {
+                          const buttonType = BUTTON_TYPES.find(t => t.value === button.type);
+                          const ButtonIcon = buttonType?.icon || ExternalLink;
+                          const rcsSpec = RCS_TYPES.find(t => t.value === watchedValues.rcsType);
+                          const maxTextLen = rcsSpec?.maxButtonTextLen || 17;
+                          
+                          return (
+                            <div key={index} className="p-3 border rounded-lg space-y-2 bg-muted/30">
+                              <div className="flex items-center justify-between">
+                                <Badge variant="secondary" className="gap-1">
+                                  <ButtonIcon className="h-3 w-3" />
+                                  버튼 {index + 1}
+                                </Badge>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => setButtons(buttons.filter((_, i) => i !== index))}
+                                  data-testid={`button-remove-btn-${index}`}
+                                >
+                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                </Button>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-2">
+                                <Select
+                                  value={button.type}
+                                  onValueChange={(value: "0" | "1" | "2") => {
+                                    const newButtons = [...buttons];
+                                    newButtons[index] = { ...button, type: value, val1: "", val2: "" };
+                                    setButtons(newButtons);
+                                  }}
+                                >
+                                  <SelectTrigger data-testid={`select-btn-type-${index}`}>
+                                    <SelectValue placeholder="버튼 타입" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {BUTTON_TYPES.map((type) => {
+                                      const Icon = type.icon;
+                                      return (
+                                        <SelectItem key={type.value} value={type.value}>
+                                          <div className="flex items-center gap-2">
+                                            <Icon className="h-4 w-4" />
+                                            {type.label}
+                                          </div>
+                                        </SelectItem>
+                                      );
+                                    })}
+                                  </SelectContent>
+                                </Select>
+                                
+                                <Input
+                                  placeholder="버튼 텍스트"
+                                  value={button.name}
+                                  maxLength={maxTextLen}
+                                  onChange={(e) => {
+                                    const newButtons = [...buttons];
+                                    newButtons[index] = { ...button, name: e.target.value };
+                                    setButtons(newButtons);
+                                  }}
+                                  data-testid={`input-btn-name-${index}`}
+                                />
+                              </div>
+                              
+                              <Input
+                                placeholder={buttonType?.placeholder || "값 입력"}
+                                value={button.val1}
+                                onChange={(e) => {
+                                  const newButtons = [...buttons];
+                                  newButtons[index] = { ...button, val1: e.target.value };
+                                  setButtons(newButtons);
+                                }}
+                                data-testid={`input-btn-val1-${index}`}
+                              />
+                              
+                              {button.type === "2" && (
+                                <Input
+                                  placeholder="대체 URL (지도 미지원 시)"
+                                  value={button.val2 || ""}
+                                  onChange={(e) => {
+                                    const newButtons = [...buttons];
+                                    newButtons[index] = { ...button, val2: e.target.value };
+                                    setButtons(newButtons);
+                                  }}
+                                  data-testid={`input-btn-val2-${index}`}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                        
+                        {buttons.length < 2 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-2"
+                            onClick={() => setButtons([...buttons, { type: "0", name: "", val1: "" }])}
+                            data-testid="button-add-btn"
+                          >
+                            <Plus className="h-4 w-4" />
+                            버튼 추가
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {isViewMode && buttons.length > 0 && (
+                      <div className="space-y-2">
+                        {buttons.map((button, index) => {
+                          const buttonType = BUTTON_TYPES.find(t => t.value === button.type);
+                          const ButtonIcon = buttonType?.icon || ExternalLink;
+                          return (
+                            <div key={index} className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+                              <Badge variant="secondary" className="gap-1 shrink-0">
+                                <ButtonIcon className="h-3 w-3" />
+                                {buttonType?.label}
+                              </Badge>
+                              <span className="text-sm font-medium">{button.name}</span>
+                              <span className="text-xs text-muted-foreground truncate">→ {button.val1}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 )}
