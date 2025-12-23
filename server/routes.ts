@@ -286,6 +286,20 @@ export async function registerRoutes(
     content: z.string().min(1).max(2000),
     imageUrl: z.string().optional(),
     imageFileId: z.string().optional(),
+    // RCS URL 링크: { list: string[], reward?: number }
+    urlLinks: z.object({
+      list: z.array(z.string()),
+      reward: z.number().optional(),
+    }).optional(),
+    // RCS 버튼: { list: [{ type: '0'|'1'|'2', name: string, val1: string, val2?: string }] }
+    buttons: z.object({
+      list: z.array(z.object({
+        type: z.enum(["0", "1", "2"]),
+        name: z.string(),
+        val1: z.string(),
+        val2: z.string().optional(),
+      })),
+    }).optional(),
   });
 
   app.post("/api/templates", isAuthenticated, async (req, res) => {
@@ -302,6 +316,8 @@ export async function registerRoutes(
         content: data.content,
         imageUrl: data.imageUrl,
         imageFileId: data.imageFileId,
+        urlLinks: data.urlLinks,
+        buttons: data.buttons,
         status: "draft",
       });
       

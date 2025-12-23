@@ -205,6 +205,11 @@ export const messages = pgTable("messages", {
   title: varchar("title", { length: 60 }),
   content: text("content").notNull(),
   imageUrl: text("image_url"),
+  
+  // RCS URL 링크 및 버튼 (템플릿에서 복사)
+  urlLinks: jsonb("url_links"), // { list: string[], reward?: number }
+  buttons: jsonb("buttons"), // { list: [{ type: '0'|'1'|'2', name: string, val1: string, val2?: string }] }
+  
   createdAt: timestamp("created_at").defaultNow(),
 });
 

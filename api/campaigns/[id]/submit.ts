@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
-import { pgTable, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
 neonConfig.fetchConnectionCache = true;
 
@@ -304,6 +304,8 @@ const messages = pgTable('messages', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  urlLinks: jsonb('url_links'), // { list: string[], reward?: number }
+  buttons: jsonb('buttons'), // { list: [{ type, name, val1, val2? }] }
 });
 
 const templates = pgTable('templates', {
@@ -314,6 +316,8 @@ const templates = pgTable('templates', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  urlLinks: jsonb('url_links'), // { list: string[], reward?: number }
+  buttons: jsonb('buttons'), // { list: [{ type, name, val1, val2? }] }
   status: text('status').default('draft'),
 });
 
@@ -725,6 +729,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           title: template.title || '',
           content: template.content,
           imageUrl: template.imageUrl || null,
+          urlLinks: template.urlLinks || null,
+          buttons: template.buttons || null,
         };
       }
     }
@@ -862,8 +868,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const needsFile = billingType === 1 || billingType === 2;
       
       // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
-      // URL 리스트 추출 (message에서 urlLinks 또는 urls 필드)
-      const mmsUrlList: string[] = (message as any)?.urlLinks || (message as any)?.urls || [];
+      // URL 리스트 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함)
+      const urlLinksData = (message as any)?.urlLinks as { list?: string[]; reward?: number } | null;
+      const mmsUrlList: string[] = urlLinksData?.list || (message as any)?.urls || [];
+      const urlReward = urlLinksData?.reward;
+      
+      // buttons 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함)
+      const buttonsData = (message as any)?.buttons as { list?: Array<{ type: string; name: string; val1: string; val2?: string }> } | null;
+      const rcsButtons = buttonsData?.list || (message as any)?.rcsButtons || [];
       
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
       const mmsObject: Record<string, unknown> = {
@@ -871,7 +883,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         msg: message?.content || '',
         ...(needsFile && message?.imageUrl && { fileInfo: { list: [{ origId: message.imageUrl }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
-        ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3) } }),
+        ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(urlReward !== undefined && { reward: urlReward }) } }),
       };
       
       // RCS 배열 구성 - RCS 타입일 때만 포함, 아니면 완전히 생략
@@ -881,9 +893,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         msg: message?.content || '',
         ...(needsFile && message?.imageUrl && { imgOrigId: message.imageUrl }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
-        ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3) } }),
-        ...((message as any)?.rcsButtons?.length > 0 && { 
-          buttons: { list: (message as any).rcsButtons.map((btn: any) => ({ ...btn, type: String(btn.type) })) }
+        ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(urlReward !== undefined && { reward: urlReward }) } }),
+        ...(rcsButtons.length > 0 && { 
+          buttons: { list: rcsButtons.map((btn: any) => ({ ...btn, type: String(btn.type) })) }
         }),
         ...((message as any)?.rcsOpts?.list?.length > 0 && { opts: (message as any).rcsOpts }),
       } : null;
@@ -1037,8 +1049,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`[Submit Update] Using sndMosu: ${sndMosu.toLocaleString()} (from ${campaign.sndMosu ? 'campaign' : 'calculated'})`);
       
       // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
-      // URL 리스트 추출
-      const updateMmsUrlList: string[] = (message as any)?.urlLinks || (message as any)?.urls || [];
+      // URL 리스트 추출 (urlLinks는 JSONB로 저장됨: { list: string[], reward?: number })
+      const updateParsedUrlLinks = typeof (message as any)?.urlLinks === 'string' 
+        ? JSON.parse((message as any).urlLinks) 
+        : (message as any)?.urlLinks;
+      const updateMmsUrlList: string[] = updateParsedUrlLinks?.list || (message as any)?.urls || [];
+      const updateUrlReward = updateParsedUrlLinks?.reward;
+      
+      // buttons는 JSONB로 저장됨: { list: [{ type, name, val1, val2? }] }
+      const updateParsedButtons = typeof (message as any)?.buttons === 'string'
+        ? JSON.parse((message as any).buttons)
+        : (message as any)?.buttons;
+      const updateRcsButtons = updateParsedButtons?.list || (message as any)?.rcsButtons || [];
       
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
       const updateMmsObject: Record<string, unknown> = {
@@ -1046,7 +1068,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         msg: message?.content || '',
         ...(needsFile && message?.imageUrl && { fileInfo: { list: [{ origId: message.imageUrl }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
-        ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3) } }),
+        ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateUrlReward !== undefined && { reward: updateUrlReward }) } }),
       };
       
       // RCS 슬라이드 구성 - RCS 타입일 때만 생성
@@ -1056,9 +1078,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         msg: message?.content || '',
         ...(needsFile && message?.imageUrl && { imgOrigId: message.imageUrl }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
-        ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3) } }),
-        ...((message as any)?.rcsButtons?.length > 0 && { 
-          buttons: { list: (message as any).rcsButtons.map((btn: any) => ({ ...btn, type: String(btn.type) })) }
+        ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateUrlReward !== undefined && { reward: updateUrlReward }) } }),
+        ...(updateRcsButtons.length > 0 && { 
+          buttons: { list: updateRcsButtons.map((btn: any) => ({ ...btn, type: String(btn.type) })) }
         }),
         ...((message as any)?.rcsOpts?.list?.length > 0 && { opts: (message as any).rcsOpts }),
       } : null;

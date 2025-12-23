@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq, desc } from 'drizzle-orm';
-import { pgTable, text, integer, timestamp, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, numeric, jsonb } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 
@@ -129,6 +129,8 @@ const messages = pgTable('messages', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  urlLinks: jsonb('url_links'), // { list: string[], reward?: number }
+  buttons: jsonb('buttons'), // { list: [{ type, name, val1, val2? }] }
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -161,6 +163,8 @@ const templates = pgTable('templates', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  urlLinks: jsonb('url_links'), // { list: string[], reward?: number }
+  buttons: jsonb('buttons'), // { list: [{ type, name, val1, val2? }] }
   status: text('status').default('draft'),
 });
 
@@ -1077,12 +1081,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } : {}),
       }).returning();
 
+      // jsonb 컬럼은 Drizzle이 자동으로 직렬화/역직렬화함
       await db.insert(messages).values({
         id: randomUUID(),
         campaignId,
         title: template.title,
         content: template.content,
         imageUrl: template.imageUrl,
+        urlLinks: template.urlLinks || null,
+        buttons: template.buttons || null,
       });
 
       // 타겟팅 데이터 저장
