@@ -2,8 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, desc } from 'drizzle-orm';
-import { pgTable, text, timestamp, serial, numeric } from 'drizzle-orm/pg-core';
+import { eq, desc, sql } from 'drizzle-orm';
+import { pgTable, text, timestamp, numeric, varchar } from 'drizzle-orm/pg-core';
 import { createHash } from 'crypto';
 
 neonConfig.fetchConnectionCache = true;
@@ -16,14 +16,14 @@ const users = pgTable('users', {
 });
 
 const transactions = pgTable('transactions', {
-  id: serial('id').primaryKey(),
+  id: text('id').primaryKey().default(sql`gen_random_uuid()`),
   userId: text('user_id').notNull(),
   type: text('type').notNull(),
-  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
-  balanceAfter: numeric('balance_after', { precision: 12, scale: 2 }).notNull(),
+  amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),
+  balanceAfter: numeric('balance_after', { precision: 12, scale: 0 }).notNull(),
   description: text('description'),
   paymentMethod: text('payment_method'),
-  referenceId: text('reference_id'),
+  stripeSessionId: text('stripe_session_id'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -179,15 +179,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updatedAt: new Date(),
     }).where(eq(users.id, userId));
 
-    await db.insert(transactions).values({
-      userId,
-      type: 'charge',
-      amount: amount.toString(),
-      balanceAfter: newBalance.toString(),
-      description: 'KISPG 카드 결제',
-      paymentMethod: 'card',
-      referenceId: tid,
-    });
+    // 거래 내역 삽입 (실패해도 잔액 업데이트는 유지)
+    try {
+      await db.insert(transactions).values({
+        userId,
+        type: 'charge',
+        amount: amount.toString(),
+        balanceAfter: newBalance.toString(),
+        description: `KISPG 카드 결제 (TID: ${tid})`,
+        paymentMethod: 'card',
+      });
+    } catch (txError) {
+      console.error('[KISPG Callback] Failed to insert transaction record:', txError);
+      // 거래 기록 실패는 경고만 로깅
+    }
 
     const successUrl = new URL(`${baseUrl}/billing`);
     successUrl.searchParams.set('success', 'true');
