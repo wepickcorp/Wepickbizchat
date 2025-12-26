@@ -8,11 +8,45 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+// 대리 로그인 상태 확인
+function isImpersonating(): boolean {
+  const impersonateToken = localStorage.getItem("impersonateToken");
+  const impersonateUser = localStorage.getItem("impersonateUser");
+  return !!(impersonateToken && impersonateUser);
+}
+
+// 대리 로그인 사용자 ID 가져오기
+function getImpersonatedUserId(): string | null {
+  try {
+    const impersonateUser = localStorage.getItem("impersonateUser");
+    if (impersonateUser) {
+      const user = JSON.parse(impersonateUser);
+      return user.id || null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data: { session } } = await supabase.auth.getSession();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
   };
+  
+  // 대리 로그인 중이면 impersonation 헤더 추가
+  if (isImpersonating()) {
+    const impersonateToken = localStorage.getItem("impersonateToken");
+    const userId = getImpersonatedUserId();
+    if (impersonateToken && userId) {
+      headers["X-Impersonate-Token"] = impersonateToken;
+      headers["X-Impersonate-User-Id"] = userId;
+    }
+    return headers;
+  }
+  
+  // 일반 로그인: Supabase 토큰 사용
+  const { data: { session } } = await supabase.auth.getSession();
   if (session?.access_token) {
     headers["Authorization"] = `Bearer ${session.access_token}`;
   }
@@ -34,6 +68,13 @@ export async function apiRequest(
   });
 
   if (res.status === 401) {
+    // 대리 로그인 중이면 Supabase 로그아웃 호출 안 함
+    if (isImpersonating()) {
+      localStorage.removeItem("impersonateToken");
+      localStorage.removeItem("impersonateUser");
+      window.location.href = "/auth?expired=impersonate";
+      throw new Error("Impersonation session expired");
+    }
     await supabase.auth.signOut();
     window.location.href = "/auth";
     throw new Error("Unauthorized");
@@ -61,6 +102,13 @@ export const getQueryFn: <T>(options: {
     }
 
     if (res.status === 401) {
+      // 대리 로그인 중이면 Supabase 로그아웃 호출 안 함
+      if (isImpersonating()) {
+        localStorage.removeItem("impersonateToken");
+        localStorage.removeItem("impersonateUser");
+        window.location.href = "/auth?expired=impersonate";
+        throw new Error("Impersonation session expired");
+      }
       await supabase.auth.signOut();
       window.location.href = "/auth";
       throw new Error("Unauthorized");

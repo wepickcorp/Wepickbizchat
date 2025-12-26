@@ -158,7 +158,41 @@ async function verifySupabaseToken(token: string): Promise<{ userId: string; ema
   }
 }
 
+import crypto from 'crypto';
+
+// 대리 로그인 토큰 검증
+function verifyImpersonateToken(token: string): { userId: string; adminId: string } | null {
+  try {
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+    const { data, signature } = decoded;
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    if (payload.type !== 'impersonate') return null;
+    return { userId: payload.userId, adminId: payload.adminId };
+  } catch {
+    return null;
+  }
+}
+
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  // 대리 로그인 토큰 확인 (X-Impersonate-Token 헤더)
+  const impersonateToken = req.headers['x-impersonate-token'] as string;
+  const impersonateUserId = req.headers['x-impersonate-user-id'] as string;
+  
+  if (impersonateToken && impersonateUserId) {
+    const verified = verifyImpersonateToken(impersonateToken);
+    if (verified && verified.userId === impersonateUserId) {
+      (req as any).userId = verified.userId;
+      (req as any).isImpersonating = true;
+      (req as any).adminId = verified.adminId;
+      return next();
+    }
+    // 토큰이 유효하지 않으면 401 반환
+    return res.status(401).json({ message: "Impersonation token invalid or expired" });
+  }
+  
   const authHeader = req.headers.authorization;
   
   if (authHeader?.startsWith('Bearer ')) {

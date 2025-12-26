@@ -42,6 +42,13 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
   - **권한 체계**: super (전체 권한), cs (고객지원), finance (재무)
   - **환경변수**: `ADMIN_JWT_SECRET`, `ADMIN_SALT`
   - **기능**: 대시보드(/admin), 유저관리(/admin/users), 캠페인모니터링(/admin/campaigns), 결제내역(/admin/transactions), 활동로그(/admin/logs)
+  - **대리 로그인(Impersonation)**: CS/super 관리자가 고객지원을 위해 특정 사용자로 로그인할 수 있는 기능
+    - **토큰 구조**: Base64 인코딩된 JSON `{ data: string, signature: string }`. data는 `{ userId, adminId, type: 'impersonate', exp }` 포함
+    - **서명 방식**: HMAC-SHA256(data, ADMIN_JWT_SECRET)
+    - **유효기간**: 30분 (클라이언트에서 60초마다 검증)
+    - **요청 헤더**: `X-Impersonate-Token`, `X-Impersonate-User-Id` 동시 전송 필요
+    - **만료 처리**: 토큰 만료 시 `/auth?expired=impersonate`로 리다이렉트
+    - **지원 API**: Express 라우트, Vercel 서버리스 API 모두 지원
 - Elimination of local sender number CRUD in favor of BizChat-managed sender numbers.
 
 ## External Dependencies

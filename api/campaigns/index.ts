@@ -1,13 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { neon, neonConfig } from '@neondatabase/serverless';
+import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq, desc } from 'drizzle-orm';
 import { pgTable, text, integer, timestamp, numeric, jsonb } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
-
-neonConfig.fetchConnectionCache = true;
+import { randomUUID, createHmac } from 'crypto';
 
 // BizChat API Configuration
 const BIZCHAT_DEV_URL = process.env.BIZCHAT_DEV_API_URL || 'https://gw-dev.bizchat1.co.kr:8443';
@@ -181,7 +179,33 @@ function getSupabaseAdmin() {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
+// 대리 로그인 토큰 검증
+function verifyImpersonateToken(token: string): { userId: string; adminId: string } | null {
+  try {
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+    const { data, signature } = decoded;
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    if (payload.type !== 'impersonate') return null;
+    return { userId: payload.userId, adminId: payload.adminId };
+  } catch { return null; }
+}
+
 async function verifyAuth(req: VercelRequest) {
+  // 대리 로그인 토큰 확인
+  const impersonateToken = req.headers['x-impersonate-token'] as string;
+  const impersonateUserId = req.headers['x-impersonate-user-id'] as string;
+  
+  if (impersonateToken && impersonateUserId) {
+    const verified = verifyImpersonateToken(impersonateToken);
+    if (verified && verified.userId === impersonateUserId) {
+      return { userId: verified.userId, email: '' };
+    }
+    return null;
+  }
+  
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {

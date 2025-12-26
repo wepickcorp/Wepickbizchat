@@ -9,10 +9,10 @@ const announcements = pgTable("announcements", {
   title: varchar("title", { length: 200 }).notNull(),
   content: text("content").notNull(),
   category: varchar("category", { length: 50 }).default("general").notNull(),
-  isActive: boolean("is_active").default(true),
+  isPublished: boolean("is_published").default(true),
   isPinned: boolean("is_pinned").default(false),
-  startDate: timestamp("start_date"),
-  endDate: timestamp("end_date"),
+  publishedAt: timestamp("published_at"),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -37,9 +37,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from(announcements)
       .where(
         and(
-          eq(announcements.isActive, true),
-          or(isNull(announcements.startDate), lte(announcements.startDate, now)),
-          or(isNull(announcements.endDate), gte(announcements.endDate, now))
+          eq(announcements.isPublished, true),
+          or(isNull(announcements.publishedAt), lte(announcements.publishedAt, now)),
+          or(isNull(announcements.expiresAt), gte(announcements.expiresAt, now))
         )
       )
       .orderBy(desc(announcements.isPinned), desc(announcements.createdAt))

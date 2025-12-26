@@ -1,11 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { neon, neonConfig } from '@neondatabase/serverless';
+import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
 import { pgTable, text, integer, timestamp, uuid } from 'drizzle-orm/pg-core';
-
-neonConfig.fetchConnectionCache = true;
+import crypto from 'crypto';
 
 const users = pgTable('users', {
   id: text('id').primaryKey(),
@@ -44,7 +43,35 @@ function getSupabaseAdmin() {
   });
 }
 
-async function verifyAuth(req: VercelRequest): Promise<{ userId: string; email: string } | null> {
+// 대리 로그인 토큰 검증
+function verifyImpersonateToken(token: string): { userId: string; adminId: string } | null {
+  try {
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+    const { data, signature } = decoded;
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    if (payload.type !== 'impersonate') return null;
+    return { userId: payload.userId, adminId: payload.adminId };
+  } catch {
+    return null;
+  }
+}
+
+async function verifyAuth(req: VercelRequest): Promise<{ userId: string; email: string; isImpersonating?: boolean } | null> {
+  // 대리 로그인 토큰 확인
+  const impersonateToken = req.headers['x-impersonate-token'] as string;
+  const impersonateUserId = req.headers['x-impersonate-user-id'] as string;
+  
+  if (impersonateToken && impersonateUserId) {
+    const verified = verifyImpersonateToken(impersonateToken);
+    if (verified && verified.userId === impersonateUserId) {
+      return { userId: verified.userId, email: '', isImpersonating: true };
+    }
+    return null; // 토큰 무효
+  }
+  
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
