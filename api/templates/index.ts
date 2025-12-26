@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq, desc, and, or } from 'drizzle-orm';
-import { pgTable, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 
@@ -14,9 +14,13 @@ const templates = pgTable('templates', {
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   messageType: text('message_type').notNull(),
+  rcsType: integer('rcs_type'),
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  imageFileId: text('image_file_id'),
+  urlLinks: jsonb('url_links'),
+  buttons: jsonb('buttons'),
   status: text('status').default('draft'),
   submittedAt: timestamp('submitted_at'),
   reviewedAt: timestamp('reviewed_at'),
@@ -68,9 +72,23 @@ async function verifyAuth(req: VercelRequest) {
 const createTemplateSchema = z.object({
   name: z.string().min(1).max(200),
   messageType: z.enum(['LMS', 'MMS', 'RCS']),
+  rcsType: z.number().optional(),
   title: z.string().max(60).optional(),
   content: z.string().min(1).max(2000),
   imageUrl: z.string().optional(),
+  imageFileId: z.string().optional(),
+  urlLinks: z.object({
+    list: z.array(z.string()),
+    reward: z.number().optional(),
+  }).optional(),
+  buttons: z.object({
+    list: z.array(z.object({
+      type: z.string(),
+      name: z.string(),
+      val1: z.string(),
+      val2: z.string().optional(),
+    })),
+  }).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -137,9 +155,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         userId,
         name: data.name,
         messageType: data.messageType,
+        rcsType: data.messageType === 'RCS' ? (data.rcsType ?? 0) : null,
         title: data.title,
         content: data.content,
         imageUrl: data.imageUrl,
+        imageFileId: data.imageFileId,
+        urlLinks: data.urlLinks,
+        buttons: data.buttons,
         status: 'draft',
       }).returning();
       

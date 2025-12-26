@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
-import { pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 
 neonConfig.fetchConnectionCache = true;
@@ -13,9 +13,13 @@ const templates = pgTable('templates', {
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   messageType: text('message_type').notNull(),
+  rcsType: integer('rcs_type'),
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  imageFileId: text('image_file_id'),
+  urlLinks: jsonb('url_links'),
+  buttons: jsonb('buttons'),
   status: text('status').default('draft'),
   submittedAt: timestamp('submitted_at'),
   reviewedAt: timestamp('reviewed_at'),
@@ -50,9 +54,23 @@ async function verifyAuth(req: VercelRequest) {
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   messageType: z.enum(['LMS', 'MMS', 'RCS']).optional(),
+  rcsType: z.number().optional(),
   title: z.string().max(60).optional(),
   content: z.string().min(1).max(2000).optional(),
   imageUrl: z.string().optional(),
+  imageFileId: z.string().optional(),
+  urlLinks: z.object({
+    list: z.array(z.string()),
+    reward: z.number().optional(),
+  }).optional(),
+  buttons: z.object({
+    list: z.array(z.object({
+      type: z.string(),
+      name: z.string(),
+      val1: z.string(),
+      val2: z.string().optional(),
+    })),
+  }).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
