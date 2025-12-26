@@ -48,7 +48,17 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
     - **유효기간**: 30분 (클라이언트에서 60초마다 검증)
     - **요청 헤더**: `X-Impersonate-Token`, `X-Impersonate-User-Id` 동시 전송 필요
     - **만료 처리**: 토큰 만료 시 `/auth?expired=impersonate`로 리다이렉트
-    - **지원 API**: Express 라우트, Vercel 서버리스 API 모두 지원
+    - **지원 API 목록**:
+      - Express 라우트: server/replitAuth.ts (모든 Express API 라우트)
+      - Vercel 서버리스:
+        - api/auth/user.ts
+        - api/dashboard/stats.ts
+        - api/templates/index.ts, api/templates/[id].ts
+        - api/campaigns/index.ts
+        - api/targeting/estimate.ts
+        - api/transactions/index.ts, api/transactions/charge.ts
+        - api/bizchat/*.ts (ai, ats, campaigns, file, maptics, mdn-upload, sender, stats, template)
+        - api/bizchat/reports/*.ts (area, gender-age, period)
 - Elimination of local sender number CRUD in favor of BizChat-managed sender numbers.
 
 ## External Dependencies
