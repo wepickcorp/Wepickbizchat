@@ -1145,6 +1145,27 @@ export default function TemplatesNew() {
                     {watchedValues.content || "메시지 내용이 여기에 표시됩니다..."}
                   </div>
                   
+                  {/* RCS 버튼 미리보기 */}
+                  {watchedValues.messageType === "RCS" && buttons.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      {buttons.map((button, index) => {
+                        const buttonType = BUTTON_TYPES.find(t => t.value === button.type);
+                        const ButtonIcon = buttonType?.icon || ExternalLink;
+                        return (
+                          <button
+                            key={index}
+                            type="button"
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-primary/30 bg-primary/5 text-primary text-sm font-medium hover:bg-primary/10 transition-colors"
+                            data-testid={`button-preview-${index}`}
+                          >
+                            <ButtonIcon className="h-4 w-4" />
+                            {button.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
                   <div className="text-tiny text-muted-foreground pt-2 border-t">
                     SK코어타겟 비즈챗
                   </div>
