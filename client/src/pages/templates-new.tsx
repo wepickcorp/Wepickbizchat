@@ -25,6 +25,8 @@ import {
   Phone,
   MapPin,
   ExternalLink,
+  Sparkles,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -52,6 +54,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Template, RcsButton, UrlLinkConfig, RcsButtonsConfig } from "@shared/schema";
+import { getMessageTypeLabel } from "@/lib/authUtils";
+
+interface TemplateWithSystem extends Template {
+  isSystem?: boolean;
+}
 
 const rcsButtonSchema = z.object({
   type: z.enum(["0", "1", "2"]), // 0: URL연결, 1: 전화걸기, 2: 지도
@@ -129,6 +136,51 @@ export default function TemplatesNew() {
     queryKey: ["/api/templates", templateId],
     enabled: !!templateId && templateId !== "new",
   });
+
+  // 추천 템플릿 조회 (새 메세지 만들기 모드일 때만)
+  const { data: allTemplates } = useQuery<TemplateWithSystem[]>({
+    queryKey: ["/api/templates"],
+    enabled: !templateId,
+  });
+
+  const recommendedTemplates = allTemplates?.filter(t => t.isSystem) || [];
+
+  // 추천 템플릿 불러오기 함수
+  const loadRecommendedTemplate = (template: TemplateWithSystem) => {
+    const templateUrlLinks = template.urlLinks as UrlLinkConfig | null;
+    const templateButtons = template.buttons as RcsButtonsConfig | null;
+    
+    form.reset({
+      name: `${template.name} (복사본)`,
+      messageType: template.messageType as "LMS" | "MMS" | "RCS",
+      rcsType: template.rcsType || 0,
+      title: template.title || "",
+      content: template.content,
+      imageUrl: template.imageUrl || "",
+      imageFileId: template.imageFileId || "",
+      urlLinks: templateUrlLinks || { list: [], reward: undefined },
+      buttons: templateButtons || { list: [] },
+    });
+    
+    if (template.imageUrl) {
+      setImagePreview(template.imageUrl);
+    }
+    if (template.imageFileId) {
+      setImageFileId(template.imageFileId);
+    }
+    if (templateUrlLinks?.list) {
+      setUrlLinks(templateUrlLinks.list);
+      setUrlRewardIndex(templateUrlLinks.reward);
+    }
+    if (templateButtons?.list) {
+      setButtons(templateButtons.list);
+    }
+    
+    toast({
+      title: "추천 템플릿 불러오기 완료",
+      description: "템플릿 내용을 수정해서 사용하세요.",
+    });
+  };
 
   const form = useForm<TemplateFormValues>({
     resolver: zodResolver(templateFormSchema),
@@ -326,7 +378,7 @@ export default function TemplatesNew() {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
       toast({
         title: "템플릿 생성 완료",
-        description: "새 템플릿이 저장되었어요. 이제 캠페인에서 사용할 수 있어요.",
+        description: "새 메세지가 저장되었어요. 이제 캠페인에서 사용할 수 있어요.",
       });
       navigate("/templates");
     },
@@ -460,15 +512,15 @@ export default function TemplatesNew() {
   };
 
   const pageTitle = isViewMode 
-    ? "템플릿 상세" 
+    ? "메세지 상세" 
     : isEditMode 
-    ? "템플릿 수정" 
-    : "새 템플릿 만들기";
+    ? "메세지 수정" 
+    : "새 메세지 만들기";
   
   const pageDescription = isViewMode
-    ? "템플릿 상세 정보를 확인하세요"
+    ? "메세지 상세 정보를 확인하세요"
     : isEditMode
-    ? "템플릿 정보를 수정하세요"
+    ? "메세지 정보를 수정하세요"
     : "메시지 템플릿을 작성하고 캠페인에 활용해보세요";
 
   const canEdit = !!existingTemplate;
@@ -510,10 +562,49 @@ export default function TemplatesNew() {
         )}
       </div>
 
+      {/* 추천 템플릿 섹션 - 새 메세지 만들기 모드에서만 표시 */}
+      {!templateId && recommendedTemplates.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-amber-500" />
+              <CardTitle className="text-h3">추천 템플릿</CardTitle>
+            </div>
+            <CardDescription>
+              자주 사용되는 템플릿을 불러와서 빠르게 시작해보세요
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {recommendedTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => loadRecommendedTemplate(template)}
+                  className="flex flex-col items-start p-4 rounded-lg border border-border hover-elevate text-left transition-all"
+                  data-testid={`button-load-recommended-${template.id}`}
+                >
+                  <div className="flex items-center gap-2 mb-2 w-full">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="font-medium text-small truncate">{template.name}</span>
+                    <Badge variant="outline" className="text-tiny shrink-0 ml-auto">
+                      {getMessageTypeLabel(template.messageType)}
+                    </Badge>
+                  </div>
+                  <p className="text-tiny text-muted-foreground line-clamp-2">
+                    {template.content.substring(0, 80)}...
+                  </p>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-h2">템플릿 정보</CardTitle>
+            <CardTitle className="text-h2">메세지 정보</CardTitle>
             <CardDescription>
               메시지 유형을 선택하고 내용을 입력해주세요
             </CardDescription>
@@ -526,7 +617,7 @@ export default function TemplatesNew() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>템플릿 이름</FormLabel>
+                      <FormLabel>메세지 이름</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="예: 12월 할인 이벤트 안내"

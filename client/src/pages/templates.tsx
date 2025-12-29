@@ -84,7 +84,7 @@ export default function Templates() {
     <div className="animate-fade-in space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-display font-bold">템플릿 목록</h1>
+          <h1 className="text-display font-bold">메세지 목록</h1>
           <p className="text-muted-foreground mt-1">
             메시지 템플릿을 관리하고 캠페인에 활용해요
           </p>
@@ -92,7 +92,7 @@ export default function Templates() {
         <Button asChild className="gap-2 w-fit" data-testid="button-new-template">
           <Link href="/templates/new">
             <FilePlus className="h-4 w-4" />
-            템플릿 만들기
+            메세지 만들기
           </Link>
         </Button>
       </div>
@@ -102,7 +102,7 @@ export default function Templates() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="템플릿 이름으로 검색..."
+              placeholder="메세지 이름으로 검색..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -222,10 +222,10 @@ export default function Templates() {
           ) : (
             <EmptyState
               icon={FileText}
-              title="템플릿이 없어요"
+              title="메세지가 없어요"
               description="메시지 템플릿을 만들고 캠페인에 활용해보세요."
               action={{
-                label: "첫 템플릿 만들기",
+                label: "첫 메세지 만들기",
                 onClick: () => setLocation("/templates/new"),
               }}
             />

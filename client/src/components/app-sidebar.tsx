@@ -60,12 +60,12 @@ const campaignNavItems = [
 
 const preparationNavItems = [
   {
-    title: "템플릿 만들기",
+    title: "메세지 만들기",
     url: "/templates/new",
     icon: FilePlus,
   },
   {
-    title: "템플릿 목록",
+    title: "메세지 목록",
     url: "/templates",
     icon: FileText,
   },

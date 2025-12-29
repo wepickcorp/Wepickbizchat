@@ -743,14 +743,14 @@ export default function CampaignsNew() {
                   ) : (
                     <div className="text-center py-12">
                       <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <h3 className="font-semibold mb-2">승인된 템플릿이 없어요</h3>
+                      <h3 className="font-semibold mb-2">승인된 메세지가 없어요</h3>
                       <p className="text-small text-muted-foreground mb-4">
-                        먼저 템플릿을 만들고 검수를 받아야 캠페인을 만들 수 있어요
+                        먼저 메세지를 만들고 검수를 받아야 캠페인을 만들 수 있어요
                       </p>
                       <Button asChild className="gap-2">
                         <Link href="/templates/new">
                           <FilePlus className="h-4 w-4" />
-                          템플릿 만들기
+                          메세지 만들기
                         </Link>
                       </Button>
                     </div>
