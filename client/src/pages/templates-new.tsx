@@ -377,14 +377,14 @@ export default function TemplatesNew() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
       toast({
-        title: "템플릿 생성 완료",
+        title: "메세지 생성 완료",
         description: "새 메세지가 저장되었어요. 이제 캠페인에서 사용할 수 있어요.",
       });
       navigate("/templates");
     },
     onError: (error: any) => {
       toast({
-        title: "템플릿 생성 실패",
+        title: "메세지 생성 실패",
         description: error.message || "다시 시도해주세요.",
         variant: "destructive",
       });
@@ -408,14 +408,14 @@ export default function TemplatesNew() {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates", templateId] });
       toast({
-        title: "템플릿 수정 완료",
-        description: "템플릿이 수정되었어요.",
+        title: "메세지 수정 완료",
+        description: "메세지가 수정되었어요.",
       });
       navigate("/templates");
     },
     onError: (error: any) => {
       toast({
-        title: "템플릿 수정 실패",
+        title: "메세지 수정 실패",
         description: error.message || "다시 시도해주세요.",
         variant: "destructive",
       });
@@ -1167,7 +1167,7 @@ export default function TemplatesNew() {
                       data-testid="button-save-template"
                     >
                       <Save className="h-4 w-4" />
-                      {isPending ? "저장 중..." : isEditMode ? "템플릿 수정" : "템플릿 저장"}
+                      {isPending ? "저장 중..." : isEditMode ? "메세지 수정" : "메세지 저장"}
                     </Button>
                   </div>
                 )}
