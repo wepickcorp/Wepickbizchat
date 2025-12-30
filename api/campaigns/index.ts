@@ -979,8 +979,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (template.status !== 'approved') return res.status(400).json({ error: 'Template must be approved' });
 
-      // 메시지 유형별 단가
-      const MESSAGE_PRICES: Record<string, number> = { LMS: 100, MMS: 120, RCS: 100 };
+      // 메시지 유형별 단가 (RCS: ₩130으로 변경됨)
+      const MESSAGE_PRICES: Record<string, number> = { LMS: 100, MMS: 120, RCS: 130 };
       const costPerMessage = MESSAGE_PRICES[template.messageType] || 100;
       
       const userBalance = parseFloat(user.balance || '0');

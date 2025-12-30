@@ -487,6 +487,10 @@ export default function CampaignsNew() {
       const template = approvedTemplates?.find(t => t.id === data.templateId);
       if (!template) throw new Error("템플릿을 찾을 수 없습니다");
 
+      // 지오펜스(maptics) 캠페인인지 확인
+      const hasGeofence = (advancedTargeting.geofences?.length ?? 0) > 0;
+      const isMapticsCampaign = advancedTargeting.targetingMode === 'maptics' || hasGeofence;
+      
       const campaignData = {
         name: data.name,
         templateId: data.templateId,
@@ -507,6 +511,14 @@ export default function CampaignsNew() {
         sndMosuDesc: atsData.sndMosuDesc || advancedTargeting.sndMosuDesc || null,
         // 발송 목표 건수
         sndGoalCnt: data.targetCount,
+        // Maptics(지오펜스) 캠페인 필수 필드: 실시간 발송 (rcvType=1)
+        // 지오펜스 캠페인은 기본적으로 실시간 발송으로 09:00~21:00 시간대 설정
+        ...(isMapticsCampaign ? {
+          mapticsSendType: 'realtime' as const,
+          rtStartHhmm: '0900',
+          rtEndHhmm: '2100',
+          sndDayDiv: 0,
+        } : {}),
       };
 
       if (isEditMode && campaignId) {
