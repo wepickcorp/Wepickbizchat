@@ -1354,12 +1354,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const bizchatCampaignId = responseData?.id;
           
           if (bizchatCampaignId) {
-            // BizChat 캠페인 ID 저장
+            // BizChat 캠페인 ID 및 Maptics 필드 저장
             await db.update(campaigns)
               .set({ 
                 bizchatCampaignId,
                 statusCode: 0, // 임시등록
                 status: 'temp_registered',
+                // Maptics 지오펜스 필드 저장 (rcvType=1,2)
+                ...(hasGeofence ? {
+                  sndGeofenceId: Number(geofenceIds[0]),
+                  collStartDate: collStartDate,
+                  collEndDate: collEndDate,
+                  collSndDate: rcvType === 2 ? collSndDate : null,
+                } : {}),
+                // ATS 발송 시작일 저장 (rcvType=0)
+                ...(!hasGeofence ? {
+                  atsSndStartDate: atsSndStartDate,
+                } : {}),
                 updatedAt: new Date(),
               })
               .where(eq(campaigns.id, campaignId));

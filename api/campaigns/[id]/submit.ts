@@ -594,12 +594,12 @@ function validateMapticsCollStartDate(data: {
   rcvType: number;
   collStartDate?: Date | string | null;
 }): { valid: boolean; error?: string; warning?: string } {
-  // Maptics 타겟팅(rcvType=2)일 때만 검증
-  // rcvType 0 = ATS 일반 타겟팅
-  // rcvType 1 = MDN 직접 지정 (테스트 발송) - Maptics 아님!
-  // rcvType 2 = Maptics (지오펜스 타겟팅) - collStartDate 필수
-  // rcvType 10 = MDN 테스트 발송 변형
-  if (data.rcvType !== 2) {
+  // Maptics 지오펜스 타겟팅 (rcvType=1 또는 rcvType=2)일 때만 검증
+  // rcvType 0 = ATS 일반 타겟팅 - collStartDate 불필요
+  // rcvType 1 = Maptics 실시간 보내기 (지오펜스) - collStartDate 필수
+  // rcvType 2 = Maptics 모아서 보내기 (지오펜스) - collStartDate 필수
+  // rcvType 10 = MDN 테스트 발송 - collStartDate 불필요
+  if (data.rcvType !== 1 && data.rcvType !== 2) {
     return { valid: true };
   }
   
