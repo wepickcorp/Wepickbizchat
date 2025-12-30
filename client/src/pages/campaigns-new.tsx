@@ -122,9 +122,6 @@ export default function CampaignsNew() {
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [uploadedImageId, setUploadedImageId] = useState<string | null>(null);
-  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [showAdvancedTargeting, setShowAdvancedTargeting] = useState(false);
   const [advancedTargeting, setAdvancedTargetingState] = useState<AdvancedTargetingState>({
     targetingMode: 'ats',
@@ -443,44 +440,6 @@ export default function CampaignsNew() {
   const costPerMessage = MESSAGE_PRICES[messageType as keyof typeof MESSAGE_PRICES] || 100;
   const estimatedCost = watchTargetCount * costPerMessage;
   const userBalance = parseFloat(user?.balance as string || "0");
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('fileType', 'image');
-    
-    try {
-      const response = await fetch('/api/files/upload', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-      });
-      
-      if (!response.ok) {
-        throw new Error('업로드 실패');
-      }
-      
-      const data = await response.json();
-      setUploadedImageId(data.id);
-      setUploadedImageUrl(URL.createObjectURL(file));
-      toast({ 
-        title: "이미지 업로드 완료",
-        description: "이미지가 성공적으로 업로드되었어요"
-      });
-    } catch (error) {
-      toast({ 
-        title: "이미지 업로드 실패", 
-        description: "이미지 업로드 중 오류가 발생했어요. 다시 시도해주세요.",
-        variant: "destructive" 
-      });
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const saveCampaignMutation = useMutation({
     mutationFn: async (data: CampaignFormData) => {
@@ -823,55 +782,6 @@ export default function CampaignsNew() {
                   )}
                 </CardContent>
               </Card>
-
-              {selectedTemplate && (selectedTemplate.messageType === "MMS" || selectedTemplate.messageType === "RCS") && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>이미지 업로드</CardTitle>
-                    <CardDescription>
-                      {selectedTemplate.messageType} 메시지에 포함될 이미지를 업로드해주세요 (선택사항)
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label htmlFor="image-upload">이미지 파일</Label>
-                      <Input
-                        id="image-upload"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        disabled={uploading}
-                        className="mt-2"
-                        data-testid="input-upload-image"
-                      />
-                      <p className="text-tiny text-muted-foreground mt-2">
-                        JPG, PNG 형식 지원 (최대 10MB)
-                      </p>
-                    </div>
-                    
-                    {uploading && (
-                      <div className="flex items-center gap-2 text-small text-muted-foreground">
-                        <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-                        <span>이미지 업로드 중...</span>
-                      </div>
-                    )}
-                    
-                    {uploadedImageUrl && (
-                      <div className="space-y-2">
-                        <Label>미리보기</Label>
-                        <div className="rounded-lg overflow-hidden bg-muted max-w-xs">
-                          <img 
-                            src={uploadedImageUrl} 
-                            alt="업로드된 이미지" 
-                            className="w-full h-auto"
-                            data-testid="img-preview"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
 
               {selectedTemplate && (
                 <Card className="bg-accent/50 border-accent">
