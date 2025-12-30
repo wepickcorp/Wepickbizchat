@@ -180,12 +180,13 @@ export default function CampaignsNew() {
     return minTime;
   };
 
-  // 선택 가능한 날짜 목록 (오늘~7일 후)
-  const getAvailableDates = () => {
+  // 선택 가능한 날짜 목록 (오늘~7일 후, maptics 모드는 내일부터)
+  const getAvailableDates = (startFromTomorrow = false) => {
     const minTime = getMinScheduledTime();
     const dates: { date: Date; label: string; dayLabel: string }[] = [];
+    const startDay = startFromTomorrow ? 1 : 0; // maptics 모드는 내일(D+1)부터
     
-    for (let day = 0; day < 7; day++) {
+    for (let day = startDay; day < 7 + startDay; day++) {
       const targetDate = new Date(minTime);
       targetDate.setDate(targetDate.getDate() + day);
       targetDate.setHours(0, 0, 0, 0);
@@ -1338,9 +1339,9 @@ export default function CampaignsNew() {
                       </div>
                       
                       <div>
-                        <Label className="text-sm font-medium mb-2 block">활성 기간 선택</Label>
+                        <Label className="text-sm font-medium mb-2 block">활성 시작일 선택 (최소 D+1)</Label>
                         <div className="grid grid-cols-7 gap-2">
-                          {getAvailableDates().map((dateOption) => (
+                          {getAvailableDates(true).map((dateOption) => (
                             <button
                               key={dateOption.date.toISOString()}
                               type="button"
