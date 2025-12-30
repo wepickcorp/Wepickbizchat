@@ -1154,23 +1154,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // RCS 타입 설정 (billingType 1 또는 3일 때)
-      // rcsType: 1=단독(슬라이드 1개), 2=캐러셀(슬라이드 2개 이상) (BizChat API 필수 필드)
+      // BizChat API rcsType: 0=스탠다드, 1=LMS(텍스트), 2=슬라이드(캐러셀), 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
       if (isRcs) {
         // 현재 구현에서는 단일 슬라이드만 지원 (rcsSlide 하나만 생성)
         const slideCount = rcsSlide ? 1 : 0;
-        // 우선순위: 1. campaign.rcsType (유효한 경우), 2. 슬라이드 개수에서 추론
+        
+        // rcsType 결정 로직:
+        // 1. campaign.rcsType이 유효하면 사용 (0~5 범위)
+        // 2. 유효하지 않으면 billingType에 따라 자동 결정:
+        //    - billingType=1 (RCS MMS, 이미지 있음): rcsType=0 (스탠다드)
+        //    - billingType=3 (RCS LMS, 텍스트만): rcsType=1 (LMS)
         let validRcsType: number;
-        if (campaign.rcsType === 1 || campaign.rcsType === 2) {
+        if (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5) {
           validRcsType = campaign.rcsType;
           console.log(`[Submit] Using campaign rcsType: ${validRcsType}`);
         } else {
-          // 슬라이드 개수에서 rcsType 추론: 2개 이상이면 캐러셀(2), 1개면 단독(1)
-          validRcsType = slideCount >= 2 ? 2 : 1;
-          console.log(`[Submit] Inferred rcsType from slide count: ${slideCount} slides → rcsType=${validRcsType}`);
+          // billingType에 따라 자동 결정
+          validRcsType = billingType === 1 ? 0 : 1; // RCS MMS → 스탠다드(0), RCS LMS → LMS(1)
+          console.log(`[Submit] Auto-determined rcsType from billingType=${billingType}: ${validRcsType} (0=스탠다드, 1=LMS)`);
         }
         createPayload.rcsType = validRcsType;
-        console.log(`[Submit] RCS type set to: ${validRcsType} (campaign.rcsType: ${campaign.rcsType}, slides: ${slideCount})`);
-        // slideCnt: rcsType=2(캐러셀)일 때 슬라이드 개수
+        console.log(`[Submit] RCS type set to: ${validRcsType} (campaign.rcsType: ${campaign.rcsType}, billingType: ${billingType}, slides: ${slideCount})`);
+        // slideCnt: rcsType=2(슬라이드/캐러셀)일 때 슬라이드 개수
         if (validRcsType === 2) {
           createPayload.slideCnt = slideCount || 1;
         }
@@ -1357,22 +1362,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       // RCS 타입 설정
-      // rcsType: 1=단독(슬라이드 1개), 2=캐러셀(슬라이드 2개 이상) (BizChat API 필수 필드)
+      // BizChat API rcsType: 0=스탠다드, 1=LMS(텍스트), 2=슬라이드(캐러셀), 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
       if (isRcs) {
-        // 우선순위: 1. campaign.rcsType (유효한 경우), 2. 슬라이드 개수에서 추론
         // 업데이트 시 슬라이드 개수는 updateRcsSlide가 있으면 1개
         const updateSlideCount = updateRcsSlide ? 1 : 0;
+        
+        // rcsType 결정 로직:
+        // 1. campaign.rcsType이 유효하면 사용 (0~5 범위)
+        // 2. 유효하지 않으면 billingType에 따라 자동 결정
         let validRcsType: number;
-        if (campaign.rcsType === 1 || campaign.rcsType === 2) {
+        if (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5) {
           validRcsType = campaign.rcsType;
           console.log(`[Submit Update] Using campaign rcsType: ${validRcsType}`);
         } else {
-          // 슬라이드 개수에서 rcsType 추론: 2개 이상이면 캐러셀(2), 1개면 단독(1)
-          validRcsType = updateSlideCount >= 2 ? 2 : 1;
-          console.log(`[Submit Update] Inferred rcsType from slide count: ${updateSlideCount} slides → rcsType=${validRcsType}`);
+          // billingType에 따라 자동 결정
+          validRcsType = billingType === 1 ? 0 : 1; // RCS MMS → 스탠다드(0), RCS LMS → LMS(1)
+          console.log(`[Submit Update] Auto-determined rcsType from billingType=${billingType}: ${validRcsType}`);
         }
         updatePayload.rcsType = validRcsType;
-        console.log(`[Submit Update] RCS type set to: ${validRcsType} (campaign.rcsType: ${campaign.rcsType}, slides: ${updateSlideCount})`);
+        console.log(`[Submit Update] RCS type set to: ${validRcsType} (campaign.rcsType: ${campaign.rcsType}, billingType: ${billingType}, slides: ${updateSlideCount})`);
         if (validRcsType === 2) {
           updatePayload.slideCnt = updateSlideCount || 1;
         }
