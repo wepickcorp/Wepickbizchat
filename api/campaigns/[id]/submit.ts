@@ -396,31 +396,103 @@ function getKSTTimeComponents(date: Date): { hours: number; minutes: number; dat
   };
 }
 
-// 발송 시간 유효성 검증 (BizChat API 규격 v0.29.0)
+// 한국시간(KST) 기준 발송 가능 시간대로 조정하는 함수
+// KST = UTC + 9시간, 발송 가능 시간: 09:00~19:00 KST
+// KST 09:00 = UTC 00:00, KST 19:00 = UTC 10:00
+function clampToKSTWindow(dateUTC: Date, minTime: Date): Date {
+  const KST_OFFSET_HOURS = 9;
+  
+  // 10분 단위 올림 헬퍼
+  const roundUpTo10Min = (date: Date): Date => {
+    const result = new Date(date);
+    result.setSeconds(0);
+    result.setMilliseconds(0);
+    const mins = result.getMinutes();
+    const rem = mins % 10;
+    if (rem > 0) {
+      result.setMinutes(mins + (10 - rem));
+    }
+    return result;
+  };
+  
+  // UTC 시간 기준으로 KST 시간 계산
+  const utcHours = dateUTC.getUTCHours();
+  const kstHours = utcHours + KST_OFFSET_HOURS;
+  const kstHoursNormalized = kstHours % 24;
+  const isNextDayKST = kstHours >= 24;
+  
+  // KST 09:00~18:59 범위 체크
+  const isInWindow = kstHoursNormalized >= 9 && kstHoursNormalized < 19;
+  
+  if (isInWindow) {
+    const effectiveDate = dateUTC > minTime ? dateUTC : minTime;
+    const resultKstHours = (effectiveDate.getUTCHours() + KST_OFFSET_HOURS) % 24;
+    if (resultKstHours >= 9 && resultKstHours < 19) {
+      return roundUpTo10Min(effectiveDate);
+    }
+  }
+  
+  // 발송 불가 시간대 → 다음 가능한 KST 09:00 (= UTC 00:00)으로 조정
+  const adjusted = new Date(dateUTC);
+  
+  if (kstHoursNormalized >= 19) {
+    // KST 19:00~23:59 → 다음날 KST 09:00
+    adjusted.setUTCDate(adjusted.getUTCDate() + 1);
+    adjusted.setUTCHours(0, 0, 0, 0);
+  } else if (kstHoursNormalized < 9) {
+    // KST 00:00~08:59
+    if (isNextDayKST) {
+      // UTC 15:00~23:59 → 다음날 UTC 00:00
+      adjusted.setUTCDate(adjusted.getUTCDate() + 1);
+    }
+    adjusted.setUTCHours(0, 0, 0, 0);
+  }
+  
+  // minTime 이후 보장 + KST 범위 재확인
+  let result = adjusted > minTime ? adjusted : minTime;
+  
+  const resultKstHours = (result.getUTCHours() + KST_OFFSET_HOURS) % 24;
+  if (resultKstHours >= 19 || resultKstHours < 9) {
+    result = new Date(result);
+    result.setUTCDate(result.getUTCDate() + 1);
+    result.setUTCHours(0, 0, 0, 0);
+  }
+  
+  const finalKstHours = (result.getUTCHours() + KST_OFFSET_HOURS) % 24;
+  console.log(`[Submit] KST window clamp: ${dateUTC.toISOString()} → ${result.toISOString()} (KST ${String(finalKstHours).padStart(2, '0')}:${String(result.getUTCMinutes()).padStart(2, '0')})`);
+  return roundUpTo10Min(result);
+}
+
+// 발송 시간 유효성 검증 및 자동 조정 (BizChat API 규격 v0.29.0)
 // 1. 현재 시간 대비 1시간 이후여야 함
-// 2. 9시부터 19시(19시 미포함) 사이여야 함 (KST 기준)
+// 2. 9시부터 19시(19시 미포함) 사이여야 함 (KST 기준) - 범위 밖이면 자동 조정
 // 3. 10분 단위로 시간 체크
 function validateSendTime(sendDate: Date | string | null): { valid: boolean; error?: string; adjustedDate?: Date } {
   if (!sendDate) return { valid: true };
   
   const targetDate = typeof sendDate === 'string' ? new Date(sendDate) : new Date(sendDate);
   const now = new Date();
+  const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
   
   // KST 기준 시간 추출
   const kstTarget = getKSTTimeComponents(targetDate);
   
   // 1. 발송 시간대 체크 (09:00~19:00, 19시 미포함) - KST 기준
+  // 범위 밖이면 자동으로 다음 가능한 시간으로 조정
   if (kstTarget.hours < 9 || kstTarget.hours >= 19) {
-    return { 
-      valid: false, 
-      error: `발송 시간은 09:00~19:00 사이여야 합니다 (현재: ${kstTarget.hours}:${kstTarget.minutes.toString().padStart(2, '0')} KST)` 
-    };
+    console.log(`[Submit] Send time ${kstTarget.hours}:${kstTarget.minutes.toString().padStart(2, '0')} KST is outside 09:00~19:00, auto-adjusting...`);
+    const adjustedDate = clampToKSTWindow(targetDate, oneHourFromNow);
+    const kstAdjusted = getKSTTimeComponents(adjustedDate);
+    console.log(`[Submit] Adjusted to ${kstAdjusted.hours}:${kstAdjusted.minutes.toString().padStart(2, '0')} KST (${adjustedDate.toISOString()})`);
+    return { valid: true, adjustedDate };
   }
   
   // 2. 최소 1시간 여유 체크
-  const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
   if (targetDate < oneHourFromNow) {
-    return { valid: false, error: '발송 시간은 현재 시간으로부터 최소 1시간 이후여야 합니다' };
+    // 최소 1시간 후로 조정하고 KST 범위도 확인
+    const adjustedDate = clampToKSTWindow(oneHourFromNow, oneHourFromNow);
+    console.log(`[Submit] Send time is less than 1 hour from now, adjusted to ${adjustedDate.toISOString()}`);
+    return { valid: true, adjustedDate };
   }
   
   // 3. 10분 단위 체크 (자동 올림 처리)
@@ -433,10 +505,11 @@ function validateSendTime(sendDate: Date | string | null): { valid: boolean; err
     adjustedDate.setMinutes(minutes + (10 - remainder));
   }
   
-  // 조정 후 KST 기준으로 다시 체크
+  // 조정 후 KST 기준으로 다시 체크 - 19시 넘어가면 다음날로 조정
   const kstAdjusted = getKSTTimeComponents(adjustedDate);
   if (kstAdjusted.hours >= 19) {
-    return { valid: false, error: '발송 시간은 19:00 이전이어야 합니다 (KST)' };
+    const finalAdjusted = clampToKSTWindow(adjustedDate, oneHourFromNow);
+    return { valid: true, adjustedDate: finalAdjusted };
   }
   
   return { valid: true, adjustedDate };
