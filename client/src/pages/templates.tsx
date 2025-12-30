@@ -11,10 +11,6 @@ import {
   BarChart3,
   Mail,
   Clock,
-  CheckCircle2,
-  Clock3,
-  XCircle,
-  FileEdit,
 } from "lucide-react";
 import { useState } from "react";
 import { formatDateTime, formatNumber, getMessageTypeLabel } from "@/lib/authUtils";
@@ -43,39 +39,6 @@ interface TemplateWithStats extends Template {
     totalDelivered: number;
     lastSentAt: string | null;
   };
-}
-
-function getStatusBadge(status: string) {
-  switch (status) {
-    case 'approved':
-      return { 
-        label: '승인됨', 
-        variant: 'default' as const, 
-        className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-100',
-        icon: CheckCircle2 
-      };
-    case 'pending':
-      return { 
-        label: '검수중', 
-        variant: 'secondary' as const, 
-        className: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100',
-        icon: Clock3 
-      };
-    case 'rejected':
-      return { 
-        label: '반려됨', 
-        variant: 'destructive' as const, 
-        className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-100',
-        icon: XCircle 
-      };
-    default:
-      return { 
-        label: '작성중', 
-        variant: 'outline' as const, 
-        className: 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-100',
-        icon: FileEdit 
-      };
-  }
 }
 
 export default function Templates() {
@@ -176,16 +139,6 @@ export default function Templates() {
                       <span className="font-medium truncate" data-testid={`text-template-name-${template.id}`}>
                         {template.name}
                       </span>
-                      {(() => {
-                        const statusBadge = getStatusBadge(template.status);
-                        const StatusIcon = statusBadge.icon;
-                        return (
-                          <Badge variant={statusBadge.variant} className={`text-tiny shrink-0 gap-1 ${statusBadge.className}`} data-testid={`badge-status-${template.id}`}>
-                            <StatusIcon className="h-3 w-3" />
-                            {statusBadge.label}
-                          </Badge>
-                        );
-                      })()}
                       {template.isSystem && (
                         <Badge variant="secondary" className="text-tiny shrink-0 bg-amber-100 text-amber-800 border-amber-200" data-testid={`badge-recommended-${template.id}`}>
                           추천템플릿
