@@ -1101,6 +1101,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...(rcsSlide && { rcs: [rcsSlide] }),
       };
 
+      // 지오펜스(Maptics) 캠페인 필드 추가 (rcvType=1: 실시간, rcvType=2: 모아서 보내기)
+      const rcvType = campaign.rcvType ?? 0;
+      if (rcvType === 1 || rcvType === 2) {
+        // rtStartHhmm/rtEndHhmm: 발송 가능 시간대 (0900~2000 범위)
+        if (campaign.rtStartHhmm) {
+          createPayload.rtStartHhmm = campaign.rtStartHhmm;
+        }
+        if (campaign.rtEndHhmm) {
+          createPayload.rtEndHhmm = campaign.rtEndHhmm;
+        }
+        // sndDayDiv: 일 균등 분할 발송 (0=미사용, 1=사용)
+        if (campaign.sndDayDiv !== null && campaign.sndDayDiv !== undefined) {
+          createPayload.sndDayDiv = campaign.sndDayDiv;
+        }
+        console.log(`[Submit] Maptics campaign fields - rcvType: ${rcvType}, rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
+      }
+
       // 타겟팅 정보 추가 (ATS 발송 모수 필터)
       // BizChat API 규격: sndMosuQuery는 ATS mosu API 응답의 query 문자열(SQL 형식)을 사용해야 함
       let atsFilterStr = '';
@@ -1376,6 +1393,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // RCS 타입일 때만 rcs 배열 포함 (빈 배열 생략 - E000002 방지)
         ...(updateRcsSlide && { rcs: [updateRcsSlide] }),
       };
+
+      // 지오펜스(Maptics) 캠페인 필드 추가 (rcvType=1: 실시간, rcvType=2: 모아서 보내기)
+      const updateRcvType = campaign.rcvType ?? 0;
+      if (updateRcvType === 1 || updateRcvType === 2) {
+        if (campaign.rtStartHhmm) {
+          updatePayload.rtStartHhmm = campaign.rtStartHhmm;
+        }
+        if (campaign.rtEndHhmm) {
+          updatePayload.rtEndHhmm = campaign.rtEndHhmm;
+        }
+        if (campaign.sndDayDiv !== null && campaign.sndDayDiv !== undefined) {
+          updatePayload.sndDayDiv = campaign.sndDayDiv;
+        }
+        console.log(`[Submit Update] Maptics campaign fields - rcvType: ${updateRcvType}, rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
+      }
       
       // 발송 시간 업데이트
       if (adjustedSendDate) {

@@ -471,12 +471,12 @@ export default function CampaignsNew() {
         // 발송 목표 건수
         sndGoalCnt: data.targetCount,
         // Maptics(지오펜스) 캠페인 필수 필드: 실시간 발송 (rcvType=1)
-        // 지오펜스 캠페인은 기본적으로 실시간 발송으로 09:00~20:00 시간대 설정 (BizChat API 제한: 0900~2000)
+        // 지오펜스 캠페인은 advancedTargeting에서 설정한 발송 시간대 사용 (기본값: 0900~2000)
         ...(isMapticsCampaign ? {
-          mapticsSendType: 'realtime' as const,
-          rtStartHhmm: '0900',
-          rtEndHhmm: '2000',
-          sndDayDiv: 0,
+          mapticsSendType: advancedTargeting.mapticsSendType || 'realtime',
+          rtStartHhmm: advancedTargeting.rtStartHhmm || '0900',
+          rtEndHhmm: advancedTargeting.rtEndHhmm || '2000',
+          sndDayDiv: advancedTargeting.sndDayDiv ?? 0,
         } : {}),
       };
 
@@ -1269,10 +1269,13 @@ export default function CampaignsNew() {
                               type="button"
                               onClick={() => {
                                 setSelectedScheduleDate(dateOption.date);
-                                // 지오펜스 모드에서는 선택한 날짜의 자정부터 활성화
-                                const startOfDay = new Date(dateOption.date);
-                                startOfDay.setHours(0, 0, 0, 0);
-                                form.setValue("scheduledAt", startOfDay.toISOString());
+                                // 지오펜스 모드에서는 선택한 날짜 + rtStartHhmm 시간으로 설정
+                                const rtStartHhmm = advancedTargeting.rtStartHhmm || '0900';
+                                const startHour = parseInt(rtStartHhmm.slice(0, 2), 10);
+                                const startMinute = parseInt(rtStartHhmm.slice(2, 4), 10);
+                                const scheduledDate = new Date(dateOption.date);
+                                scheduledDate.setHours(startHour, startMinute, 0, 0);
+                                form.setValue("scheduledAt", scheduledDate.toISOString());
                               }}
                               className={cn(
                                 "flex flex-col items-center justify-center p-2 rounded-lg border transition-colors",
@@ -1298,7 +1301,7 @@ export default function CampaignsNew() {
                               month: 'long',
                               day: 'numeric',
                               weekday: 'long',
-                            })} 부터 활성화
+                            })} {(advancedTargeting.rtStartHhmm || '0900').slice(0, 2)}:{(advancedTargeting.rtStartHhmm || '0900').slice(2)}~{(advancedTargeting.rtEndHhmm || '2000').slice(0, 2)}:{(advancedTargeting.rtEndHhmm || '2000').slice(2)} 활성화
                           </span>
                         </div>
                       )}
