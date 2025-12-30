@@ -976,6 +976,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const isRcs = billingType === 1 || billingType === 3;
       const needsFile = billingType === 1 || billingType === 2;
       
+      // ========== 이미지 파일 업로드 처리 ==========
+      // BizChat API는 base64 대신 업로드된 파일 ID(origId)를 필요로 함
+      let imageFileId: string | null = null;
+      if (needsFile && message?.imageUrl) {
+        const imageUrl = message.imageUrl;
+        // base64 데이터 URL인 경우 파일 업로드 API 호출
+        if (imageUrl.startsWith('data:')) {
+          console.log('[Submit] Image is base64, uploading to BizChat file API...');
+          try {
+            const host = req.headers.host || process.env.VERCEL_URL || 'localhost:5000';
+            const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+            const protocol = req.headers['x-forwarded-proto'] || (isLocalhost ? 'http' : 'https');
+            const baseUrlForUpload = `${protocol}://${host}`;
+            
+            // 이미지 타입 및 파일명 추출
+            const mimeMatch = imageUrl.match(/^data:([^;]+);/);
+            const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+            const extMatch = mimeType.match(/image\/(\w+)/);
+            const ext = extMatch ? extMatch[1] : 'jpg';
+            const fileName = `campaign_${id}_${Date.now()}.${ext}`;
+            
+            // RCS용 파일인 경우 rcs=1 플래그 설정
+            const rcsFlag = isRcs ? 1 : 0;
+            
+            const uploadResponse = await fetch(`${baseUrlForUpload}/api/bizchat/file`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(req.headers.authorization ? { 'Authorization': req.headers.authorization } : {}),
+                ...(req.headers['x-impersonate-token'] ? { 'X-Impersonate-Token': req.headers['x-impersonate-token'] as string } : {}),
+                ...(req.headers['x-impersonate-user-id'] ? { 'X-Impersonate-User-Id': req.headers['x-impersonate-user-id'] as string } : {}),
+              },
+              body: JSON.stringify({
+                fileData: imageUrl,
+                fileName: fileName,
+                fileType: mimeType,
+                type: 2, // 이미지
+                rcs: rcsFlag,
+              }),
+            });
+            
+            const uploadResult = await uploadResponse.json();
+            if (uploadResult.success && uploadResult.fileId) {
+              imageFileId = uploadResult.fileId;
+              console.log(`[Submit] Image uploaded successfully, fileId: ${imageFileId}`);
+            } else {
+              console.error('[Submit] Image upload failed:', uploadResult);
+              return res.status(400).json({
+                error: '이미지 업로드에 실패했습니다.',
+                details: uploadResult.error || uploadResult.rawResponse,
+              });
+            }
+          } catch (uploadError) {
+            console.error('[Submit] Image upload error:', uploadError);
+            return res.status(500).json({
+              error: '이미지 업로드 중 오류가 발생했습니다.',
+            });
+          }
+        } else {
+          // 이미 업로드된 파일 ID 또는 URL인 경우 그대로 사용
+          imageFileId = imageUrl;
+          console.log(`[Submit] Using existing image reference: ${imageFileId.substring(0, 50)}...`);
+        }
+      }
+      
       // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
       // URL 리스트 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함)
       const urlLinksData = (message as any)?.urlLinks as { list?: string[]; reward?: number } | null;
@@ -990,7 +1055,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const mmsObject: Record<string, unknown> = {
         title: message?.title || '',
         msg: message?.content || '',
-        ...(needsFile && message?.imageUrl && { fileInfo: { list: [{ origId: message.imageUrl }] } }),
+        ...(needsFile && imageFileId && { fileInfo: { list: [{ origId: imageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
         ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(urlReward !== undefined && { reward: urlReward }) } }),
       };
@@ -1000,7 +1065,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         slideNum: 1,
         title: message?.title || '',
         msg: message?.content || '',
-        ...(needsFile && message?.imageUrl && { imgOrigId: message.imageUrl }),
+        ...(needsFile && imageFileId && { imgOrigId: imageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
         ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(urlReward !== undefined && { reward: urlReward }) } }),
         ...(rcsButtons.length > 0 && { 
@@ -1151,6 +1216,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const isRcs = billingType === 1 || billingType === 3;
       const needsFile = billingType === 1 || billingType === 2;
       
+      // ========== 이미지 파일 업로드 처리 (재제출 시) ==========
+      let updateImageFileId: string | null = null;
+      if (needsFile && message?.imageUrl) {
+        const imageUrl = message.imageUrl;
+        if (imageUrl.startsWith('data:')) {
+          console.log('[Submit Update] Image is base64, uploading to BizChat file API...');
+          try {
+            const host = req.headers.host || process.env.VERCEL_URL || 'localhost:5000';
+            const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+            const protocol = req.headers['x-forwarded-proto'] || (isLocalhost ? 'http' : 'https');
+            const baseUrlForUpload = `${protocol}://${host}`;
+            
+            const mimeMatch = imageUrl.match(/^data:([^;]+);/);
+            const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+            const extMatch = mimeType.match(/image\/(\w+)/);
+            const ext = extMatch ? extMatch[1] : 'jpg';
+            const fileName = `campaign_${id}_${Date.now()}.${ext}`;
+            const rcsFlag = isRcs ? 1 : 0;
+            
+            const uploadResponse = await fetch(`${baseUrlForUpload}/api/bizchat/file`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(req.headers.authorization ? { 'Authorization': req.headers.authorization } : {}),
+                ...(req.headers['x-impersonate-token'] ? { 'X-Impersonate-Token': req.headers['x-impersonate-token'] as string } : {}),
+                ...(req.headers['x-impersonate-user-id'] ? { 'X-Impersonate-User-Id': req.headers['x-impersonate-user-id'] as string } : {}),
+              },
+              body: JSON.stringify({
+                fileData: imageUrl,
+                fileName: fileName,
+                fileType: mimeType,
+                type: 2,
+                rcs: rcsFlag,
+              }),
+            });
+            
+            const uploadResult = await uploadResponse.json();
+            if (uploadResult.success && uploadResult.fileId) {
+              updateImageFileId = uploadResult.fileId;
+              console.log(`[Submit Update] Image uploaded successfully, fileId: ${updateImageFileId}`);
+            } else {
+              console.error('[Submit Update] Image upload failed:', uploadResult);
+              return res.status(400).json({
+                error: '이미지 업로드에 실패했습니다.',
+                details: uploadResult.error || uploadResult.rawResponse,
+              });
+            }
+          } catch (uploadError) {
+            console.error('[Submit Update] Image upload error:', uploadError);
+            return res.status(500).json({
+              error: '이미지 업로드 중 오류가 발생했습니다.',
+            });
+          }
+        } else {
+          updateImageFileId = imageUrl;
+          console.log(`[Submit Update] Using existing image reference: ${updateImageFileId.substring(0, 50)}...`);
+        }
+      }
+      
       // 타겟팅/발송 수량 재계산
       const sndGoalCnt = campaign.sndGoalCnt || campaign.targetCount || 1000;
       // sndMosu: 캠페인에 저장된 값 사용 (타겟팅 설정 시 ATS mosu API로 계산됨)
@@ -1175,7 +1299,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const updateMmsObject: Record<string, unknown> = {
         title: message?.title || '',
         msg: message?.content || '',
-        ...(needsFile && message?.imageUrl && { fileInfo: { list: [{ origId: message.imageUrl }] } }),
+        ...(needsFile && updateImageFileId && { fileInfo: { list: [{ origId: updateImageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
         ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateUrlReward !== undefined && { reward: updateUrlReward }) } }),
       };
@@ -1185,7 +1309,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         slideNum: 1,
         title: message?.title || '',
         msg: message?.content || '',
-        ...(needsFile && message?.imageUrl && { imgOrigId: message.imageUrl }),
+        ...(needsFile && updateImageFileId && { imgOrigId: updateImageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
         ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateUrlReward !== undefined && { reward: updateUrlReward }) } }),
         ...(updateRcsButtons.length > 0 && { 
