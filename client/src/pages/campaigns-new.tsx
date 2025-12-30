@@ -512,11 +512,11 @@ export default function CampaignsNew() {
         // 발송 목표 건수
         sndGoalCnt: data.targetCount,
         // Maptics(지오펜스) 캠페인 필수 필드: 실시간 발송 (rcvType=1)
-        // 지오펜스 캠페인은 기본적으로 실시간 발송으로 09:00~21:00 시간대 설정
+        // 지오펜스 캠페인은 기본적으로 실시간 발송으로 09:00~20:00 시간대 설정 (BizChat API 제한: 0900~2000)
         ...(isMapticsCampaign ? {
           mapticsSendType: 'realtime' as const,
           rtStartHhmm: '0900',
-          rtEndHhmm: '2100',
+          rtEndHhmm: '2000',
           sndDayDiv: 0,
         } : {}),
       };
