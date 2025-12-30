@@ -1,9 +1,31 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { verifyAuth, createGeofence, updateGeofence, deleteGeofence, GeofenceTarget, listGeofences } from '../bizchat/maptics.js';
-import { db } from '../../server/db.js';
-import { geofences } from '../../shared/schema.js';
+import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-http';
 import { eq, and, desc } from 'drizzle-orm';
+import { pgTable, text, integer, timestamp, boolean, numeric } from 'drizzle-orm/pg-core';
+
+// 로컬 geofences 테이블 스키마
+const geofences = pgTable('geofences', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  bizchatGeofenceId: text('bizchat_geofence_id'),
+  name: text('name').notNull(),
+  poiName: text('poi_name'),
+  latitude: numeric('latitude'),
+  longitude: numeric('longitude'),
+  radius: integer('radius').default(500),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+function getDb() {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) throw new Error('DATABASE_URL is not set');
+  return drizzle(neon(dbUrl));
+}
 
 const geofenceTargetSchema = z.object({
   gender: z.number().min(0).max(2),
@@ -47,6 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`[Geofence List] BizChat returned ${bizchatGeofences.length} geofences`);
       
       // 로컬 DB에서 사용자의 지오펜스 가져오기
+      const db = getDb();
       const localGeofences = await db.select()
         .from(geofences)
         .where(and(
