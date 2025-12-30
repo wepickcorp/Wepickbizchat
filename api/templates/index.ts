@@ -2,10 +2,32 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, desc, and, or } from 'drizzle-orm';
+import { eq, desc, and, or, inArray, isNotNull } from 'drizzle-orm';
 import { pgTable, text, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { randomUUID, createHmac } from 'crypto';
+
+const BIZCHAT_DEV_URL = process.env.BIZCHAT_DEV_API_URL || 'https://gw-dev.bizchat1.co.kr:8443';
+const BIZCHAT_PROD_URL = process.env.BIZCHAT_PROD_API_URL || 'https://gw.bizchat1.co.kr';
+
+function getBizChatConfig() {
+  const useProduction = process.env.BIZCHAT_USE_PROD === 'true';
+  const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
+  const apiKey = useProduction 
+    ? process.env.BIZCHAT_PROD_API_KEY 
+    : process.env.BIZCHAT_DEV_API_KEY;
+  return { baseUrl, apiKey, useProduction };
+}
+
+function bizChatStatusToLocal(bizChatStatus: number): string {
+  switch (bizChatStatus) {
+    case 0: return 'draft';
+    case 10: return 'pending';
+    case 11: return 'approved';
+    case 17: return 'rejected';
+    default: return 'draft';
+  }
+}
 
 const templates = pgTable('templates', {
   id: text('id').primaryKey(),
@@ -90,6 +112,60 @@ async function verifyAuth(req: VercelRequest) {
   } catch { return null; }
 }
 
+async function syncBizChatTemplateStatuses(db: ReturnType<typeof getDb>, templateIds: string[]): Promise<Map<string, string>> {
+  const statusMap = new Map<string, string>();
+  
+  try {
+    const { baseUrl, apiKey } = getBizChatConfig();
+    if (!apiKey) {
+      console.log('[Templates] No BizChat API key configured, skipping sync');
+      return statusMap;
+    }
+    
+    const tid = Date.now().toString();
+    const response = await fetch(`${baseUrl}/api/v1/cmpn/tpl/list?tid=${tid}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiKey,
+      },
+      body: JSON.stringify({ pageNumber: 1, pageSize: 100 }),
+    });
+    
+    if (!response.ok) {
+      console.log(`[Templates] BizChat API error: ${response.status}`);
+      return statusMap;
+    }
+    
+    const result = await response.json();
+    if (result.code !== 'S000001' || !result.data?.list) {
+      console.log(`[Templates] BizChat API failed: ${result.msg}`);
+      return statusMap;
+    }
+    
+    const bizChatTemplates = result.data.list as Array<{ id: number; name: string; status: number }>;
+    console.log(`[Templates] Fetched ${bizChatTemplates.length} templates from BizChat for sync`);
+    
+    for (const bct of bizChatTemplates) {
+      const localStatus = bizChatStatusToLocal(bct.status);
+      statusMap.set(bct.id.toString(), localStatus);
+      
+      await db.update(templates)
+        .set({ 
+          status: localStatus,
+          updatedAt: new Date(),
+        })
+        .where(eq(templates.id, bct.id.toString()));
+    }
+    
+    console.log(`[Templates] Synced ${statusMap.size} template statuses from BizChat`);
+  } catch (error) {
+    console.error('[Templates] Error syncing BizChat statuses:', error);
+  }
+  
+  return statusMap;
+}
+
 const createTemplateSchema = z.object({
   name: z.string().min(1).max(200),
   messageType: z.enum(['LMS', 'MMS', 'RCS']),
@@ -123,14 +199,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     try {
+      // BizChat에서 템플릿 상태 동기화 (백그라운드에서 실행)
+      const syncPromise = syncBizChatTemplateStatuses(db, []).catch(err => {
+        console.error('[Templates] Background sync error:', err);
+      });
+      
       // 사용자 본인 템플릿 + 시스템 기본 템플릿 모두 조회
       const SYSTEM_USER_ID = 'system';
       const templateList = await db.select().from(templates)
         .where(or(eq(templates.userId, userId), eq(templates.userId, SYSTEM_USER_ID)))
         .orderBy(desc(templates.createdAt));
       
+      // 동기화 완료 대기 (최대 3초)
+      await Promise.race([syncPromise, new Promise(resolve => setTimeout(resolve, 3000))]);
+      
+      // 동기화 후 다시 조회하여 최신 상태 반영
+      const updatedTemplateList = await db.select().from(templates)
+        .where(or(eq(templates.userId, userId), eq(templates.userId, SYSTEM_USER_ID)))
+        .orderBy(desc(templates.createdAt));
+      
       const templatesWithStats = await Promise.all(
-        templateList.map(async (template) => {
+        updatedTemplateList.map(async (template) => {
           const templateCampaigns = await db.select().from(campaigns).where(and(eq(campaigns.templateId, template.id), eq(campaigns.userId, userId)));
           let totalSent = 0, totalDelivered = 0;
           let lastSentAt: Date | null = null;

@@ -297,9 +297,17 @@ export default function CampaignsNew() {
     enabled: isEditMode,
   });
 
-  const { data: approvedTemplates, isLoading: templatesLoading } = useQuery<Template[]>({
+  const { data: allTemplates, isLoading: templatesLoading } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
   });
+  
+  const currentTemplateId = isEditMode ? existingCampaign?.templateId : null;
+  
+  const approvedTemplates = allTemplates?.filter(t => 
+    t.status === 'approved' || t.id === currentTemplateId
+  );
+  const pendingTemplates = allTemplates?.filter(t => t.status === 'pending');
+  const hasNonApprovedTemplates = (allTemplates?.length || 0) > (approvedTemplates?.length || 0);
 
   const [senderNumbers, setSenderNumbers] = useState<BizChatSenderNumber[]>([]);
   const [senderNumbersLoading, setSenderNumbersLoading] = useState(true);
@@ -757,9 +765,15 @@ export default function CampaignsNew() {
                     <div className="text-center py-12">
                       <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                       <h3 className="font-semibold mb-2">승인된 메세지가 없어요</h3>
-                      <p className="text-small text-muted-foreground mb-4">
-                        먼저 메세지를 만들고 검수를 받아야 캠페인을 만들 수 있어요
-                      </p>
+                      {pendingTemplates && pendingTemplates.length > 0 ? (
+                        <p className="text-small text-muted-foreground mb-4">
+                          검수 대기 중인 메세지가 {pendingTemplates.length}개 있어요. 검수가 완료되면 캠페인을 만들 수 있어요.
+                        </p>
+                      ) : (
+                        <p className="text-small text-muted-foreground mb-4">
+                          먼저 메세지를 만들고 검수를 받아야 캠페인을 만들 수 있어요
+                        </p>
+                      )}
                       <Button asChild className="gap-2">
                         <Link href="/templates/new">
                           <FilePlus className="h-4 w-4" />

@@ -1,0 +1,120 @@
+URL	/api/v1/maptics/poi				
+Description	Maptics POI - 지오펜스에 사용할 poi 검색				
+Method	POST				
+Header	Authorization: {token}				
+					
+Request					
+In Type	Parameter	Mandatory	Data Type	Value(Example)	Description
+Query Parameter	tid	Y	string	"1705298638704"	transaction ID
+Body	skey	Y	string	"을지로입구"	지번/도로명 또는 poi 값
+	type	Y	string	"poi"	"검색 타입이 지번/도로명 또는 poi 구분 
+- poi : poi 로 검색 
+- addr : 지번/도로명 으로 검색"
+Example(Query string)	tid=1706073253324				
+Example(Body)	"{
+    ""skey"": ""을지로입구"",
+    ""type"": ""poi""
+}"				
+Example(Body)	"{
+    ""skey"": ""대왕판교"",
+    ""type"": ""addr""
+}"				
+					
+Response					
+구분	Parameter	Mandatory	Data Type	Value(Example)	Description
+Body	tid	Y	string	"1705298638704"	request 시 사용한 tid 값
+	code	Y	string	"S000001"	API 성공, 실패 코드
+	msg	Y	string	"success"	API 성공, 실패 메시지
+	data	Y	object		위치 코드 정보
+	data.list	Y	object array		위치 코드 목록
+	data.list[].road	Y	string	"경기 성남시 수정구 대왕판교로1323번길"	주소
+	data.list[].lat	Y	string	"37.458614"	위도
+	data.list[].lon	Y	string	"127.106889"	경도
+Example(poi)	"{
+    ""tid"": ""1706073253324"",
+    ""code"": ""S000001"",
+    ""msg"": ""success"",
+    ""data"": {
+        ""list"": [
+            {
+                ""road"": ""서울 중구 을지로 42(을지로1가) 을지로입구역[2호선]"",
+                ""lat"": ""37.56598210"",
+                ""lon"": ""126.98215959""
+            },
+            {
+                ""road"": ""서울 중구 을지로 42(을지로1가) 을지로입구역 1번출구"",
+                ""lat"": ""37.56620430"",
+                ""lon"": ""126.98207626""
+            }
+        ]
+    }
+}"				
+Example(addr)	"{
+    ""tid"": ""1706073253324"",
+    ""code"": ""S000001"",
+    ""msg"": ""success"",
+    ""data"": {
+        ""list"": [
+            {
+                ""road"": ""경기 성남시 수정구 대왕판교로1323번길  "",
+                ""lat"": ""37.458614"",
+                ""lon"": ""127.106889""
+            },
+            {
+                ""road"": ""경기 성남시 수정구 대왕판교로  "",
+                ""lat"": ""37.424479"",
+                ""lon"": ""127.10189""
+            }
+        ]
+    }
+}"				
+					
+URL	/api/v1/maptics/geofences/save				
+Description	Maptics 지오펜스 생성				
+Method	POST				
+Header	Authorization: {token}				
+					
+Request					
+In Type	Parameter	Mandatory	Data Type	Value(Example)	Description
+Query Parameter	tid	Y	string	"1705298638704"	transaction ID
+Body	name	Y	string	"지오펜스 그룹1"	생성할 지오펜스 명
+	target	Y	object array		생성할 지오펜스 목록. 다중 등록 가능.
+	target[].gender	Y	number	0	"성별.
+- 0 : 전체 
+- 1 : 남자
+- 2 : 여자"
+	target[].minAge	Y	number	20	최소 나이 ( 19 <= minAge <= 90 )
+	target[].maxAge	Y	number	30	최대 나이 ( 19 <= maxAge <= 90 )
+	target[].stayMin	Y	number	10	체류 시간. 분 단위. ( 5 <= stayMin <= 30 )
+	target[].radius	Y	number	500	반경. 미터 단위. ( 50 <= radius <= 2000 )
+	target[].address	Y	string	"서울 중구 을지로 42(을지로1가) 을지로입구역[2호선]"	등록 주소. "Maptics POI - 지오펜스에 사용할 poi 검색" 에서 구한 road 값
+Example(Query string)	tid=1706073253324				
+Example(Body)	"{
+    ""name"": ""지오펜스1"",
+    ""target"": [
+        {
+            ""gender"": 0,
+            ""minAge"": 20,
+            ""maxAge"": 30,
+            ""stayMin"": 10,
+            ""radius"": 500,
+            ""address"": ""서울 중구 을지로 42(을지로1가) 을지로입구역[2호선]""
+        }
+    ]
+}"				
+					
+Response					
+구분	Parameter	Mandatory	Data Type	Value(Example)	Description
+Body	tid	Y	string	"1705298638704"	request 시 사용한 tid 값
+	code	Y	string	"S000001"	API 성공, 실패 코드
+	msg	Y	string	"success"	API 성공, 실패 메시지
+	data	Y	object		
+	data.id	Y	number	569	등록된 지오펜스 아이디. 수정, 삭제시에 사용.
+Example(poi)	"{
+    ""tid"": ""1706073253324"",
+    ""code"": ""S000001"",
+    ""msg"": ""success"",
+    ""data"": {
+        id: 569
+    }
+}"				
