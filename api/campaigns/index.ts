@@ -167,6 +167,7 @@ const templates = pgTable('templates', {
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   messageType: text('message_type').notNull(),
+  rcsType: integer('rcs_type'), // 0=스탠다드, 1=LMS, 2=슬라이드, 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
@@ -1176,6 +1177,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 1. 로컬 DB에 캠페인 저장 (초기 상태: temp_registered)
       // Maptics 필드도 초기 INSERT 시점에 저장 (submit 시 validation 통과 위함)
+      // RCS 타입은 템플릿에서 복사 (사용자가 메시지 생성 시 선택한 값)
+      const templateRcsType = template.rcsType ?? null;
+      console.log(`[Campaign] Template rcsType: ${templateRcsType} (messageType: ${data.messageType})`);
+      
       const campaignResult = await db.insert(campaigns).values({
         id: campaignId,
         userId,
@@ -1183,6 +1188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         tgtCompanyName: '위픽',
         templateId: data.templateId,
         messageType: data.messageType,
+        rcsType: templateRcsType, // 템플릿에서 RCS 타입 복사 (0=스탠다드, 1=LMS, 2=슬라이드, 3=이미지강조A, 4=이미지강조B, 5=상품소개세로)
         sndNum: data.sndNum,
         statusCode: 0, // temp_registered (BizChat 등록 시도)
         status: 'temp_registered',
