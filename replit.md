@@ -54,7 +54,7 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
         - api/auth/user.ts
         - api/dashboard/stats.ts
         - api/templates/index.ts, api/templates/[id].ts
-        - api/campaigns/index.ts
+        - api/campaigns/index.ts, api/campaigns/[id]/submit.ts, api/campaigns/[id]/cancel.ts, api/campaigns/[id]/stop.ts
         - api/targeting/estimate.ts
         - api/transactions/index.ts, api/transactions/charge.ts
         - api/bizchat/*.ts (ai, ats, campaigns, file, maptics, mdn-upload, sender, stats, template)
