@@ -1108,23 +1108,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // KST 09:00-19:00 윈도우로 발송 시간 제한 (BizChat 규격)
       const clampToKSTWindow = (date: Date): Date => {
-        const result = new Date(date);
-        // KST 시간 확인 (UTC + 9시간)
-        const kstHours = (result.getUTCHours() + 9) % 24;
-        const kstDate = new Date(result.getTime() + 9 * 60 * 60 * 1000);
+        // KST로 변환해서 시간 판단 (UTC + 9시간)
+        const kstOffset = 9 * 60 * 60 * 1000;
+        const kstTime = new Date(date.getTime() + kstOffset);
+        const kstHours = kstTime.getUTCHours();
+        const kstMinutes = kstTime.getUTCMinutes();
         
-        // 09:00 KST 이전이면 같은 날 09:00으로 조정
+        // KST 기준으로 09:00~19:00 내라면 그대로 반환
+        if (kstHours >= 9 && kstHours < 19) {
+          return new Date(date);
+        }
+        
+        // KST 기준 날짜 계산
+        const kstYear = kstTime.getUTCFullYear();
+        const kstMonth = kstTime.getUTCMonth();
+        const kstDay = kstTime.getUTCDate();
+        
+        let resultKST: Date;
         if (kstHours < 9) {
-          result.setUTCHours(0, 0, 0, 0); // UTC 00:00 = KST 09:00
-          return result;
+          // 09:00 KST 이전 → 같은 KST 날짜의 09:00으로 설정
+          resultKST = new Date(Date.UTC(kstYear, kstMonth, kstDay, 9, 0, 0, 0));
+        } else {
+          // 19:00 KST 이후 → 다음 KST 날짜의 09:00으로 설정
+          resultKST = new Date(Date.UTC(kstYear, kstMonth, kstDay + 1, 9, 0, 0, 0));
         }
-        // 19:00 KST 이후이면 다음 날 09:00으로 조정
-        if (kstHours >= 19) {
-          result.setDate(result.getDate() + 1);
-          result.setUTCHours(0, 0, 0, 0); // UTC 00:00 = KST 09:00
-          return result;
-        }
-        return result;
+        
+        // KST를 UTC로 변환 (KST - 9시간 = UTC)
+        return new Date(resultKST.getTime() - kstOffset);
       };
       
       if (hasGeofence) {
