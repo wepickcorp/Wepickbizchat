@@ -1154,14 +1154,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // RCS 타입 설정 (billingType 1 또는 3일 때)
-      // rcsType: 1=단독, 2=캐러셀 (BizChat API 필수 필드)
+      // rcsType: 1=단독(슬라이드 1개), 2=캐러셀(슬라이드 2개 이상) (BizChat API 필수 필드)
       if (isRcs) {
-        // rcsType이 유효하지 않으면 기본값 1(단독) 사용
-        const validRcsType = campaign.rcsType === 1 || campaign.rcsType === 2 
-          ? campaign.rcsType 
-          : 1;
+        // 우선순위: 1. campaign.rcsType (유효한 경우), 2. 슬라이드 개수에서 추론
+        let validRcsType: number;
+        if (campaign.rcsType === 1 || campaign.rcsType === 2) {
+          validRcsType = campaign.rcsType;
+          console.log(`[Submit] Using campaign rcsType: ${validRcsType}`);
+        } else {
+          // 슬라이드 개수에서 rcsType 추론: 2개 이상이면 캐러셀(2), 1개면 단독(1)
+          validRcsType = rcsArray.length >= 2 ? 2 : 1;
+          console.log(`[Submit] Inferred rcsType from slide count: ${rcsArray.length} slides → rcsType=${validRcsType}`);
+        }
         createPayload.rcsType = validRcsType;
-        console.log(`[Submit] RCS type set to: ${validRcsType} (from campaign: ${campaign.rcsType})`);
+        console.log(`[Submit] RCS type set to: ${validRcsType} (campaign.rcsType: ${campaign.rcsType}, slides: ${rcsArray.length})`);
         // slideCnt: rcsType=2(캐러셀)일 때 슬라이드 개수
         if (validRcsType === 2) {
           createPayload.slideCnt = rcsArray.length || 1;
@@ -1349,16 +1355,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       // RCS 타입 설정
-      // rcsType: 1=단독, 2=캐러셀 (BizChat API 필수 필드)
+      // rcsType: 1=단독(슬라이드 1개), 2=캐러셀(슬라이드 2개 이상) (BizChat API 필수 필드)
       if (isRcs) {
-        // rcsType이 유효하지 않으면 기본값 1(단독) 사용
-        const validRcsType = campaign.rcsType === 1 || campaign.rcsType === 2 
-          ? campaign.rcsType 
-          : 1;
+        // 우선순위: 1. campaign.rcsType (유효한 경우), 2. 슬라이드 개수에서 추론
+        // 업데이트 시 슬라이드 개수는 updateRcsSlide가 있으면 1개
+        const updateSlideCount = updateRcsSlide ? 1 : 0;
+        let validRcsType: number;
+        if (campaign.rcsType === 1 || campaign.rcsType === 2) {
+          validRcsType = campaign.rcsType;
+          console.log(`[Submit Update] Using campaign rcsType: ${validRcsType}`);
+        } else {
+          // 슬라이드 개수에서 rcsType 추론: 2개 이상이면 캐러셀(2), 1개면 단독(1)
+          validRcsType = updateSlideCount >= 2 ? 2 : 1;
+          console.log(`[Submit Update] Inferred rcsType from slide count: ${updateSlideCount} slides → rcsType=${validRcsType}`);
+        }
         updatePayload.rcsType = validRcsType;
-        console.log(`[Submit Update] RCS type set to: ${validRcsType} (from campaign: ${campaign.rcsType})`);
+        console.log(`[Submit Update] RCS type set to: ${validRcsType} (campaign.rcsType: ${campaign.rcsType}, slides: ${updateSlideCount})`);
         if (validRcsType === 2) {
-          updatePayload.slideCnt = 1;
+          updatePayload.slideCnt = updateSlideCount || 1;
         }
       }
       
