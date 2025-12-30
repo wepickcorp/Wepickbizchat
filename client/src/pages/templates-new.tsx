@@ -102,13 +102,75 @@ function navigate(href: string) {
 
 
 const RCS_TYPES = [
-  { value: 0, label: "스탠다드", maxChars: 1100, imageSpec: "400x240 또는 500x300, 최대 0.3MB", aspectRatio: "5/3", maxButtonTextLen: 17, maxUrlCount: 3 },
-  { value: 1, label: "LMS", maxChars: 1100, imageSpec: "이미지 없음", aspectRatio: null, maxButtonTextLen: 17, maxUrlCount: 3 },
-  { value: 2, label: "슬라이드", maxChars: 300, imageSpec: "464x336, 슬라이드당 최대 300KB (총 1MB)", aspectRatio: "464/336", maxButtonTextLen: 13, maxUrlCount: 1, note: "슬라이드당 300자, 전체 1300자 이내" },
-  { value: 3, label: "이미지 강조 A", maxChars: 1100, imageSpec: "900x1200, 최대 1MB", aspectRatio: "3/4", maxButtonTextLen: 16, maxUrlCount: 3 },
-  { value: 4, label: "이미지 강조 B", maxChars: 1100, imageSpec: "900x900, 최대 1MB", aspectRatio: "1/1", maxButtonTextLen: 16, maxUrlCount: 3 },
-  { value: 5, label: "상품 소개 (세로)", maxChars: 1100, imageSpec: "900x560, 최대 1MB", aspectRatio: "900/560", maxButtonTextLen: 16, maxUrlCount: 3, note: "옵션 이미지 2~3개 필수 (300x300)" },
+  { value: 0, label: "스탠다드", maxChars: 1100, imageSpec: "400x240 또는 500x300, 최대 0.3MB", aspectRatio: "5/3", maxButtonTextLen: 17, maxUrlCount: 3, targetWidth: 500, targetHeight: 300 },
+  { value: 1, label: "LMS", maxChars: 1100, imageSpec: "이미지 없음", aspectRatio: null, maxButtonTextLen: 17, maxUrlCount: 3, targetWidth: null, targetHeight: null },
+  { value: 2, label: "슬라이드", maxChars: 300, imageSpec: "464x336, 슬라이드당 최대 300KB (총 1MB)", aspectRatio: "464/336", maxButtonTextLen: 13, maxUrlCount: 1, note: "슬라이드당 300자, 전체 1300자 이내", targetWidth: 464, targetHeight: 336 },
+  { value: 3, label: "이미지 강조 A", maxChars: 1100, imageSpec: "900x1200, 최대 1MB", aspectRatio: "3/4", maxButtonTextLen: 16, maxUrlCount: 3, targetWidth: 900, targetHeight: 1200 },
+  { value: 4, label: "이미지 강조 B", maxChars: 1100, imageSpec: "900x900, 최대 1MB", aspectRatio: "1/1", maxButtonTextLen: 16, maxUrlCount: 3, targetWidth: 900, targetHeight: 900 },
+  { value: 5, label: "상품 소개 (세로)", maxChars: 1100, imageSpec: "900x560, 최대 1MB", aspectRatio: "900/560", maxButtonTextLen: 16, maxUrlCount: 3, note: "옵션 이미지 2~3개 필수 (300x300)", targetWidth: 900, targetHeight: 560 },
 ];
+
+const resizeImageToRcsSpec = (
+  file: File,
+  targetWidth: number,
+  targetHeight: number,
+  maxSizeKB: number = 1024
+): Promise<{ base64: string; resized: boolean; originalSize: string; newSize: string }> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const originalSize = `${img.width}x${img.height}`;
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          reject(new Error('Canvas context not available'));
+          return;
+        }
+        
+        const sourceAspect = img.width / img.height;
+        const targetAspect = targetWidth / targetHeight;
+        
+        let sx = 0, sy = 0, sw = img.width, sh = img.height;
+        
+        if (sourceAspect > targetAspect) {
+          sw = img.height * targetAspect;
+          sx = (img.width - sw) / 2;
+        } else {
+          sh = img.width / targetAspect;
+          sy = (img.height - sh) / 2;
+        }
+        
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
+        
+        let quality = 0.92;
+        let base64 = canvas.toDataURL('image/jpeg', quality);
+        
+        while (base64.length > maxSizeKB * 1024 * 1.37 && quality > 0.1) {
+          quality -= 0.05;
+          base64 = canvas.toDataURL('image/jpeg', quality);
+        }
+        
+        const resized = img.width !== targetWidth || img.height !== targetHeight;
+        resolve({
+          base64,
+          resized,
+          originalSize,
+          newSize: `${targetWidth}x${targetHeight}`,
+        });
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+};
 
 const MMS_IMAGE_SPEC = {
   format: "JPG",
@@ -261,86 +323,103 @@ export default function TemplatesNew() {
       return;
     }
 
-    const getMaxFileSize = () => {
-      if (messageType === "MMS") return 300 * 1024;
-      if (messageType === "RCS") {
-        switch (rcsType) {
-          case 0: return 300 * 1024;
-          case 2: return 300 * 1024;
-          default: return 1024 * 1024;
-        }
-      }
-      return 1024 * 1024;
-    };
-    
-    const maxSize = getMaxFileSize();
-    if (file.size > maxSize) {
-      const sizeText = maxSize >= 1024 * 1024 
-        ? `${maxSize / (1024 * 1024)}MB` 
-        : `${Math.round(maxSize / 1024)}KB`;
-      toast({
-        title: "파일 크기 초과",
-        description: `파일 크기가 ${sizeText}를 초과해요. 이미지를 압축해서 다시 시도해주세요.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsUploading(true);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64Data = e.target?.result as string;
-        setImagePreview(base64Data);
-        form.setValue("imageUrl", base64Data);
-
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const token = session?.access_token;
-          const response = await fetch("/api/bizchat/file", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              fileData: base64Data,
-              fileName: file.name,
-              fileType: file.type,
-              type: 2,
-              rcs: messageType === "RCS" ? 1 : 0,
-            }),
-          });
-
-          const result = await response.json();
-
-          if (result.success && result.fileId) {
-            setImageFileId(result.fileId);
-            form.setValue("imageFileId", result.fileId);
+      let base64Data: string;
+      let resizeInfo: { resized: boolean; originalSize: string; newSize: string } | null = null;
+      
+      if (messageType === "RCS" && rcsType !== undefined && rcsType !== 1) {
+        const rcsSpec = RCS_TYPES.find(t => t.value === rcsType);
+        if (rcsSpec && rcsSpec.targetWidth && rcsSpec.targetHeight) {
+          const maxSizeKB = rcsType === 0 || rcsType === 2 ? 300 : 1024;
+          const result = await resizeImageToRcsSpec(file, rcsSpec.targetWidth, rcsSpec.targetHeight, maxSizeKB);
+          base64Data = result.base64;
+          resizeInfo = { resized: result.resized, originalSize: result.originalSize, newSize: result.newSize };
+          
+          if (result.resized) {
             toast({
-              title: "이미지 업로드 완료",
-              description: "BizChat 서버에 이미지가 업로드되었어요",
-            });
-          } else {
-            toast({
-              title: "이미지 업로드 실패",
-              description: result.error || "다시 시도해주세요",
-              variant: "destructive",
+              title: "이미지 크기 자동 조정됨",
+              description: `${result.originalSize} → ${result.newSize} (${rcsSpec.label} 규격)`,
             });
           }
-        } catch (error) {
-          console.error("Image upload error:", error);
+        } else {
+          const reader = new FileReader();
+          base64Data = await new Promise<string>((resolve, reject) => {
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(file);
+          });
+        }
+      } else if (messageType === "MMS") {
+        const result = await resizeImageToRcsSpec(file, 640, 480, 300);
+        base64Data = result.base64;
+        resizeInfo = { resized: result.resized, originalSize: result.originalSize, newSize: result.newSize };
+        
+        if (result.resized) {
+          toast({
+            title: "이미지 크기 자동 조정됨",
+            description: `${result.originalSize} → ${result.newSize} (MMS 규격)`,
+          });
+        }
+      } else {
+        const reader = new FileReader();
+        base64Data = await new Promise<string>((resolve, reject) => {
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsDataURL(file);
+        });
+      }
+      
+      setImagePreview(base64Data);
+      form.setValue("imageUrl", base64Data);
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const response = await fetch("/api/bizchat/file", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            fileData: base64Data,
+            fileName: file.name.replace(/\.[^.]+$/, '.jpg'),
+            fileType: 'image/jpeg',
+            type: 2,
+            rcs: messageType === "RCS" ? 1 : 0,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (result.success && result.fileId) {
+          setImageFileId(result.fileId);
+          form.setValue("imageFileId", result.fileId);
+          toast({
+            title: "이미지 업로드 완료",
+            description: resizeInfo?.resized 
+              ? `${resizeInfo.newSize} 크기로 변환되어 업로드되었어요`
+              : "BizChat 서버에 이미지가 업로드되었어요",
+          });
+        } else {
           toast({
             title: "이미지 업로드 실패",
-            description: "서버 연결에 실패했어요. 나중에 다시 시도해주세요",
+            description: result.error || "다시 시도해주세요",
             variant: "destructive",
           });
         }
+      } catch (error) {
+        console.error("Image upload error:", error);
+        toast({
+          title: "이미지 업로드 실패",
+          description: "서버 연결에 실패했어요. 나중에 다시 시도해주세요",
+          variant: "destructive",
+        });
+      }
 
-        setIsUploading(false);
-      };
-      reader.readAsDataURL(file);
+      setIsUploading(false);
     } catch (error) {
       setIsUploading(false);
       toast({
