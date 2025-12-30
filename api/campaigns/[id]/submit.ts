@@ -1061,8 +1061,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
       
       // RCS 배열 구성 - RCS 타입일 때만 포함, 아니면 완전히 생략
+      // BizChat API 규격: slideNum은 슬라이드형(rcsType=2)에서만 사용
+      // 이미지 강조 A/B (rcsType=3,4)에서는 slideNum 포함 시 E100038 오류 발생
+      // effectiveRcsType: campaign.rcsType이 유효하면 사용, 아니면 billingType에 따라 결정
+      const effectiveRcsType = (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5)
+        ? campaign.rcsType
+        : (billingType === 1 ? 4 : 1);
+      console.log(`[Submit] effectiveRcsType for slideNum check: ${effectiveRcsType}`);
       const rcsSlide: Record<string, unknown> | null = isRcs ? {
-        slideNum: 1,
+        ...(effectiveRcsType === 2 && { slideNum: 1 }),
         title: message?.title || '',
         msg: message?.content || '',
         ...(needsFile && imageFileId && { imgOrigId: imageFileId }),
@@ -1334,8 +1341,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
       
       // RCS 슬라이드 구성 - RCS 타입일 때만 생성
+      // BizChat API 규격: slideNum은 슬라이드형(rcsType=2)에서만 사용
+      // updateEffectiveRcsType: campaign.rcsType이 유효하면 사용, 아니면 billingType에 따라 결정
+      const updateEffectiveRcsType = (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5)
+        ? campaign.rcsType
+        : (billingType === 1 ? 4 : 1);
+      console.log(`[Submit Update] effectiveRcsType for slideNum check: ${updateEffectiveRcsType}`);
       const updateRcsSlide: Record<string, unknown> | null = isRcs ? {
-        slideNum: 1,
+        ...(updateEffectiveRcsType === 2 && { slideNum: 1 }),
         title: message?.title || '',
         msg: message?.content || '',
         ...(needsFile && updateImageFileId && { imgOrigId: updateImageFileId }),
