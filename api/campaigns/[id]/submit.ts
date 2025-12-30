@@ -1154,10 +1154,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // RCS 타입 설정 (billingType 1 또는 3일 때)
-      if (isRcs && campaign.rcsType !== undefined) {
-        createPayload.rcsType = campaign.rcsType;
+      // rcsType: 1=단독, 2=캐러셀 (BizChat API 필수 필드)
+      if (isRcs) {
+        // rcsType이 유효하지 않으면 기본값 1(단독) 사용
+        const validRcsType = campaign.rcsType === 1 || campaign.rcsType === 2 
+          ? campaign.rcsType 
+          : 1;
+        createPayload.rcsType = validRcsType;
+        console.log(`[Submit] RCS type set to: ${validRcsType} (from campaign: ${campaign.rcsType})`);
         // slideCnt: rcsType=2(캐러셀)일 때 슬라이드 개수
-        if (campaign.rcsType === 2) {
+        if (validRcsType === 2) {
           createPayload.slideCnt = rcsArray.length || 1;
         }
       }
@@ -1343,9 +1349,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       // RCS 타입 설정
-      if (isRcs && campaign.rcsType !== undefined) {
-        updatePayload.rcsType = campaign.rcsType;
-        if (campaign.rcsType === 2) {
+      // rcsType: 1=단독, 2=캐러셀 (BizChat API 필수 필드)
+      if (isRcs) {
+        // rcsType이 유효하지 않으면 기본값 1(단독) 사용
+        const validRcsType = campaign.rcsType === 1 || campaign.rcsType === 2 
+          ? campaign.rcsType 
+          : 1;
+        updatePayload.rcsType = validRcsType;
+        console.log(`[Submit Update] RCS type set to: ${validRcsType} (from campaign: ${campaign.rcsType})`);
+        if (validRcsType === 2) {
           updatePayload.slideCnt = 1;
         }
       }
