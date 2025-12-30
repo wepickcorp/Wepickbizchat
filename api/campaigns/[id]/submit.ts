@@ -1155,14 +1155,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // RCS 타입 설정 (billingType 1 또는 3일 때)
       // BizChat API rcsType: 0=스탠다드, 1=LMS(텍스트), 2=슬라이드(캐러셀), 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
+      // 
+      // 각 RCS 타입별 이미지 규격:
+      // - 스탠다드(0): 400x240, 500x300 (작은 이미지)
+      // - 슬라이드(2): 464x336
+      // - 이미지강조A(3): 900x1200 (세로형)
+      // - 이미지강조B(4): 900x900 (정사각형)
+      // - 상품소개세로(5): 900x560 (opts 필드 필수!)
+      //
+      // E100038 오류 방지: 이미지가 900x560인 경우 API가 상품소개세로로 인식하여 opts를 요구함
+      // 해결: 큰 이미지가 있는 RCS MMS는 이미지강조B(rcsType=4)를 사용 (900x900 지원)
       if (isRcs) {
-        // 현재 구현에서는 단일 슬라이드만 지원 (rcsSlide 하나만 생성)
         const slideCount = rcsSlide ? 1 : 0;
         
         // rcsType 결정 로직:
         // 1. campaign.rcsType이 유효하면 사용 (0~5 범위)
         // 2. 유효하지 않으면 billingType에 따라 자동 결정:
-        //    - billingType=1 (RCS MMS, 이미지 있음): rcsType=0 (스탠다드)
+        //    - billingType=1 (RCS MMS, 이미지 있음): rcsType=4 (이미지강조B) - 큰 이미지 지원, opts 불필요
         //    - billingType=3 (RCS LMS, 텍스트만): rcsType=1 (LMS)
         let validRcsType: number;
         if (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5) {
@@ -1170,8 +1179,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log(`[Submit] Using campaign rcsType: ${validRcsType}`);
         } else {
           // billingType에 따라 자동 결정
-          validRcsType = billingType === 1 ? 0 : 1; // RCS MMS → 스탠다드(0), RCS LMS → LMS(1)
-          console.log(`[Submit] Auto-determined rcsType from billingType=${billingType}: ${validRcsType} (0=스탠다드, 1=LMS)`);
+          // RCS MMS(이미지 있음) → 이미지강조B(4) 사용 (상품소개세로 opts 오류 방지)
+          validRcsType = billingType === 1 ? 4 : 1;
+          console.log(`[Submit] Auto-determined rcsType from billingType=${billingType}: ${validRcsType} (4=이미지강조B, 1=LMS)`);
         }
         createPayload.rcsType = validRcsType;
         console.log(`[Submit] RCS type set to: ${validRcsType} (campaign.rcsType: ${campaign.rcsType}, billingType: ${billingType}, slides: ${slideCount})`);
@@ -1363,8 +1373,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // RCS 타입 설정
       // BizChat API rcsType: 0=스탠다드, 1=LMS(텍스트), 2=슬라이드(캐러셀), 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
+      // E100038 오류 방지: 이미지가 있는 RCS MMS는 이미지강조B(rcsType=4) 사용
       if (isRcs) {
-        // 업데이트 시 슬라이드 개수는 updateRcsSlide가 있으면 1개
         const updateSlideCount = updateRcsSlide ? 1 : 0;
         
         // rcsType 결정 로직:
@@ -1375,9 +1385,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           validRcsType = campaign.rcsType;
           console.log(`[Submit Update] Using campaign rcsType: ${validRcsType}`);
         } else {
-          // billingType에 따라 자동 결정
-          validRcsType = billingType === 1 ? 0 : 1; // RCS MMS → 스탠다드(0), RCS LMS → LMS(1)
-          console.log(`[Submit Update] Auto-determined rcsType from billingType=${billingType}: ${validRcsType}`);
+          // RCS MMS(이미지 있음) → 이미지강조B(4), RCS LMS → LMS(1)
+          validRcsType = billingType === 1 ? 4 : 1;
+          console.log(`[Submit Update] Auto-determined rcsType from billingType=${billingType}: ${validRcsType} (4=이미지강조B, 1=LMS)`);
         }
         updatePayload.rcsType = validRcsType;
         console.log(`[Submit Update] RCS type set to: ${validRcsType} (campaign.rcsType: ${campaign.rcsType}, billingType: ${billingType}, slides: ${updateSlideCount})`);
