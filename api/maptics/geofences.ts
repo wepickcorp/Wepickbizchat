@@ -12,6 +12,8 @@ const geofenceTargetSchema = z.object({
   stayMin: z.number().min(5).max(30),
   radius: z.number().min(50).max(2000),
   address: z.string().min(1),
+  lat: z.string().optional(), // POI 검색 결과의 위도
+  lon: z.string().optional(), // POI 검색 결과의 경도
 });
 
 const createGeofenceSchema = z.object({

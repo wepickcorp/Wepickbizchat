@@ -74,6 +74,8 @@ export interface GeofenceTarget {
   stayMin: number;
   radius: number;
   address: string;
+  lat?: string; // POI 위도
+  lon?: string; // POI 경도
 }
 
 export interface GeofenceCreateRequest {
