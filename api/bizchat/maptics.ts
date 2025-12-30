@@ -179,3 +179,42 @@ export async function deleteGeofence(targetId: number): Promise<void> {
     throw new Error(`BizChat Geofence delete failed: ${result.msg}`);
   }
 }
+
+export interface GeofenceListItem {
+  id: number;
+  name: string;
+  regDt?: string;
+  target?: GeofenceTarget[];
+}
+
+export async function listGeofences(): Promise<GeofenceListItem[]> {
+  const baseUrl = getBizChatApiUrl();
+  const apiKey = getBizChatApiKey();
+  const tid = generateTid();
+
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/maptics/geofences/list?tid=${tid}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiKey,
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`BizChat Geofence list API error: ${response.status}`);
+      return [];
+    }
+
+    const result = await response.json();
+    if (result.code !== 'S000001') {
+      console.error(`BizChat Geofence list failed: ${result.msg}`);
+      return [];
+    }
+
+    return result.data?.list || [];
+  } catch (error) {
+    console.error('BizChat Geofence list error:', error);
+    return [];
+  }
+}

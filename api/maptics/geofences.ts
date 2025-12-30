@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
-import { verifyAuth, createGeofence, updateGeofence, deleteGeofence, GeofenceTarget } from '../bizchat/maptics.js';
+import { verifyAuth, createGeofence, updateGeofence, deleteGeofence, GeofenceTarget, listGeofences } from '../bizchat/maptics.js';
+import { db } from '../../server/db.js';
+import { geofences } from '../../shared/schema.js';
+import { eq, and, desc } from 'drizzle-orm';
 
 const geofenceTargetSchema = z.object({
   gender: z.number().min(0).max(2),
@@ -33,6 +36,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // GET: 지오펜스 목록 조회 (로컬 DB + BizChat 동기화)
+    if (req.method === 'GET') {
+      console.log(`[Geofence List] Fetching geofences for user: ${auth.userId}`);
+      
+      // BizChat에서 지오펜스 목록 가져오기
+      const bizchatGeofences = await listGeofences();
+      console.log(`[Geofence List] BizChat returned ${bizchatGeofences.length} geofences`);
+      
+      // 로컬 DB에서 사용자의 지오펜스 가져오기
+      const localGeofences = await db.select()
+        .from(geofences)
+        .where(and(
+          eq(geofences.userId, auth.userId),
+          eq(geofences.isActive, true)
+        ))
+        .orderBy(desc(geofences.createdAt));
+      
+      console.log(`[Geofence List] Local DB has ${localGeofences.length} geofences`);
+      
+      // BizChat 지오펜스와 로컬 지오펜스를 매칭하여 반환
+      // bizchatGeofenceId로 매핑
+      const result = bizchatGeofences.map(bg => {
+        const local = localGeofences.find(lg => lg.bizchatGeofenceId === String(bg.id));
+        return {
+          id: bg.id,
+          name: bg.name,
+          localId: local?.id || null,
+          latitude: local?.latitude || null,
+          longitude: local?.longitude || null,
+          radius: local?.radius || bg.target?.[0]?.radius || 500,
+          poiName: local?.poiName || bg.target?.[0]?.address || null,
+          createdAt: bg.regDt || local?.createdAt,
+          isLocal: !!local,
+        };
+      });
+      
+      return res.status(200).json({ geofences: result });
+    }
+
     if (req.method === 'POST') {
       const parsed = createGeofenceSchema.safeParse(req.body);
       if (!parsed.success) {
