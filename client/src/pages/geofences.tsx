@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { formatDateTime } from "@/lib/authUtils";
-import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -254,13 +253,18 @@ export default function Geofences() {
               ))}
             </div>
           ) : filteredGeofences.length === 0 ? (
-            <EmptyState
-              icon={MapPin}
-              title="등록된 지오펜스가 없어요"
-              description="캠페인 생성 시 지도에서 지오펜스를 추가할 수 있어요"
-              actionLabel="캠페인 만들기"
-              actionHref="/campaigns/new"
-            />
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
+                <MapPin className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">등록된 지오펜스가 없어요</h3>
+              <p className="text-sm text-muted-foreground max-w-sm mb-6">
+                캠페인 생성 시 지도에서 지오펜스를 추가할 수 있어요
+              </p>
+              <Button asChild>
+                <Link href="/campaigns/new">캠페인 만들기</Link>
+              </Button>
+            </div>
           ) : (
             <div className="space-y-2">
               {filteredGeofences.map((geofence) => (

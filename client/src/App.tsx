@@ -32,6 +32,7 @@ import TaxInvoices from "@/pages/tax-invoices";
 import Announcements from "@/pages/announcements";
 import Reports from "@/pages/reports";
 import TestCampaign from "@/pages/test-campaign";
+import Geofences from "@/pages/geofences";
 import NotFound from "@/pages/not-found";
 
 import AdminLogin from "@/pages/admin/login";
@@ -225,6 +226,7 @@ function Router() {
       <Route path="/tax-invoices" component={() => <ProtectedRoute component={TaxInvoices} />} />
       <Route path="/announcements" component={() => <ProtectedRoute component={Announcements} />} />
       <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
+      <Route path="/geofences" component={() => <ProtectedRoute component={Geofences} />} />
       
       {/* Admin Routes */}
       <Route path="/admin/login" component={AdminLogin} />

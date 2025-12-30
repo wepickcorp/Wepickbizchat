@@ -10,6 +10,7 @@ import {
   Phone,
   Receipt,
   Bell,
+  MapPin,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -73,6 +74,11 @@ const preparationNavItems = [
     title: "발신번호",
     url: "/sender-numbers",
     icon: Phone,
+  },
+  {
+    title: "지오펜스",
+    url: "/geofences",
+    icon: MapPin,
   },
 ];
 
