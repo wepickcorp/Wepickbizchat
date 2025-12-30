@@ -1315,12 +1315,78 @@ export default function CampaignsNew() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Clock className="h-5 w-5" />
-                    발송 일시 설정
+                    {isMaptics ? "캠페인 활성 기간" : "발송 일시 설정"}
                   </CardTitle>
-                  <CardDescription>캠페인 발송 시간을 설정해주세요</CardDescription>
+                  <CardDescription>
+                    {isMaptics 
+                      ? "지오펜스 캠페인이 활성화되는 기간을 설정해주세요" 
+                      : "캠페인 발송 시간을 설정해주세요"}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="space-y-4">
+                  {isMaptics ? (
+                    /* 지오펜스 실시간 모드: 캠페인 활성 기간 설정 */
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                        <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="font-medium">실시간 발송 안내</p>
+                          <p className="text-small">
+                            지오펜스 캠페인은 설정된 기간 동안 타겟 지역에 들어오는 고객에게 <strong>실시간으로</strong> 메세지가 발송됩니다.
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label className="text-sm font-medium mb-2 block">활성 기간 선택</Label>
+                        <div className="grid grid-cols-7 gap-2">
+                          {getAvailableDates().map((dateOption) => (
+                            <button
+                              key={dateOption.date.toISOString()}
+                              type="button"
+                              onClick={() => {
+                                setSelectedScheduleDate(dateOption.date);
+                                // 지오펜스 모드에서는 선택한 날짜의 자정부터 활성화
+                                const startOfDay = new Date(dateOption.date);
+                                startOfDay.setHours(0, 0, 0, 0);
+                                form.setValue("scheduledAt", startOfDay.toISOString());
+                              }}
+                              className={cn(
+                                "flex flex-col items-center justify-center p-2 rounded-lg border transition-colors",
+                                selectedScheduleDate?.toDateString() === dateOption.date.toDateString()
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border hover:bg-accent hover:text-accent-foreground"
+                              )}
+                              data-testid={`button-date-${dateOption.label}`}
+                            >
+                              <span className="text-tiny font-medium">{dateOption.dayLabel}</span>
+                              <span className="text-sm font-bold">{dateOption.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {selectedScheduleDate && (
+                        <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                          <Calendar className="h-5 w-5 text-primary" />
+                          <span className="font-medium text-primary">
+                            {selectedScheduleDate.toLocaleDateString('ko-KR', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              weekday: 'long',
+                            })} 부터 활성화
+                          </span>
+                        </div>
+                      )}
+
+                      <p className="text-tiny text-muted-foreground">
+                        선택한 날짜부터 캠페인이 활성화되며, 예산 소진 시 자동으로 종료됩니다.
+                      </p>
+                    </div>
+                  ) : (
+                    /* 일반 ATS 모드: 발송 일시 설정 */
+                    <div className="space-y-4">
                     <RadioGroup
                       value={useScheduledSend ? "scheduled" : "immediate"}
                       onValueChange={(value) => {
@@ -1490,7 +1556,8 @@ export default function CampaignsNew() {
                         </p>
                       </div>
                     )}
-                  </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1533,18 +1600,26 @@ export default function CampaignsNew() {
                       <span className="font-medium">{formatNumber(watchTargetCount)}명</span>
                     </div>
                     <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground">발송 일시</span>
+                      <span className="text-muted-foreground">{isMaptics ? "활성 시작일" : "발송 일시"}</span>
                       <span className="font-medium" data-testid="summary-scheduled-time">
-                        {useScheduledSend && form.watch("scheduledAt")
-                          ? new Date(form.watch("scheduledAt") as string).toLocaleString('ko-KR', {
-                              month: 'long',
-                              day: 'numeric',
-                              weekday: 'short',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false,
-                            })
-                          : "승인 후 즉시 발송"}
+                        {isMaptics
+                          ? (form.watch("scheduledAt")
+                            ? new Date(form.watch("scheduledAt") as string).toLocaleDateString('ko-KR', {
+                                month: 'long',
+                                day: 'numeric',
+                                weekday: 'short',
+                              }) + " 부터 실시간"
+                            : "선택 안됨")
+                          : (useScheduledSend && form.watch("scheduledAt")
+                            ? new Date(form.watch("scheduledAt") as string).toLocaleString('ko-KR', {
+                                month: 'long',
+                                day: 'numeric',
+                                weekday: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false,
+                              })
+                            : "승인 후 즉시 발송")}
                       </span>
                     </div>
                     <div className="flex justify-between py-2">
