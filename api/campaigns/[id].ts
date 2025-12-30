@@ -36,7 +36,15 @@ const campaigns = pgTable('campaigns', {
   sndMosuDesc: text('snd_mosu_desc'),
   settleCnt: integer('settle_cnt').default(0),
   mdnFileId: text('mdn_file_id'),
+  // Maptics 지오펜스 발송 관련 필드
   atsSndStartDate: timestamp('ats_snd_start_date'),
+  collStartDate: timestamp('coll_start_date'),
+  collEndDate: timestamp('coll_end_date'),
+  collSndDate: timestamp('coll_snd_date'),
+  sndGeofenceId: integer('snd_geofence_id'),
+  rtStartHhmm: text('rt_start_hhmm'),
+  rtEndHhmm: text('rt_end_hhmm'),
+  sndDayDiv: integer('snd_day_div'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });

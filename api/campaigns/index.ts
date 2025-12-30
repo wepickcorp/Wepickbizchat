@@ -117,6 +117,15 @@ const campaigns = pgTable('campaigns', {
   budget: numeric('budget'),
   costPerMessage: numeric('cost_per_message'),
   scheduledAt: timestamp('scheduled_at'),
+  // Maptics 지오펜스 발송 관련 필드
+  atsSndStartDate: timestamp('ats_snd_start_date'),
+  collStartDate: timestamp('coll_start_date'),
+  collEndDate: timestamp('coll_end_date'),
+  collSndDate: timestamp('coll_snd_date'),
+  sndGeofenceId: integer('snd_geofence_id'),
+  rtStartHhmm: text('rt_start_hhmm'),
+  rtEndHhmm: text('rt_end_hhmm'),
+  sndDayDiv: integer('snd_day_div'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
