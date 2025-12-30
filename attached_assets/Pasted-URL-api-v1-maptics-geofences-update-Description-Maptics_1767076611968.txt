@@ -1,0 +1,67 @@
+URL	/api/v1/maptics/geofences/update				
+Description	Maptics 지오펜스 수정				
+Method	POST				
+Header	Authorization: {token}				
+					
+Request					
+In Type	Parameter	Mandatory	Data Type	Value(Example)	Description
+Query Parameter	tid	Y	string	"1705298638704"	transaction ID
+	targetId	Y	number	579	수정할 지오펜스 아이디
+Body	name	Y	string	"지오펜스 그룹1"	생성할 지오펜스 명
+	target	Y	object array		생성할 지오펜스 목록. 다중 등록 가능.
+	target[].gender	Y	number	0	"성별.
+- 0 : 전체 
+- 1 : 남자
+- 2 : 여자"
+	target[].minAge	Y	number	20	최소 나이 ( 19 <= minAge <= 90 )
+	target[].maxAge	Y	number	30	최대 나이 ( 19 <= maxAge <= 90 )
+	target[].stayMin	Y	number	10	체류 시간. 분 단위. ( 5 <= stayMin <= 30 )
+	target[].radius	Y	number	500	반경. 미터 단위. ( 50 <= radius <= 2000 )
+	target[].address	Y	string	"서울 중구 을지로 42(을지로1가) 을지로입구역[2호선]"	등록 주소. "Maptics POI - 지오펜스에 사용할 poi 검색" 에서 구한 road 값
+Example(Query string)	tid=1706073253324&targetId=579				
+Example(Body)	"{
+    ""name"": ""지오펜스1"",
+    ""target"": [
+        {
+            ""gender"": 0,
+            ""minAge"": 20,
+            ""maxAge"": 30,
+            ""stayMin"": 10,
+            ""radius"": 500,
+            ""address"": ""서울 중구 을지로 42(을지로1가) 을지로입구역[2호선]""
+        }
+    ]
+}"				
+					
+Response					
+구분	Parameter	Mandatory	Data Type	Value(Example)	Description
+Body	tid	Y	string	"1705298638704"	request 시 사용한 tid 값
+	code	Y	string	"S000001"	API 성공, 실패 코드
+	msg	Y	string	"success"	API 성공, 실패 메시지
+Example(poi)	"{
+    ""tid"": ""1706073253324"",
+    ""code"": ""S000001"",
+    ""msg"": ""success""
+}"				
+					
+URL	/api/v1/maptics/geofences/delete				
+Description	Maptics 지오펜스 삭제				
+Method	POST				
+Header	Authorization: {token}				
+					
+Request					
+In Type	Parameter	Mandatory	Data Type	Value(Example)	Description
+Query Parameter	tid	Y	string	"1705298638704"	transaction ID
+	targetId	Y	number	569	삭제할 지오펜스 아이디
+Example(Query string)	tid=1706073253324&targetId=569				
+					
+Response					
+구분	Parameter	Mandatory	Data Type	Value(Example)	Description
+Body	tid	Y	string	"1705298638704"	request 시 사용한 tid 값
+	code	Y	string	"S000001"	API 성공, 실패 코드
+	msg	Y	string	"success"	API 성공, 실패 메시지
+Example(poi)	"{
+    ""tid"": ""1706073253324"",
+    ""code"": ""S000001"",
+    ""msg"": ""success""
+}"				

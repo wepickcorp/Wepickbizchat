@@ -155,8 +155,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const updateData: Record<string, unknown> = { ...req.body, updatedAt: new Date() };
       
-      // Date 필드 변환
-      const dateFields = ['scheduledAt', 'atsSndStartDate', 'completedAt'];
+      // Date 필드 변환 (Maptics 필드 포함)
+      const dateFields = ['scheduledAt', 'atsSndStartDate', 'completedAt', 'collStartDate', 'collEndDate', 'collSndDate'];
       for (const field of dateFields) {
         if (updateData[field] && typeof updateData[field] === 'string') {
           updateData[field] = new Date(updateData[field] as string);
@@ -165,8 +165,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
       
-      // 숫자 필드 변환 (문자열로 전달된 경우)
-      const intFields = ['sndMosu', 'sndGoalCnt', 'targetCount', 'rcvType', 'billingType', 'rcsType', 'settleCnt', 'statusCode'];
+      // 숫자 필드 변환 (문자열로 전달된 경우) - Maptics 필드 포함
+      const intFields = ['sndMosu', 'sndGoalCnt', 'targetCount', 'rcvType', 'billingType', 'rcsType', 'settleCnt', 'statusCode', 'sndGeofenceId', 'sndDayDiv'];
       for (const field of intFields) {
         if (updateData[field] !== undefined && updateData[field] !== null) {
           const value = updateData[field];
