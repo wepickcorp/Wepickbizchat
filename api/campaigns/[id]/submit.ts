@@ -1282,7 +1282,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         // sndGeofenceId 추가 (필수)
         createPayload.sndGeofenceId = bizchatGeofenceId;
-        console.log(`[Submit] Maptics campaign fields - rcvType: ${rcvType}, sndGeofenceId: ${bizchatGeofenceId}, rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
+        
+        // collStartDate/collEndDate/collSndDate 추가 (rcvType=1/2 필수)
+        // BizChat API 규격: 데이터 수집 시작/종료 일시 (Unix timestamp, 초 단위)
+        // collStartDate: 지오펜스 데이터 수집 시작 시점 (반드시 현재보다 미래여야 함)
+        // collEndDate: 지오펜스 데이터 수집 종료 시점
+        // collSndDate: 발송 시작 시점 (rcvType=2 모아서 보내기용, rcvType=1은 실시간 발송)
+        
+        // 발송 시작 시간 기준으로 기본값 계산 (캠페인 설정값이 없는 경우)
+        const sendDate = adjustedSendDate || new Date();
+        const sendTimestamp = toUnixTimestamp(typeof sendDate === 'string' ? new Date(sendDate) : sendDate);
+        const nowTimestamp = toUnixTimestamp(new Date());
+        
+        // collStartDate: 캠페인 설정값 우선
+        // 기본값: 현재 시간 + 1시간 또는 발송일 1일 전 중 더 늦은 시간 (미래 보장)
+        let collStartTimestamp: number;
+        if (campaign.collStartDate) {
+          collStartTimestamp = toUnixTimestamp(new Date(campaign.collStartDate));
+          // 이미 지난 시간이면 현재 + 1시간으로 조정
+          if (collStartTimestamp <= nowTimestamp) {
+            collStartTimestamp = nowTimestamp + 3600; // 1시간 후
+            console.log('[Submit] collStartDate adjusted to future:', new Date(collStartTimestamp * 1000).toISOString());
+          }
+        } else {
+          // 기본값: max(현재 + 1시간, 발송일 - 1일)
+          const sendMinus1Day = sendTimestamp - 86400; // 발송일 1일 전
+          const nowPlus1Hour = nowTimestamp + 3600; // 현재 + 1시간
+          collStartTimestamp = Math.max(nowPlus1Hour, sendMinus1Day);
+          // 발송일보다 늦으면 안됨 (수집 → 발송 순서)
+          if (collStartTimestamp >= sendTimestamp) {
+            collStartTimestamp = nowPlus1Hour; // 현재 + 1시간
+          }
+        }
+        createPayload.collStartDate = collStartTimestamp;
+        
+        // collEndDate: 캠페인 설정값 우선, 없으면 발송 시작일 기준
+        // 단, collStartDate보다 늦어야 하고 발송일보다 같거나 이전이어야 함
+        let collEndTimestamp: number;
+        if (campaign.collEndDate) {
+          collEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
+          // collStartDate보다 이전이면 발송일로 조정
+          if (collEndTimestamp <= collStartTimestamp) {
+            collEndTimestamp = sendTimestamp;
+          }
+        } else {
+          // 기본값: 발송 시작일 (= 수집 종료 후 발송 시작)
+          collEndTimestamp = sendTimestamp;
+        }
+        createPayload.collEndDate = collEndTimestamp;
+        
+        // rcvType=2 (모아서 보내기)의 경우 collSndDate 추가
+        if (rcvType === 2) {
+          let collSndTimestamp: number;
+          if (campaign.collSndDate) {
+            collSndTimestamp = toUnixTimestamp(new Date(campaign.collSndDate));
+          } else {
+            // 기본값: 발송 시작일
+            collSndTimestamp = sendTimestamp;
+          }
+          createPayload.collSndDate = collSndTimestamp;
+        }
+        
+        console.log(`[Submit] Maptics campaign fields - rcvType: ${rcvType}, sndGeofenceId: ${bizchatGeofenceId}, collStartDate: ${collStartTimestamp} (${new Date(collStartTimestamp * 1000).toISOString()}), collEndDate: ${collEndTimestamp} (${new Date(collEndTimestamp * 1000).toISOString()}), rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
       }
 
       // 타겟팅 정보 추가 (ATS 발송 모수 필터)
@@ -1661,7 +1722,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         
         updatePayload.sndGeofenceId = updateBizchatGeofenceId;
-        console.log(`[Submit Update] Maptics campaign fields - rcvType: ${updateRcvType}, sndGeofenceId: ${updateBizchatGeofenceId}, rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
+        
+        // collStartDate/collEndDate/collSndDate 추가 (rcvType=1/2 필수)
+        // BizChat API 규격: 데이터 수집 시작/종료 일시 (Unix timestamp, 초 단위)
+        const updateSendDate = adjustedSendDate || new Date();
+        const updateSendTimestamp = toUnixTimestamp(typeof updateSendDate === 'string' ? new Date(updateSendDate) : updateSendDate);
+        const updateNowTimestamp = toUnixTimestamp(new Date());
+        
+        // collStartDate: 캠페인 설정값 우선
+        // 기본값: 현재 시간 + 1시간 또는 발송일 1일 전 중 더 늦은 시간 (미래 보장)
+        let updateCollStartTimestamp: number;
+        if (campaign.collStartDate) {
+          updateCollStartTimestamp = toUnixTimestamp(new Date(campaign.collStartDate));
+          // 이미 지난 시간이면 현재 + 1시간으로 조정
+          if (updateCollStartTimestamp <= updateNowTimestamp) {
+            updateCollStartTimestamp = updateNowTimestamp + 3600; // 1시간 후
+            console.log('[Submit Update] collStartDate adjusted to future:', new Date(updateCollStartTimestamp * 1000).toISOString());
+          }
+        } else {
+          // 기본값: max(현재 + 1시간, 발송일 - 1일)
+          const sendMinus1Day = updateSendTimestamp - 86400;
+          const nowPlus1Hour = updateNowTimestamp + 3600;
+          updateCollStartTimestamp = Math.max(nowPlus1Hour, sendMinus1Day);
+          // 발송일보다 늦으면 안됨
+          if (updateCollStartTimestamp >= updateSendTimestamp) {
+            updateCollStartTimestamp = nowPlus1Hour;
+          }
+        }
+        updatePayload.collStartDate = updateCollStartTimestamp;
+        
+        // collEndDate: 캠페인 설정값 우선, 없으면 발송 시작일 기준
+        let updateCollEndTimestamp: number;
+        if (campaign.collEndDate) {
+          updateCollEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
+          if (updateCollEndTimestamp <= updateCollStartTimestamp) {
+            updateCollEndTimestamp = updateSendTimestamp;
+          }
+        } else {
+          updateCollEndTimestamp = updateSendTimestamp;
+        }
+        updatePayload.collEndDate = updateCollEndTimestamp;
+        
+        // rcvType=2 (모아서 보내기)의 경우 collSndDate 추가
+        if (updateRcvType === 2) {
+          let updateCollSndTimestamp: number;
+          if (campaign.collSndDate) {
+            updateCollSndTimestamp = toUnixTimestamp(new Date(campaign.collSndDate));
+          } else {
+            updateCollSndTimestamp = updateSendTimestamp;
+          }
+          updatePayload.collSndDate = updateCollSndTimestamp;
+        }
+        
+        console.log(`[Submit Update] Maptics campaign fields - rcvType: ${updateRcvType}, sndGeofenceId: ${updateBizchatGeofenceId}, collStartDate: ${updateCollStartTimestamp} (${new Date(updateCollStartTimestamp * 1000).toISOString()}), collEndDate: ${updateCollEndTimestamp} (${new Date(updateCollEndTimestamp * 1000).toISOString()}), rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
       }
       
       // 발송 시간 업데이트
