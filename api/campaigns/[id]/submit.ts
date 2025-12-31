@@ -1289,10 +1289,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // collEndDate: 지오펜스 데이터 수집 종료 시점
         // collSndDate: 발송 시작 시점 (rcvType=2 모아서 보내기용, rcvType=1은 실시간 발송)
         
-        // 발송 시작 시간 기준으로 기본값 계산 (캠페인 설정값이 없는 경우)
-        const sendDate = adjustedSendDate || new Date();
-        const sendTimestamp = toUnixTimestamp(typeof sendDate === 'string' ? new Date(sendDate) : sendDate);
+        // 발송 시작 시간 기준으로 기본값 계산
+        // 우선순위: adjustedSendDate → campaign.scheduledAt → campaign.atsSndStartDate → now + 24h
+        let scheduledSendTimestamp: number;
+        if (adjustedSendDate) {
+          scheduledSendTimestamp = toUnixTimestamp(typeof adjustedSendDate === 'string' ? new Date(adjustedSendDate) : adjustedSendDate);
+        } else if (campaign.scheduledAt) {
+          scheduledSendTimestamp = toUnixTimestamp(new Date(campaign.scheduledAt));
+        } else if (campaign.atsSndStartDate) {
+          // atsSndStartDate가 이미 Unix timestamp라면 그대로 사용
+          scheduledSendTimestamp = typeof campaign.atsSndStartDate === 'number' 
+            ? campaign.atsSndStartDate 
+            : toUnixTimestamp(new Date(campaign.atsSndStartDate));
+        } else {
+          // 기본값: 현재로부터 24시간 후
+          scheduledSendTimestamp = toUnixTimestamp(new Date()) + 86400;
+        }
         const nowTimestamp = toUnixTimestamp(new Date());
+        console.log(`[Submit] Maptics coll* calculation - scheduledSendTimestamp: ${scheduledSendTimestamp} (${new Date(scheduledSendTimestamp * 1000).toISOString()})`);
         
         // collStartDate: 캠페인 설정값 우선
         // 기본값: 현재 시간 + 1시간 또는 발송일 1일 전 중 더 늦은 시간 (미래 보장)
@@ -1306,11 +1320,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         } else {
           // 기본값: max(현재 + 1시간, 발송일 - 1일)
-          const sendMinus1Day = sendTimestamp - 86400; // 발송일 1일 전
+          const sendMinus1Day = scheduledSendTimestamp - 86400; // 발송일 1일 전
           const nowPlus1Hour = nowTimestamp + 3600; // 현재 + 1시간
           collStartTimestamp = Math.max(nowPlus1Hour, sendMinus1Day);
           // 발송일보다 늦으면 안됨 (수집 → 발송 순서)
-          if (collStartTimestamp >= sendTimestamp) {
+          if (collStartTimestamp >= scheduledSendTimestamp) {
             collStartTimestamp = nowPlus1Hour; // 현재 + 1시간
           }
         }
@@ -1323,11 +1337,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           collEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
           // collStartDate보다 이전이면 발송일로 조정
           if (collEndTimestamp <= collStartTimestamp) {
-            collEndTimestamp = sendTimestamp;
+            collEndTimestamp = scheduledSendTimestamp;
           }
         } else {
           // 기본값: 발송 시작일 (= 수집 종료 후 발송 시작)
-          collEndTimestamp = sendTimestamp;
+          collEndTimestamp = scheduledSendTimestamp;
         }
         createPayload.collEndDate = collEndTimestamp;
         
@@ -1338,7 +1352,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             collSndTimestamp = toUnixTimestamp(new Date(campaign.collSndDate));
           } else {
             // 기본값: 발송 시작일
-            collSndTimestamp = sendTimestamp;
+            collSndTimestamp = scheduledSendTimestamp;
           }
           createPayload.collSndDate = collSndTimestamp;
         }
@@ -1725,9 +1739,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         // collStartDate/collEndDate/collSndDate 추가 (rcvType=1/2 필수)
         // BizChat API 규격: 데이터 수집 시작/종료 일시 (Unix timestamp, 초 단위)
-        const updateSendDate = adjustedSendDate || new Date();
-        const updateSendTimestamp = toUnixTimestamp(typeof updateSendDate === 'string' ? new Date(updateSendDate) : updateSendDate);
+        
+        // 발송 시작 시간 기준으로 기본값 계산
+        // 우선순위: adjustedSendDate → campaign.scheduledAt → campaign.atsSndStartDate → now + 24h
+        let updateScheduledSendTimestamp: number;
+        if (adjustedSendDate) {
+          updateScheduledSendTimestamp = toUnixTimestamp(typeof adjustedSendDate === 'string' ? new Date(adjustedSendDate) : adjustedSendDate);
+        } else if (campaign.scheduledAt) {
+          updateScheduledSendTimestamp = toUnixTimestamp(new Date(campaign.scheduledAt));
+        } else if (campaign.atsSndStartDate) {
+          updateScheduledSendTimestamp = typeof campaign.atsSndStartDate === 'number' 
+            ? campaign.atsSndStartDate 
+            : toUnixTimestamp(new Date(campaign.atsSndStartDate));
+        } else {
+          updateScheduledSendTimestamp = toUnixTimestamp(new Date()) + 86400;
+        }
         const updateNowTimestamp = toUnixTimestamp(new Date());
+        console.log(`[Submit Update] Maptics coll* calculation - scheduledSendTimestamp: ${updateScheduledSendTimestamp} (${new Date(updateScheduledSendTimestamp * 1000).toISOString()})`);
         
         // collStartDate: 캠페인 설정값 우선
         // 기본값: 현재 시간 + 1시간 또는 발송일 1일 전 중 더 늦은 시간 (미래 보장)
@@ -1741,11 +1769,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         } else {
           // 기본값: max(현재 + 1시간, 발송일 - 1일)
-          const sendMinus1Day = updateSendTimestamp - 86400;
+          const sendMinus1Day = updateScheduledSendTimestamp - 86400;
           const nowPlus1Hour = updateNowTimestamp + 3600;
           updateCollStartTimestamp = Math.max(nowPlus1Hour, sendMinus1Day);
           // 발송일보다 늦으면 안됨
-          if (updateCollStartTimestamp >= updateSendTimestamp) {
+          if (updateCollStartTimestamp >= updateScheduledSendTimestamp) {
             updateCollStartTimestamp = nowPlus1Hour;
           }
         }
@@ -1756,10 +1784,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (campaign.collEndDate) {
           updateCollEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
           if (updateCollEndTimestamp <= updateCollStartTimestamp) {
-            updateCollEndTimestamp = updateSendTimestamp;
+            updateCollEndTimestamp = updateScheduledSendTimestamp;
           }
         } else {
-          updateCollEndTimestamp = updateSendTimestamp;
+          updateCollEndTimestamp = updateScheduledSendTimestamp;
         }
         updatePayload.collEndDate = updateCollEndTimestamp;
         
@@ -1769,7 +1797,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (campaign.collSndDate) {
             updateCollSndTimestamp = toUnixTimestamp(new Date(campaign.collSndDate));
           } else {
-            updateCollSndTimestamp = updateSendTimestamp;
+            updateCollSndTimestamp = updateScheduledSendTimestamp;
           }
           updatePayload.collSndDate = updateCollSndTimestamp;
         }
