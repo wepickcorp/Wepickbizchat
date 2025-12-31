@@ -33,6 +33,7 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
 - Supabase for robust authentication and user management.
 - Drizzle ORM for type-safe database interactions.
 - BizChat API integration for core advertising functionality, including campaign creation, approval, and real-time statistics, with strict adherence to BizChat API v0.29.0 specifications.
+- **BizChat RCS API 규격**: RCS 메시지 전송 시 `rcs[]` 배열 내 각 슬라이드 객체에 `opts` 필드가 필수입니다. 옵션이 없더라도 빈 객체 `opts: {}`를 포함해야 E100038 오류가 발생하지 않습니다.
 - **BizChat API 환경 설정**: 개발 완료 전까지 모든 API 호출은 개발 URL(gw-dev.bizchat1.co.kr:8443)로 전송됩니다. `BIZCHAT_USE_PROD=true` 환경변수를 설정해야만 운영 API를 사용합니다.
 - **KIS PG 환경 설정**: 기본값으로 테스트 API(testapi.kispg.co.kr)를 사용합니다. `KISPG_USE_PROD=true` 환경변수를 설정해야만 운영 API(api.kispg.co.kr)를 사용합니다. `KISPG_RETURN_URL` 환경변수로 콜백 URL을 명시적으로 지정할 수 있습니다 (예: `https://bizchat.wepick.kr/api/kispg/callback`). **해시 생성 방식**: `SHA256(mid + ediDate + goodsAmt + merchantKey)` - merchantKey는 Base64 디코딩 없이 원본 문자열 그대로 사용.
 - **마스터 계정 시스템**: `is_master=true`로 설정된 계정은 매일 자정(UTC) Vercel Cron Job에 의해 광고 캐시가 1억원(100,000,000원)으로 자동 리셋됩니다. 현재 마스터 계정: campaign@wepick.kr. `CRON_SECRET` 환경변수로 Cron API 보안 적용.
