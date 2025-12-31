@@ -1078,7 +1078,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...(rcsButtons.length > 0 && { 
           buttons: { list: rcsButtons.map((btn: any) => ({ ...btn, type: String(btn.type) })) }
         }),
-        ...((message as any)?.rcsOpts?.list?.length > 0 && { opts: (message as any).rcsOpts }),
+        // BizChat API 규격: opts 필드는 빈 객체라도 필수로 포함해야 함 (E100038 오류 방지)
+        opts: (message as any)?.rcsOpts || {},
       } : null;
 
       const createPayload: Record<string, unknown> = {
@@ -1374,7 +1375,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...(updateRcsButtons.length > 0 && { 
           buttons: { list: updateRcsButtons.map((btn: any) => ({ ...btn, type: String(btn.type) })) }
         }),
-        ...((message as any)?.rcsOpts?.list?.length > 0 && { opts: (message as any).rcsOpts }),
+        // BizChat API 규격: opts 필드는 빈 객체라도 필수로 포함해야 함 (E100038 오류 방지)
+        opts: (message as any)?.rcsOpts || {},
       } : null;
       
       // 업데이트 페이로드 구성 - 빈 배열/객체 완전히 생략
