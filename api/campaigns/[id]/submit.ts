@@ -1288,6 +1288,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // collStartDate: 지오펜스 데이터 수집 시작 시점 (반드시 현재보다 미래여야 함)
         // collEndDate: 지오펜스 데이터 수집 종료 시점
         // collSndDate: 발송 시작 시점 (rcvType=2 모아서 보내기용, rcvType=1은 실시간 발송)
+        // 
+        // E100015 규칙: rcvType=1(실시간)의 경우 rtStartHhmm~rtEndHhmm 시간대가 
+        // collStartDate~collEndDate 범위 내에 포함되어야 함
         
         // 발송 시작 시간 기준으로 기본값 계산
         // 우선순위: adjustedSendDate → campaign.scheduledAt → campaign.atsSndStartDate → now + 24h
@@ -1306,43 +1309,125 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           scheduledSendTimestamp = toUnixTimestamp(new Date()) + 86400;
         }
         const nowTimestamp = toUnixTimestamp(new Date());
-        console.log(`[Submit] Maptics coll* calculation - scheduledSendTimestamp: ${scheduledSendTimestamp} (${new Date(scheduledSendTimestamp * 1000).toISOString()})`);
         
-        // collStartDate: 캠페인 설정값 우선
-        // 기본값: 현재 시간 + 1시간 또는 발송일 1일 전 중 더 늦은 시간 (미래 보장)
+        // 발송일의 날짜 부분 추출 (KST 기준)
+        const scheduledDate = new Date(scheduledSendTimestamp * 1000);
+        // KST = UTC + 9시간
+        const kstOffset = 9 * 60 * 60 * 1000;
+        const kstDate = new Date(scheduledDate.getTime() + kstOffset);
+        const year = kstDate.getUTCFullYear();
+        const month = kstDate.getUTCMonth();
+        const day = kstDate.getUTCDate();
+        
+        console.log(`[Submit] Maptics coll* calculation - scheduledSendTimestamp: ${scheduledSendTimestamp} (${scheduledDate.toISOString()}), KST date: ${year}-${month+1}-${day}`);
+        
+        // rcvType=1 (실시간)의 경우 rtStartHhmm/rtEndHhmm 시간대를 고려
+        // collStartDate는 rtStartHhmm 이전, collEndDate는 rtEndHhmm 이후가 되어야 함
         let collStartTimestamp: number;
-        if (campaign.collStartDate) {
-          collStartTimestamp = toUnixTimestamp(new Date(campaign.collStartDate));
-          // 이미 지난 시간이면 현재 + 1시간으로 조정
+        let collEndTimestamp: number;
+        
+        if (rcvType === 1 && campaign.rtStartHhmm && campaign.rtEndHhmm) {
+          // hhmm 형식에서 시간/분 추출 (예: "1500" → 15:00, "15:00" → 15:00)
+          // non-digit 문자 제거 후 파싱
+          const rtStartClean = String(campaign.rtStartHhmm).replace(/\D/g, '').padStart(4, '0');
+          const rtEndClean = String(campaign.rtEndHhmm).replace(/\D/g, '').padStart(4, '0');
+          
+          // 유효성 검증 (4자리 숫자인지 확인)
+          if (rtStartClean.length < 4 || rtEndClean.length < 4) {
+            console.error(`[Submit] Invalid rtHhmm format: rtStart=${campaign.rtStartHhmm}, rtEnd=${campaign.rtEndHhmm}`);
+            return res.status(400).json({
+              error: '발송 시간 형식이 올바르지 않습니다',
+              code: 'E100015',
+              hint: '발송 시간은 HHMM 형식(예: 1500)으로 입력해주세요.',
+            });
+          }
+          
+          const rtStartHour = parseInt(rtStartClean.substring(0, 2), 10);
+          const rtStartMin = parseInt(rtStartClean.substring(2, 4), 10);
+          const rtEndHour = parseInt(rtEndClean.substring(0, 2), 10);
+          const rtEndMin = parseInt(rtEndClean.substring(2, 4), 10);
+          
+          // NaN 체크
+          if (isNaN(rtStartHour) || isNaN(rtStartMin) || isNaN(rtEndHour) || isNaN(rtEndMin)) {
+            console.error(`[Submit] NaN in rtHhmm parsing: ${rtStartHour}:${rtStartMin} ~ ${rtEndHour}:${rtEndMin}`);
+            return res.status(400).json({
+              error: '발송 시간 형식이 올바르지 않습니다',
+              code: 'E100015',
+              hint: '발송 시간을 확인해주세요.',
+            });
+          }
+          
+          // rtStart/rtEnd UTC timestamp 계산
+          const rtStartUtcMs = Date.UTC(year, month, day, rtStartHour - 9, rtStartMin, 0);
+          const rtStartTimestamp = Math.floor(rtStartUtcMs / 1000);
+          let rtEndUtcMs = Date.UTC(year, month, day, rtEndHour - 9, rtEndMin, 0);
+          let rtEndTimestamp = Math.floor(rtEndUtcMs / 1000);
+          
+          // 자정 넘김 처리: rtEnd < rtStart인 경우 (예: 23:00~01:00)
+          // rtEndTimestamp에 24시간 추가
+          if (rtEndTimestamp <= rtStartTimestamp) {
+            rtEndTimestamp += 86400; // +24시간
+            console.log(`[Submit] Cross-midnight detected: rtEnd adjusted to next day`);
+          }
+          
+          // BizChat 규칙: collStart ≤ rtStart ≤ rtEnd ≤ collEnd
+          // collStartDate: rtStart와 동일 (BizChat은 같은 경우도 허용)
+          // collEndDate: rtEnd + 30분
+          collStartTimestamp = rtStartTimestamp;
+          collEndTimestamp = rtEndTimestamp + 1800; // rtEnd + 30분
+          
+          console.log(`[Submit] rcvType=1: rtStart=${rtStartHour}:${rtStartMin}, rtEnd=${rtEndHour}:${rtEndMin}`);
+          console.log(`[Submit] rtStartTimestamp: ${rtStartTimestamp} (${new Date(rtStartTimestamp * 1000).toISOString()})`);
+          console.log(`[Submit] rtEndTimestamp: ${rtEndTimestamp} (${new Date(rtEndTimestamp * 1000).toISOString()})`);
+          console.log(`[Submit] Calculated collStart: ${new Date(collStartTimestamp * 1000).toISOString()}, collEnd: ${new Date(collEndTimestamp * 1000).toISOString()}`);
+          
+          // collStartDate는 반드시 미래여야 함
+          // 현재 시간이 이미 rtStart를 지났다면(초과) 캠페인 제출 불가
+          // BizChat은 collStart == rtStart를 허용하므로 > 사용 (>= 아님)
+          if (nowTimestamp > rtStartTimestamp) {
+            console.error(`[Submit] Cannot submit: rtStart (${new Date(rtStartTimestamp * 1000).toISOString()}) already passed`);
+            return res.status(400).json({
+              error: '발송 시작 시간이 이미 지났습니다',
+              code: 'E100015',
+              hint: `발송 시작 시간(${rtStartHour}:${String(rtStartMin).padStart(2, '0')})이 현재 시간보다 이후여야 합니다.`,
+            });
+          }
+          
+          // collStartDate가 현재보다 과거거나 같으면 현재 + 60초로 조정
+          // 단, rtStartTimestamp를 초과하면 안 됨
           if (collStartTimestamp <= nowTimestamp) {
-            collStartTimestamp = nowTimestamp + 3600; // 1시간 후
+            collStartTimestamp = Math.min(nowTimestamp + 60, rtStartTimestamp);
             console.log('[Submit] collStartDate adjusted to future:', new Date(collStartTimestamp * 1000).toISOString());
           }
         } else {
-          // 기본값: max(현재 + 1시간, 발송일 - 1일)
-          const sendMinus1Day = scheduledSendTimestamp - 86400; // 발송일 1일 전
-          const nowPlus1Hour = nowTimestamp + 3600; // 현재 + 1시간
-          collStartTimestamp = Math.max(nowPlus1Hour, sendMinus1Day);
-          // 발송일보다 늦으면 안됨 (수집 → 발송 순서)
-          if (collStartTimestamp >= scheduledSendTimestamp) {
-            collStartTimestamp = nowPlus1Hour; // 현재 + 1시간
+          // rcvType=2 또는 rtHhmm이 없는 경우 기존 로직 사용
+          if (campaign.collStartDate) {
+            collStartTimestamp = toUnixTimestamp(new Date(campaign.collStartDate));
+            if (collStartTimestamp <= nowTimestamp) {
+              collStartTimestamp = nowTimestamp + 3600;
+              console.log('[Submit] collStartDate adjusted to future:', new Date(collStartTimestamp * 1000).toISOString());
+            }
+          } else {
+            // 기본값: max(현재 + 1시간, 발송일 - 1일)
+            const sendMinus1Day = scheduledSendTimestamp - 86400;
+            const nowPlus1Hour = nowTimestamp + 3600;
+            collStartTimestamp = Math.max(nowPlus1Hour, sendMinus1Day);
+            if (collStartTimestamp >= scheduledSendTimestamp) {
+              collStartTimestamp = nowPlus1Hour;
+            }
           }
-        }
-        createPayload.collStartDate = collStartTimestamp;
-        
-        // collEndDate: 캠페인 설정값 우선, 없으면 발송 시작일 기준
-        // 단, collStartDate보다 늦어야 하고 발송일보다 같거나 이전이어야 함
-        let collEndTimestamp: number;
-        if (campaign.collEndDate) {
-          collEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
-          // collStartDate보다 이전이면 발송일로 조정
-          if (collEndTimestamp <= collStartTimestamp) {
+          
+          if (campaign.collEndDate) {
+            collEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
+            if (collEndTimestamp <= collStartTimestamp) {
+              collEndTimestamp = scheduledSendTimestamp;
+            }
+          } else {
             collEndTimestamp = scheduledSendTimestamp;
           }
-        } else {
-          // 기본값: 발송 시작일 (= 수집 종료 후 발송 시작)
-          collEndTimestamp = scheduledSendTimestamp;
         }
+        
+        createPayload.collStartDate = collStartTimestamp;
         createPayload.collEndDate = collEndTimestamp;
         
         // rcvType=2 (모아서 보내기)의 경우 collSndDate 추가
@@ -1739,6 +1824,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         // collStartDate/collEndDate/collSndDate 추가 (rcvType=1/2 필수)
         // BizChat API 규격: 데이터 수집 시작/종료 일시 (Unix timestamp, 초 단위)
+        // E100015 규칙: rcvType=1(실시간)의 경우 rtStartHhmm~rtEndHhmm 시간대가 
+        // collStartDate~collEndDate 범위 내에 포함되어야 함
         
         // 발송 시작 시간 기준으로 기본값 계산
         // 우선순위: adjustedSendDate → campaign.scheduledAt → campaign.atsSndStartDate → now + 24h
@@ -1755,40 +1842,106 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updateScheduledSendTimestamp = toUnixTimestamp(new Date()) + 86400;
         }
         const updateNowTimestamp = toUnixTimestamp(new Date());
-        console.log(`[Submit Update] Maptics coll* calculation - scheduledSendTimestamp: ${updateScheduledSendTimestamp} (${new Date(updateScheduledSendTimestamp * 1000).toISOString()})`);
         
-        // collStartDate: 캠페인 설정값 우선
-        // 기본값: 현재 시간 + 1시간 또는 발송일 1일 전 중 더 늦은 시간 (미래 보장)
+        // 발송일의 날짜 부분 추출 (KST 기준)
+        const updateScheduledDate = new Date(updateScheduledSendTimestamp * 1000);
+        const updateKstOffset = 9 * 60 * 60 * 1000;
+        const updateKstDate = new Date(updateScheduledDate.getTime() + updateKstOffset);
+        const updateYear = updateKstDate.getUTCFullYear();
+        const updateMonth = updateKstDate.getUTCMonth();
+        const updateDay = updateKstDate.getUTCDate();
+        
+        console.log(`[Submit Update] Maptics coll* calculation - scheduledSendTimestamp: ${updateScheduledSendTimestamp} (${updateScheduledDate.toISOString()}), KST date: ${updateYear}-${updateMonth+1}-${updateDay}`);
+        
+        // rcvType=1 (실시간)의 경우 rtStartHhmm/rtEndHhmm 시간대를 고려
         let updateCollStartTimestamp: number;
-        if (campaign.collStartDate) {
-          updateCollStartTimestamp = toUnixTimestamp(new Date(campaign.collStartDate));
-          // 이미 지난 시간이면 현재 + 1시간으로 조정
+        let updateCollEndTimestamp: number;
+        
+        if (updateRcvType === 1 && campaign.rtStartHhmm && campaign.rtEndHhmm) {
+          // hhmm 형식에서 시간/분 추출 (non-digit 문자 제거)
+          const rtStartClean = String(campaign.rtStartHhmm).replace(/\D/g, '').padStart(4, '0');
+          const rtEndClean = String(campaign.rtEndHhmm).replace(/\D/g, '').padStart(4, '0');
+          
+          if (rtStartClean.length < 4 || rtEndClean.length < 4) {
+            console.error(`[Submit Update] Invalid rtHhmm format`);
+            return res.status(400).json({
+              error: '발송 시간 형식이 올바르지 않습니다',
+              code: 'E100015',
+              hint: '발송 시간은 HHMM 형식(예: 1500)으로 입력해주세요.',
+            });
+          }
+          
+          const rtStartHour = parseInt(rtStartClean.substring(0, 2), 10);
+          const rtStartMin = parseInt(rtStartClean.substring(2, 4), 10);
+          const rtEndHour = parseInt(rtEndClean.substring(0, 2), 10);
+          const rtEndMin = parseInt(rtEndClean.substring(2, 4), 10);
+          
+          if (isNaN(rtStartHour) || isNaN(rtStartMin) || isNaN(rtEndHour) || isNaN(rtEndMin)) {
+            console.error(`[Submit Update] NaN in rtHhmm parsing`);
+            return res.status(400).json({
+              error: '발송 시간 형식이 올바르지 않습니다',
+              code: 'E100015',
+              hint: '발송 시간을 확인해주세요.',
+            });
+          }
+          
+          // rtStart/rtEnd UTC timestamp 계산
+          const updateRtStartUtcMs = Date.UTC(updateYear, updateMonth, updateDay, rtStartHour - 9, rtStartMin, 0);
+          const updateRtStartTimestamp = Math.floor(updateRtStartUtcMs / 1000);
+          const updateRtEndUtcMs = Date.UTC(updateYear, updateMonth, updateDay, rtEndHour - 9, rtEndMin, 0);
+          const updateRtEndTimestamp = Math.floor(updateRtEndUtcMs / 1000);
+          
+          // BizChat 규칙: collStart ≤ rtStart ≤ rtEnd ≤ collEnd
+          updateCollStartTimestamp = updateRtStartTimestamp;
+          updateCollEndTimestamp = updateRtEndTimestamp + 1800;
+          
+          console.log(`[Submit Update] rcvType=1: rtStart=${rtStartHour}:${rtStartMin}, rtEnd=${rtEndHour}:${rtEndMin}`);
+          console.log(`[Submit Update] rtStartTimestamp: ${updateRtStartTimestamp} (${new Date(updateRtStartTimestamp * 1000).toISOString()})`);
+          console.log(`[Submit Update] Calculated collStart: ${new Date(updateCollStartTimestamp * 1000).toISOString()}, collEnd: ${new Date(updateCollEndTimestamp * 1000).toISOString()}`);
+          
+          // 현재 시간이 이미 rtStart를 지났다면 캠페인 제출 불가
+          if (updateNowTimestamp >= updateRtStartTimestamp) {
+            console.error(`[Submit Update] Cannot submit: rtStart already passed`);
+            return res.status(400).json({
+              error: '발송 시작 시간이 이미 지났습니다',
+              code: 'E100015',
+              hint: `발송 시작 시간(${rtStartHour}:${String(rtStartMin).padStart(2, '0')})이 현재 시간보다 이후여야 합니다.`,
+            });
+          }
+          
+          // collStartDate가 현재보다 과거면 현재 + 60초로 조정
           if (updateCollStartTimestamp <= updateNowTimestamp) {
-            updateCollStartTimestamp = updateNowTimestamp + 3600; // 1시간 후
+            updateCollStartTimestamp = Math.min(updateNowTimestamp + 60, updateRtStartTimestamp);
             console.log('[Submit Update] collStartDate adjusted to future:', new Date(updateCollStartTimestamp * 1000).toISOString());
           }
         } else {
-          // 기본값: max(현재 + 1시간, 발송일 - 1일)
-          const sendMinus1Day = updateScheduledSendTimestamp - 86400;
-          const nowPlus1Hour = updateNowTimestamp + 3600;
-          updateCollStartTimestamp = Math.max(nowPlus1Hour, sendMinus1Day);
-          // 발송일보다 늦으면 안됨
-          if (updateCollStartTimestamp >= updateScheduledSendTimestamp) {
-            updateCollStartTimestamp = nowPlus1Hour;
+          // rcvType=2 또는 rtHhmm이 없는 경우 기존 로직 사용
+          if (campaign.collStartDate) {
+            updateCollStartTimestamp = toUnixTimestamp(new Date(campaign.collStartDate));
+            if (updateCollStartTimestamp <= updateNowTimestamp) {
+              updateCollStartTimestamp = updateNowTimestamp + 3600;
+              console.log('[Submit Update] collStartDate adjusted to future:', new Date(updateCollStartTimestamp * 1000).toISOString());
+            }
+          } else {
+            const sendMinus1Day = updateScheduledSendTimestamp - 86400;
+            const nowPlus1Hour = updateNowTimestamp + 3600;
+            updateCollStartTimestamp = Math.max(nowPlus1Hour, sendMinus1Day);
+            if (updateCollStartTimestamp >= updateScheduledSendTimestamp) {
+              updateCollStartTimestamp = nowPlus1Hour;
+            }
           }
-        }
-        updatePayload.collStartDate = updateCollStartTimestamp;
-        
-        // collEndDate: 캠페인 설정값 우선, 없으면 발송 시작일 기준
-        let updateCollEndTimestamp: number;
-        if (campaign.collEndDate) {
-          updateCollEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
-          if (updateCollEndTimestamp <= updateCollStartTimestamp) {
+          
+          if (campaign.collEndDate) {
+            updateCollEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
+            if (updateCollEndTimestamp <= updateCollStartTimestamp) {
+              updateCollEndTimestamp = updateScheduledSendTimestamp;
+            }
+          } else {
             updateCollEndTimestamp = updateScheduledSendTimestamp;
           }
-        } else {
-          updateCollEndTimestamp = updateScheduledSendTimestamp;
         }
+        
+        updatePayload.collStartDate = updateCollStartTimestamp;
         updatePayload.collEndDate = updateCollEndTimestamp;
         
         // rcvType=2 (모아서 보내기)의 경우 collSndDate 추가
