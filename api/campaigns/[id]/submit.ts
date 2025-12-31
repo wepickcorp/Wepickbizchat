@@ -330,6 +330,22 @@ const templates = pgTable('templates', {
   status: text('status').default('draft'),
 });
 
+const targeting = pgTable('targeting', {
+  id: text('id').primaryKey(),
+  campaignId: text('campaign_id').notNull(),
+  geofenceIds: text('geofence_ids').array(),
+});
+
+const geofences = pgTable('geofences', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  latitude: text('latitude').notNull(),
+  longitude: text('longitude').notNull(),
+  radius: integer('radius').default(500),
+  bizchatGeofenceId: text('bizchat_geofence_id'),
+});
+
 function getDb() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL is not set');
@@ -378,6 +394,61 @@ async function verifyAuth(req: VercelRequest) {
 
 function generateTid(): string {
   return Date.now().toString();
+}
+
+interface GeofenceTarget {
+  gender: number;
+  minAge: number;
+  maxAge: number;
+  stayMin: number;
+  radius: number;
+  address: string;
+  lat?: string;
+  lon?: string;
+}
+
+async function createBizChatGeofence(
+  name: string, 
+  targets: GeofenceTarget[], 
+  useProduction: boolean
+): Promise<{ success: boolean; geofenceId?: number; error?: string }> {
+  const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
+  const apiKey = useProduction 
+    ? process.env.BIZCHAT_PROD_API_KEY 
+    : process.env.BIZCHAT_DEV_API_KEY;
+  
+  if (!apiKey) {
+    return { success: false, error: 'BizChat API key not configured' };
+  }
+  
+  const tid = generateTid();
+  
+  try {
+    console.log(`[Submit] Creating BizChat geofence: ${name}`);
+    console.log(`[Submit] Geofence targets:`, JSON.stringify(targets, null, 2));
+    
+    const response = await fetch(`${baseUrl}/api/v1/maptics/geofences/save?tid=${tid}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiKey,
+      },
+      body: JSON.stringify({ name, target: targets }),
+    });
+    
+    const result = await response.json();
+    console.log(`[Submit] BizChat geofence create response:`, JSON.stringify(result));
+    
+    if (result.code === 'S000001' && result.data?.id) {
+      console.log(`[Submit] BizChat geofence created successfully: ${result.data.id}`);
+      return { success: true, geofenceId: result.data.id };
+    }
+    
+    return { success: false, error: result.msg || 'Geofence creation failed' };
+  } catch (error) {
+    console.error('[Submit] BizChat geofence create error:', error);
+    return { success: false, error: String(error) };
+  }
 }
 
 function toUnixTimestamp(date: Date | string | null): number | undefined {
@@ -1116,7 +1187,102 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (campaign.sndDayDiv !== null && campaign.sndDayDiv !== undefined) {
           createPayload.sndDayDiv = campaign.sndDayDiv;
         }
-        console.log(`[Submit] Maptics campaign fields - rcvType: ${rcvType}, rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
+        
+        // BizChat geofence 생성 또는 기존 ID 사용
+        // 1. campaign.sndGeofenceId가 이미 있으면 사용 (이전에 생성된 BizChat geofence ID)
+        // 2. 없으면 targeting 테이블에서 geofenceIds 조회 후 BizChat geofence 생성
+        let bizchatGeofenceId: number | null = campaign.sndGeofenceId || null;
+        
+        if (!bizchatGeofenceId) {
+          console.log('[Submit] No sndGeofenceId found, looking up geofences from targeting table...');
+          
+          // targeting 테이블에서 geofenceIds 조회
+          const targetingResult = await db.select().from(targeting).where(eq(targeting.campaignId, id));
+          const campaignTargeting = targetingResult[0];
+          
+          if (campaignTargeting?.geofenceIds?.length) {
+            console.log('[Submit] Found geofenceIds in targeting:', campaignTargeting.geofenceIds);
+            
+            // geofences 테이블에서 지오펜스 정보 조회
+            const geofenceResult = await db.select().from(geofences).where(
+              eq(geofences.id, campaignTargeting.geofenceIds[0])
+            );
+            const geofence = geofenceResult[0];
+            
+            if (geofence) {
+              console.log('[Submit] Found geofence in DB:', geofence.name, geofence.latitude, geofence.longitude);
+              
+              // 기존 bizchatGeofenceId가 있으면 재사용
+              if (geofence.bizchatGeofenceId) {
+                bizchatGeofenceId = parseInt(geofence.bizchatGeofenceId, 10);
+                console.log('[Submit] Reusing existing bizchatGeofenceId:', bizchatGeofenceId);
+                
+                // campaign.sndGeofenceId에도 저장
+                await db.update(campaigns)
+                  .set({ sndGeofenceId: bizchatGeofenceId, updatedAt: new Date() })
+                  .where(eq(campaigns.id, id));
+              } else {
+                // BizChat geofence API 호출하여 sndGeofenceId 생성
+                const geofenceTargets: GeofenceTarget[] = [{
+                  gender: 0, // 전체
+                  minAge: 0, // 전체 연령
+                  maxAge: 100,
+                  stayMin: 30, // 기본 30분 체류
+                  radius: geofence.radius || 500,
+                  address: geofence.name, // 주소 대신 이름 사용
+                  lat: geofence.latitude,
+                  lon: geofence.longitude,
+                }];
+                
+                const geofenceCreateResult = await createBizChatGeofence(
+                  `${campaign.name}_geofence_${Date.now()}`,
+                  geofenceTargets,
+                  useProduction
+                );
+                
+                if (geofenceCreateResult.success && geofenceCreateResult.geofenceId) {
+                  bizchatGeofenceId = geofenceCreateResult.geofenceId;
+                  console.log('[Submit] BizChat geofence created, ID:', bizchatGeofenceId);
+                  
+                  // DB에 bizchatGeofenceId 저장 (campaign.sndGeofenceId 및 geofences.bizchatGeofenceId)
+                  await Promise.all([
+                    db.update(campaigns)
+                      .set({ sndGeofenceId: bizchatGeofenceId, updatedAt: new Date() })
+                      .where(eq(campaigns.id, id)),
+                    db.update(geofences)
+                      .set({ bizchatGeofenceId: String(bizchatGeofenceId) })
+                      .where(eq(geofences.id, geofence.id)),
+                  ]);
+                } else {
+                  console.error('[Submit] Failed to create BizChat geofence:', geofenceCreateResult.error);
+                  return res.status(400).json({
+                    error: `지오펜스 생성 실패: ${geofenceCreateResult.error}`,
+                    code: 'E100012',
+                    hint: '지오펜스 정보를 확인해주세요.',
+                  });
+                }
+              }
+            } else {
+              console.error('[Submit] Geofence not found in DB:', campaignTargeting.geofenceIds[0]);
+              return res.status(400).json({
+                error: '지오펜스를 찾을 수 없습니다',
+                code: 'E100012',
+                hint: '캠페인 타겟팅 설정에서 지오펜스를 다시 선택해주세요.',
+              });
+            }
+          } else {
+            console.error('[Submit] No geofenceIds found in targeting for rcvType=1/2 campaign');
+            return res.status(400).json({
+              error: '지오펜스 캠페인에 지오펜스 ID가 없습니다',
+              code: 'E100012',
+              hint: '캠페인 타겟팅 설정에서 지오펜스를 선택해주세요.',
+            });
+          }
+        }
+        
+        // sndGeofenceId 추가 (필수)
+        createPayload.sndGeofenceId = bizchatGeofenceId;
+        console.log(`[Submit] Maptics campaign fields - rcvType: ${rcvType}, sndGeofenceId: ${bizchatGeofenceId}, rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
       }
 
       // 타겟팅 정보 추가 (ATS 발송 모수 필터)
@@ -1408,7 +1574,94 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (campaign.sndDayDiv !== null && campaign.sndDayDiv !== undefined) {
           updatePayload.sndDayDiv = campaign.sndDayDiv;
         }
-        console.log(`[Submit Update] Maptics campaign fields - rcvType: ${updateRcvType}, rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
+        
+        // sndGeofenceId 필수 추가 (기존 ID 사용 또는 targeting에서 조회/생성)
+        let updateBizchatGeofenceId: number | null = campaign.sndGeofenceId || null;
+        
+        if (!updateBizchatGeofenceId) {
+          console.log('[Submit Update] No sndGeofenceId found, looking up geofences from targeting table...');
+          
+          // targeting 테이블에서 geofenceIds 조회
+          const targetingResult = await db.select().from(targeting).where(eq(targeting.campaignId, id));
+          const campaignTargeting = targetingResult[0];
+          
+          if (campaignTargeting?.geofenceIds?.length) {
+            console.log('[Submit Update] Found geofenceIds in targeting:', campaignTargeting.geofenceIds);
+            
+            // geofences 테이블에서 지오펜스 정보 조회
+            const geofenceResult = await db.select().from(geofences).where(
+              eq(geofences.id, campaignTargeting.geofenceIds[0])
+            );
+            const geofence = geofenceResult[0];
+            
+            if (geofence) {
+              // 기존 bizchatGeofenceId가 있으면 재사용
+              if (geofence.bizchatGeofenceId) {
+                updateBizchatGeofenceId = parseInt(geofence.bizchatGeofenceId, 10);
+                console.log('[Submit Update] Reusing existing bizchatGeofenceId:', updateBizchatGeofenceId);
+              } else {
+                // BizChat geofence API 호출하여 생성
+                const geofenceTargets: GeofenceTarget[] = [{
+                  gender: 0,
+                  minAge: 0,
+                  maxAge: 100,
+                  stayMin: 30,
+                  radius: geofence.radius || 500,
+                  address: geofence.name,
+                  lat: geofence.latitude,
+                  lon: geofence.longitude,
+                }];
+                
+                const geofenceCreateResult = await createBizChatGeofence(
+                  `${campaign.name}_geofence_${Date.now()}`,
+                  geofenceTargets,
+                  useProduction
+                );
+                
+                if (geofenceCreateResult.success && geofenceCreateResult.geofenceId) {
+                  updateBizchatGeofenceId = geofenceCreateResult.geofenceId;
+                  console.log('[Submit Update] BizChat geofence created, ID:', updateBizchatGeofenceId);
+                  
+                  // DB에 저장
+                  await Promise.all([
+                    db.update(campaigns)
+                      .set({ sndGeofenceId: updateBizchatGeofenceId, updatedAt: new Date() })
+                      .where(eq(campaigns.id, id)),
+                    db.update(geofences)
+                      .set({ bizchatGeofenceId: String(updateBizchatGeofenceId) })
+                      .where(eq(geofences.id, geofence.id)),
+                  ]);
+                } else {
+                  console.error('[Submit Update] Failed to create BizChat geofence:', geofenceCreateResult.error);
+                  return res.status(400).json({
+                    error: `지오펜스 생성 실패: ${geofenceCreateResult.error}`,
+                    code: 'E100012',
+                  });
+                }
+              }
+              
+              // campaign.sndGeofenceId에도 저장
+              await db.update(campaigns)
+                .set({ sndGeofenceId: updateBizchatGeofenceId, updatedAt: new Date() })
+                .where(eq(campaigns.id, id));
+            } else {
+              console.error('[Submit Update] Geofence not found in DB');
+              return res.status(400).json({
+                error: '지오펜스를 찾을 수 없습니다',
+                code: 'E100012',
+              });
+            }
+          } else {
+            console.error('[Submit Update] No geofenceIds found in targeting');
+            return res.status(400).json({
+              error: '지오펜스 캠페인에 지오펜스 ID가 없습니다',
+              code: 'E100012',
+            });
+          }
+        }
+        
+        updatePayload.sndGeofenceId = updateBizchatGeofenceId;
+        console.log(`[Submit Update] Maptics campaign fields - rcvType: ${updateRcvType}, sndGeofenceId: ${updateBizchatGeofenceId}, rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
       }
       
       // 발송 시간 업데이트
