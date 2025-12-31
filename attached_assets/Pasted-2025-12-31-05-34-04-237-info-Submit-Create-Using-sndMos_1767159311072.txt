@@ -1,0 +1,142 @@
+2025-12-31 05:34:04.237 [info] [Submit Create] Using sndMosu: 150 (from calculated)
+2025-12-31 05:34:04.237 [info] [Submit] Image is base64, uploading to BizChat file API...
+2025-12-31 05:34:05.636 [info] [Submit] Image uploaded successfully, fileId: b8ab21f052e9374db6c08711b5fe19a4215202
+2025-12-31 05:34:05.636 [info] [Submit] effectiveRcsType for slideNum check: 4
+2025-12-31 05:34:05.636 [info] [Submit] Maptics campaign fields - rcvType: 1, rtStartHhmm: 1500, rtEndHhmm: 1700, sndDayDiv: 0
+2025-12-31 05:34:05.637 [info] [Submit] atsSndStartDate (adjusted): 1767333600 2026-01-02T06:00:00.000Z
+2025-12-31 05:34:05.637 [info] [Submit] Using campaign rcsType: 4
+2025-12-31 05:34:05.637 [info] [Submit] RCS type set to: 4 (campaign.rcsType: 4, billingType: 1, slides: 1)
+2025-12-31 05:34:05.637 [info] [Submit] Creating campaign in BizChat...
+2025-12-31 05:34:05.637 [info] [Submit] Full createPayload: {
+  "tgtCompanyName": "위픽",
+  "name": "251213여성타겟",
+  "sndNum": "001001",
+  "rcvType": 1,
+  "sndGoalCnt": 100,
+  "billingType": 1,
+  "isTmp": 0,
+  "settleCnt": 100,
+  "sndMosu": 150,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-3heg285vm-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "(광고)[SKT] 몰리또 대학로점 저녁 혜택 안내",
+    "msg": "몰리또 대학로점 저녁 혜택 안내드립니다.\n\n고객님, 안녕하세요.\n몰리도 대학로점에서 저녁 시간에 주문 시 나쵸 무료 서비스를 드립니다.\n \n▶ 저녁 혜택 받기: [URL분석1]\n \n■ 몰리도 대학로점 저녁 혜택 안내\n- 장소: 몰리도 대학로점(혜화역 3번 출구 도보 2분)\n- 시간: 오후 5시~오후 9시\n- 대상: 해당 문자 수신 고객님\n- 혜택\n① 주문 시 나쵸 무료 서비스\n② 매장 방문 시 즉시 혜택 적용\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.\n \n무료 수신거부 1504",
+    "fileInfo": {
+      "list": [
+        {
+          "origId": "b8ab21f052e9374db6c08711b5fe19a4215202"
+        }
+      ]
+    },
+    "urlLink": {
+      "list": [
+        "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+      ]
+    }
+  },
+  "rcs": [
+    {
+      "title": "(광고)[SKT] 몰리또 대학로점 저녁 혜택 안내",
+      "msg": "몰리또 대학로점 저녁 혜택 안내드립니다.\n\n고객님, 안녕하세요.\n몰리도 대학로점에서 저녁 시간에 주문 시 나쵸 무료 서비스를 드립니다.\n \n▶ 저녁 혜택 받기: [URL분석1]\n \n■ 몰리도 대학로점 저녁 혜택 안내\n- 장소: 몰리도 대학로점(혜화역 3번 출구 도보 2분)\n- 시간: 오후 5시~오후 9시\n- 대상: 해당 문자 수신 고객님\n- 혜택\n① 주문 시 나쵸 무료 서비스\n② 매장 방문 시 즉시 혜택 적용\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.\n \n무료 수신거부 1504",
+      "imgOrigId": "b8ab21f052e9374db6c08711b5fe19a4215202",
+      "urlLink": {
+        "list": [
+          "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+        ]
+      },
+      "buttons": {
+        "list": [
+          {
+            "name": "쿠폰받기",
+            "type": "0",
+            "val1": "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+          }
+        ]
+      },
+      "opts": {}
+    }
+  ],
+  "rtStartHhmm": "1500",
+  "rtEndHhmm": "1700",
+  "sndDayDiv": 0,
+  "atsSndStartDate": 1767333600,
+  "rcsType": 4
+}
+2025-12-31 05:34:05.637 [info] [BizChat Submit] Environment: DEVELOPMENT
+2025-12-31 05:34:05.637 [info] [BizChat Submit] Looking for env var: BIZCHAT_DEV_API_KEY
+2025-12-31 05:34:05.637 [info] [BizChat Submit] API key exists: true, length: 64
+2025-12-31 05:34:05.637 [info] [BizChat Submit] VERCEL_ENV: production, NODE_ENV: production
+2025-12-31 05:34:05.637 [info] [BizChat] POST https://gw-dev.bizchat1.co.kr:8443/api/v1/cmpn/create?tid=1767159245637
+2025-12-31 05:34:05.637 [info] [BizChat] Request body: {
+  "tgtCompanyName": "위픽",
+  "name": "251213여성타겟",
+  "sndNum": "001001",
+  "rcvType": 1,
+  "sndGoalCnt": 100,
+  "billingType": 1,
+  "isTmp": 0,
+  "settleCnt": 100,
+  "sndMosu": 150,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-3heg285vm-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "(광고)[SKT] 몰리또 대학로점 저녁 혜택 안내",
+    "msg": "몰리또 대학로점 저녁 혜택 안내드립니다.\n\n고객님, 안녕하세요.\n몰리도 대학로점에서 저녁 시간에 주문 시 나쵸 무료 서비스를 드립니다.\n \n▶ 저녁 혜택 받기: [URL분석1]\n \n■ 몰리도 대학로점 저녁 혜택 안내\n- 장소: 몰리도 대학로점(혜화역 3번 출구 도보 2분)\n- 시간: 오후 5시~오후 9시\n- 대상: 해당 문자 수신 고객님\n- 혜택\n① 주문 시 나쵸 무료 서비스\n② 매장 방문 시 즉시 혜택 적용\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.\n \n무료 수신거부 1504",
+    "fileInfo": {
+      "list": [
+        {
+          "origId": "b8ab21f052e9374db6c08711b5fe19a4215202"
+        }
+      ]
+    },
+    "urlLink": {
+      "list": [
+        "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+      ]
+    }
+  },
+  "rcs": [
+    {
+      "title": "(광고)[SKT] 몰리또 대학로점 저녁 혜택 안내",
+      "msg": "몰리또 대학로점 저녁 혜택 안내드립니다.\n\n고객님, 안녕하세요.\n몰리도 대학로점에서 저녁 시간에 주문 시 나쵸 무료 서비스를 드립니다.\n \n▶ 저녁 혜택 받기: [URL분석1]\n \n■ 몰리도 대학로점 저녁 혜택 안내\n- 장소: 몰리도 대학로점(혜화역 3번 출구 도보 2분)\n- 시간: 오후 5시~오후 9시\n- 대상: 해당 문자 수신 고객님\n- 혜택\n① 주문 시 나쵸 무료 서비스\n② 매장 방문 시 즉시 혜택 적용\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.\n \n무료 수신거부 1504",
+      "imgOrigId": "b8ab21f052e9374db6c08711b5fe19a4215202",
+      "urlLink": {
+        "list": [
+          "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+        ]
+      },
+      "buttons": {
+        "list": [
+          {
+            "name": "쿠폰받기",
+            "type": "0",
+            "val1": "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+          }
+        ]
+      },
+      "opts": {}
+    }
+  ],
+  "rtStartHhmm": "1500",
+  "rtEndHhmm": "1700",
+  "sndDayDiv": 0,
+  "atsSndStartDate": 1767333600,
+  "rcsType": 4
+}
+2025-12-31 05:34:05.794 [info] [BizChat] Response: 400 - {"tid":"1767159245637","code":"E100012","msg":"No snd geofence id for maptics rt. rcv type [1]"}
+2025-12-31 05:34:05.794 [error] [Submit] BizChat API error: {
+  tid: '1767159245637',
+  code: 'E100012',
+  msg: 'No snd geofence id for maptics rt. rcv type [1]'
+}
+2025-12-31 05:34:02.364 [info] The `fetchConnectionCache` option is deprecated (now always `true`)
+2025-12-31 05:34:02.378 [info] [BizChat Submit] Force DEV mode: BIZCHAT_USE_PROD is not set to "true"
+2025-12-31 05:34:02.378 [info] [BizChat Submit] Environment: DEVELOPMENT (VERCEL_ENV=production)
+2025-12-31 05:34:02.461 [error] (node:4) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
