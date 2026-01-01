@@ -1888,8 +1888,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // rtStart/rtEnd UTC timestamp 계산
           const updateRtStartUtcMs = Date.UTC(updateYear, updateMonth, updateDay, rtStartHour - 9, rtStartMin, 0);
           const updateRtStartTimestamp = Math.floor(updateRtStartUtcMs / 1000);
-          const updateRtEndUtcMs = Date.UTC(updateYear, updateMonth, updateDay, rtEndHour - 9, rtEndMin, 0);
-          const updateRtEndTimestamp = Math.floor(updateRtEndUtcMs / 1000);
+          let updateRtEndUtcMs = Date.UTC(updateYear, updateMonth, updateDay, rtEndHour - 9, rtEndMin, 0);
+          let updateRtEndTimestamp = Math.floor(updateRtEndUtcMs / 1000);
+          
+          // 자정 넘김 처리: rtEnd < rtStart인 경우 (예: 23:00~01:00)
+          if (updateRtEndTimestamp <= updateRtStartTimestamp) {
+            updateRtEndTimestamp += 86400; // +24시간
+            console.log(`[Submit Update] Cross-midnight detected: rtEnd adjusted to next day`);
+          }
           
           // BizChat 규칙: collStart ≤ rtStart ≤ rtEnd ≤ collEnd
           updateCollStartTimestamp = updateRtStartTimestamp;
@@ -1897,10 +1903,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           
           console.log(`[Submit Update] rcvType=1: rtStart=${rtStartHour}:${rtStartMin}, rtEnd=${rtEndHour}:${rtEndMin}`);
           console.log(`[Submit Update] rtStartTimestamp: ${updateRtStartTimestamp} (${new Date(updateRtStartTimestamp * 1000).toISOString()})`);
+          console.log(`[Submit Update] rtEndTimestamp: ${updateRtEndTimestamp} (${new Date(updateRtEndTimestamp * 1000).toISOString()})`);
           console.log(`[Submit Update] Calculated collStart: ${new Date(updateCollStartTimestamp * 1000).toISOString()}, collEnd: ${new Date(updateCollEndTimestamp * 1000).toISOString()}`);
           
-          // 현재 시간이 이미 rtStart를 지났다면 캠페인 제출 불가
-          if (updateNowTimestamp >= updateRtStartTimestamp) {
+          // 현재 시간이 이미 rtStart를 지났다면(초과) 캠페인 제출 불가
+          // BizChat은 collStart == rtStart를 허용하므로 > 사용
+          if (updateNowTimestamp > updateRtStartTimestamp) {
             console.error(`[Submit Update] Cannot submit: rtStart already passed`);
             return res.status(400).json({
               error: '발송 시작 시간이 이미 지났습니다',
@@ -1909,7 +1917,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
           }
           
-          // collStartDate가 현재보다 과거면 현재 + 60초로 조정
+          // collStartDate가 현재보다 과거거나 같으면 현재 + 60초로 조정
           if (updateCollStartTimestamp <= updateNowTimestamp) {
             updateCollStartTimestamp = Math.min(updateNowTimestamp + 60, updateRtStartTimestamp);
             console.log('[Submit Update] collStartDate adjusted to future:', new Date(updateCollStartTimestamp * 1000).toISOString());
