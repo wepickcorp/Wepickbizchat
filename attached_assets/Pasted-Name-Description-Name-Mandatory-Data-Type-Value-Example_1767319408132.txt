@@ -1,0 +1,289 @@
+Name	캠패인			
+Description	캠패인 정보			
+				
+필드 설명				
+Name	Mandatory	Data Type	Value(Example)	Description
+id	Y	string	"95c4d0c73e564eee87c64370626af30e"	아이디
+customerName	Y	string	"유엔젤"	제휴사명
+tgtCompanyName	Y	string	"이마트"	고객사명. 최대 100자
+name	Y	string	"구정 이벤트"	캠패인명. 최대 40자
+sndNum	Y	string	"15881234"	발신 번호 코드
+rcvType	Y	number	0	"수신자 구분 
+
+- 0 : ATS 일반 타겟팅
+- 1 : Maptics 타겟팅(실시간 보내기)
+- 2 : Maptics 타겟팅(모아서 보내기)
+- 10 : 수신 MDN 직접 지정"
+sndGoalCnt	Y	number	50	발송 목표 건수. 1이상 200000 이하의 정수
+atsSndStartDate	Y	number	1717552800	rcvType이 0, 10 인 경우 메시지 발송 시작 일시. rcvType 이 0, 10 가 아니면 의미 없음. 초단위 timestamp 형태
+atsSndEndDate	Y	number	1717556400	rcvType이 0, 10 인 경우 메시지 발송 종료 일시. rcvType 이 0, 10 가 아니면 의미 없음. 초단위 timestamp 형태
+collStartDate	Y	number	0	rcvType이 1, 2 인 경우 수신자 수집 시작 일시. rcvType 이 1, 2 가 아니면 의미 없음. 초단위 timestamp 형태
+collEndDate	Y	number	0	rcvType이 1, 2 인 경우 수신자 수집 종료 일시. rcvType 이 1, 2 가 아니면 의미 없음. 초단위 timestamp 형태
+collSndDate	Y	number	0	rcvType이 2 인 경우 collStartDate, collEndDate 사이에 수집한 수신자에게 메시지를 발송 시작할 일시. rcvType 이 2 가 아니면 의미 없음. 초단위 timestamp 형태
+startDate	Y	number	1717552800	캠패인 시작 시간. 초단위 timestamp 형태
+endDate	Y	number	1717556400	캠패인 종료 시간. 초단위 timestamp 형태
+rtStartHhmm	N	String	"1600"	rcvType이 1인 경우 수집 기간중 발송 시작 시간. HHMM 포맷. rcvType이 1인 경우 반드시 입력해야한다.
+rtEndHhmm	N	String	"2000"	rcvType이 1인 경우 수집 기간중 발송 종료 시간. HHMM 포맷. rcvType이 1인 경우 반드시 입력해야한다.
+sndDayDiv	N	number	0	"rcvType이 1, 2 인 경우 Maptics 데이터를 일 균등 분할하여 발송 여부. 하루에 보내지는 최대 mdn 개수가 발송 목표 건수/발송 날짜로 제한된다. 입력하지 않으면 0으로 입력된다.
+
+- 0 : 미분할
+- 1 : 분할"
+billingType	Y	number	0	"과금 유형 
+
+- 0 : LMS
+- 1 : RCS MMS
+- 2 : MMS
+- 3 : RCS LMS"
+rcsType	Y	number	0	"RCS 템플릿 구분 
+
+- 0 : 스탠다드 
+- 1 : LMS 
+- 2 : 슬라이드 
+- 3 : 이미지 강조 A(3:4)
+- 4 : 이미지 강조 B(1:1)
+- 5 : 상품 소개 세로
+- 200 : RCS 아님"
+slideCnt	Y	number	0	rcsType 이 2 일 때, 슬라이드 갯수. 슬라이드 템플릿이 아니면 0
+state	Y	number	0	"캠패인 상태 코드 
+
+- 10 : 승인 요청
+- 11 :승인 완료
+- 20 :발송 준비
+- 25 : 취소
+- 30 : 진행중
+- 35 : 중단
+- 40 : 종료"
+stateUpdateDate	Y	number	1705298638	캠패인 상태 업데이트 일시. 초단위 timestamp 형태. 0이면 업데이트 이력 없음
+stateReason	Y	string	"거부"	캠패인 상태에 따른 사유
+apprUserId	Y	string	""	캠페인 승인자 아이디
+mdnFileId	Y	string	"ebe7525e815d3c01855e30c758bcb34f504202"	메시지 수신 대상자 mdn 목록 파일 아이디
+isTmp	Y	number	0	"임시 저장 데이터 인지 여부.
+
+- 0 : 아니오 
+- 1 : 네"
+sndGeofenceId	Y	number	571	지오펜스 생성시 받은 지오펜스 아이디. rcvType이 1, 2가 아니면 의미 없다.
+sndMosu	Y	number	10256	ATS 에서 구한 발송 모수. rcvType이 0가 아니면 의미 없다.
+sndMosuDesc	Y	string	<html><body><p>서울시 강남구, 남자, 25세 이상</p></body></html>	발송 모수 구할 때 사용한 필터 설명. html 내용. rcvType이 0가 아니면 의미 없다.
+sndMosuQuery	Y	string	""	ATS 에서 받은 발송 모수 쿼리. 발송 대상 구할 때 사용. rcvType이 0가 아니면 의미 없다.
+useCoupon	Y	number	0	"쿠폰(코드삽입) 사용 여부.
+
+- 0 : 쿠폰(코드삽입) 사용 하지 않음 
+- 1 : 쿠폰(코드삽입) 사용"
+coupon	Y	string	""	쿠폰 csv 파일의 아이디
+adver	Y	number	0	"메시지 제목, 본문에 광고 문구를 자동 추가할지 여부
+
+- 0 : 광고 문구를 추가 하지 않음 
+- 1 : 광고 문구를 자동 추가"
+adverDeny	Y	string	""	자동 추가될 광고 문구에서 사용할 무료 수신거부 전화 번호
+free	N	number	0	"더 이상 사용 되지 않고 settleCnt 를 사용 하도록 한다.
+정산 금액 유료/무료 캠페인 구분. 값이 없으면 유료로 판단 한다.
+
+- 0 : 유료 
+- 1 : 무료"
+settleCnt	N	number	0	정산 건수. 정산시 설정된 건수 이상은 무료로 처리 된다. 값이 없으면 정산 건수 설정 하지 않았다는 의미
+rewardEndDate	N	number	1705298638	리워드를 사용 할때, 리워드를 지급할 제한 기간. 설정된 시간 이전에만 리워드가 지급 된다. 리워드 기능을 사용 할때는 필수값
+cb	N	object	{}	캠패인 결과를 수신받을 callback url 정보. 제휴사에 등록된 callback url과 캠패인의 callback url 정보다 모두 없으면 report 하지 않는다.
+cb.state	N	string	""	캠패인 상태 정보 변경 알림을 받을 callback url 정보
+retarget	N	object list	[ ]	이전 실행한 캠페인의 수신 mdn 을 참고하여 수신 mdn 을 제외 할 때 사용할 정보. list 에 포함 가능한 object 갯수는 최대 10개 이다.
+retarget.id	Y	string	"19ca34b180394f15a9c66f798b65df95404203"	제외할 mdn 을 포함하는 캠페인 아이디
+retarget.recv	Y	boolean	true 	수신 성공 mdn 제외 여부. true 일 경우 제외
+retarget.react	Y	boolean	true 	반응(URL/버튼 클릭)한 mdn 제외 여부. true 일 경우 제외
+crtDate	Y	number	17059742011	생성일. 초단위 timestamp 형태
+updDate	Y	number	0	수정일. 초단위 timestamp 형태
+mms	Y	object	{}	MMS 내용. 과금 유형이 RCS인 경우에는 수신자 단말이 RCS 수신이 불가한 경우 대신 보내지는 MMS이다.
+mms.id	Y	string	"95c4d0c73e564eee87c64370626af30e"	MMS 메시지 아이디
+mms.title	Y	string	"구정 이벤트"	MMS 메시지 제목. 최대 글자수는 27자
+mms.msg	Y	string	"구정을 맞이하여 만원 이상 구매 고객에게 복조리를 증정해드립니다. [URL분석1]"	"메시지 + 마케팅 URL 변수
+- 1000글자 제한
+- 마케팅 URL 변수: [URL분석1]. 메시지 발송시 마케팅 URL로 변환되어 발송"
+mms.fileInfo	Y	object	{}	MMS 메시지 발송시 포함할 이미지 파일 정보. 파일이 포함되지 않으면 empty object
+mms.fileInfo.list	N	object array	[ ]	MMS 파일 리스트. 1개까지 사용할 수 있다.
+mms.fileInfo.list[].rcsId	Y	string	"ebe7525e815d3c01855e30c758bcb34f"	MMS 파일의 RCS 아이디. RCS 전달 후 받은 아이디. 이미지가 없으면 empty string
+mms.fileInfo.list[].origId	Y	string	"ebe7525e815d3c01855e30c758bcb34f504202"	MMS 파일 아이디. 권장 사이즈는 300KB 미만, 해상도 400x240, 500x300 이며 최대 사이즈는 1MB, 해상도는 2000 x 2000 까지 사용할 수 있다
+mms.urlFile	Y	string	""	메시지 마다 다른 URL 을 사용 하고 싶을때 사용하며, 미리 업로드한 URL을 포함하는 파일의 아이디
+mms.urlFileReward	N	number	0	URL CSV 파일에서 리워드 링크로 사용할 URL 의 Index
+mms[].urlLink	Y	object	{}	MMS 마케팅 URL 정보. 링크가 없을 때는 empty object
+mms[].urlLink.list	N	string array	[]	MMS 마케팅 URL 리스트. 3개까지 사용할 수 있다.
+mms[].urlLink.reward	N	number	0	리워드가 적용될 URL 의 index. mms[].urlLink.list 에 포함된 URL 의 index
+rcs	N	object array	[]	RCS 내용. 과금 유형이 RCS인 경우에만 유효하다.
+rcs[].id	Y	string	"95c4d0c73e564eee87c64370626af30e"	RCS 메시지 아이디
+rcs[].slideNum	N	number	1	RCS 슬라이드 index. 슬라이드 템플릿이 아니면 1로 고정
+rcs[].title	N	string	""	RCS 제목. 최대 글자 수는 30자
+rcs[].msg	N	string	""	"RCS 메시지 본문. RCS 템플릿에 따라 사이즈 제한됨.
+
+- 스탠다드 : 1100자 
+- LMS : 1100자 
+- 슬라이드 : 슬라이드당 170자.
+- 이미지 강조 A : 150자 
+- 이미지 강조 B : 150자 
+- 상품 소개 세로 : 150자"
+rcs[].imgOrigId	N	string	"ebe7525e815d3c01855e30c758bcb34f504202"	"RCS 이미지 파일 아이디. RCS 템플릿에 따라 이미지 용량 제한이 있으며, RCS에 들어가는 전체 이미지 용량이 1MB를 초과할 수 없다. RCS MMS 타입에만 유효하다.
+
+- 스탠다드 : 최대 0.3MB, 400x240, 500x300
+- LMS : 이미지 없음 
+- 슬라이드 : 1MB, 장당 최대 300KB, 464x336
+- 이미지 강조 A : 최대 1MB, 900x1200
+- 이미지 강조 B : 최대 1MB, 900x900
+- 상품 소개 세로 : 최대 1MB, 900x560"
+rcs[].imgRcsId	N	string	"19ca34b180394f15a9c66f798b65df95"	RCS 이미지 파일 아이디. RCS 전달 후 받은 아이디. 이미지가 없으면 empty string
+rcs[].urlFile	Y	string	""	각각의 메시지 마다 다른 URL 을 사용 하고 싶을때 사용하며, 미리 업로드한 URL을 포함하는 파일의 아이디
+rcs[].urlFileReward	N	number	0	URL CSV 파일에서 리워드 링크로 사용할 URL 의 Index
+rcs[].urlLink	Y	object	{}	RCS 마케팅 URL 정보. 링크가 없을 때는 empty object
+rcs[].urlLink.list	N	string array	[]	"RCS 마케팅 URL 리스트. rcs type 별 사용할 수 있는 URL 분석 개수는 아래와 같다.
+
+- LMS : 3개
+- 스탠다드 : 3개
+- 슬라이드 : 슬라이드당 1개
+- 이미지강조A : 3개
+- 이미지강조B : 3개
+- 상품 소개 세로 : 3개"
+rcs[].urlLink.reward	N	number	0	리워드가 적용될 URL 의 index. rcs[].urlLink.list 에 포함된 URL 의 index
+rcs[].buttons	Y	object	{}	RCS 버튼 정보. 버튼이 없을 때는 empty object
+rcs[].buttons.list	N	object array	[]	RCS 버튼 목록. 각 슬라이드별 최대 2개까지 입력 가능하다.
+rcs[].buttons.list[].type	Y	string	"0"	"RCS 버튼 종류.
+
+- 0 : URL 연결 
+- 1 : 전화 걸기 
+- 2 : 지도 보여 주기"
+rcs[].buttons.list[].name	Y	string	""	"RCS 버튼 텍스트
+
+- 스탠다드 : 17자 
+- LMS : 17자 
+- 슬라이드 : 슬라이드당 17자.
+- 이미지 강조 A : 16자 
+- 이미지 강조 B : 16자 
+- 상품 소개 세로 : 16자"
+rcs[].buttons.list[].val1	Y	string	""	"RCS 버튼 값1. 버튼 종류에 따라 다름.
+
+- URL 연결 : 버튼 클릭시 이동하는 URL 
+- 전화 걸기 : 전화 번호 
+- 지도 보여 주기 : 위치 이름"
+rcs[].buttons.list[].val2	N	string	""	RCS 버튼 값2. 버튼 종류가 지도 보여 주기 일때 검색 URL 값. 지도 보여 주기가 아니면 empty string
+rcs[].buttons.list[].reward	N	string	"1"	"리워드가 적용될 버튼인지 여부. 리워드가 적용될 버튼이면 1
+
+- 1 : 리워드가 설정될 버튼 
+- 그 외의 값 : 리워드가 설정될 버튼이 아님 "
+rcs[].opts	Y	object	{}	RCS 상품 소개 옵션 정보. 상품 소개 세로 템플릿이 아닌 경우 empty object
+rcs[].opts.list	N	object array	[]	RCS 옵션 목록. RCS 템플릿이 상품 소개 세로일 경우에 반드시 입력해야한다. 최소 2개에서 최대 3개까지 사용할 수 있다.
+rcs[].opts.list[].origId	Y	string	"ebe7525e815d3c01855e30c758bcb34f504202"	RCS 선택 옵션의 이미지 파일 아이디. 해상도는 300x300 이어야 한다.
+rcs[].opts.list[].rcsId	Y	string	"19ca34b180394f15a9c66f798b65df95"	RCS에서 받은 이미지 아이디
+rcs[].opts.list[].descr	Y	string	"SKT 홈"	RCS 선택 옵션의 설명. 최대 33자
+rcs[].opts.list[].link	Y	string	"https://www.tworld.co.kr/web/home"	RCS 선택 옵션의 링크
+				
+Example				
+"{
+    ""id"": ""50d8d0dd7ccf3cfea138f494daf0f1dd"",
+    ""customerName"": ""유엔젤 (ASUM)"",
+    ""tgtCompanyName"": ""유엔젤"",
+    ""name"": ""유엔젤 이벤트 (lms)"",
+    ""sndNum"": ""001001"",
+    ""rcvType"": 10,
+    ""sndType"": 0,
+    ""sndGoalCnt"": 10,
+    ""atsSndStartDate"": 1717552800,
+    ""atsSndEndDate"": 1717556400,
+    ""collStartDate"": 0,
+    ""collEndDate"": 0,
+    ""collSndDate"": 0,
+    ""startDate"": 1717552800,
+    ""endDate"": 1717556400,
+    ""sndDayDiv"": 0,
+    ""billingType"": 0,
+    ""rcsType"": 200,
+    ""slideCnt"": 0,
+    ""state"": 15,
+    ""stateUpdDate"": 0,
+    ""stateReason"": """",
+    ""apprUserId"": """",
+    ""mdnFileId"": ""ebe7525e815d3c01855e30c758bcb34f504202"",
+    ""isTmp"": 0,
+    ""sndGeofenceId"": 0,
+    ""sndMosu"": 0,
+    ""sndMosuDesc"": """",
+    ""sndMosuQuery"": """",
+    ""cb"": {
+        ""recv"": ""http://www.google.com3"",
+        ""urlClick"": ""http://www.google.com4"",
+        ""state"": ""http://www.google.com1"",
+        ""send"": ""http://www.google.com2""
+    },
+    ""crtDate"": 1717547329,
+    ""updDate"": 1717547329,
+    ""mms"": {
+        ""id"": ""6dba1540f110334eb64aab41aab56658"",
+        ""title"": ""유엔젤 이벤트 (lms)"",
+        ""msg"": ""(lms) 구정을 맞이하여 만원 이상 구매 고객에게 복조리를 증정해드립니다. [URL분석1] [URL분석2] [URL분석3]"",
+        ""fileInfo"": {
+            ""list"": [
+                {
+                    ""rcsId"": """",
+                    ""origId"": ""cd47fd8d5a993b778d51fb6f2f104afd304202""
+                }
+            ]
+        },
+        ""urlLink"": {
+            ""list"": [
+                ""https://www.google.com"",
+                ""https://www.apple.com"",
+                ""https://www.kakao.com""
+            ]
+        },
+        ""crtDate"": 1717547329,
+        ""updDate"": 1717547329
+    },
+    ""rcs"": [
+        {
+            ""id"": ""27d6eea6b9f8305f9f5e37c5e1d9b724"",
+            ""slideNum"": 1,
+            ""title"": ""유엔젤 이벤트 (rcs mms - 스탠다드)"",
+            ""msg"": ""구정을 맞이하여 만원 이상 구매 고객에게 복조리를 증정해드립니다."",
+            ""imgOrigId"": ""7046614d3c1f34138ba25471d40a2a60304202"",
+            ""imgRcsId"": ""06774019d05f3cf993956b4788c8ab7c"",
+            ""buttons"": {
+                ""list"": [
+                    {
+                        ""name"": ""URL 연결"",
+                        ""type"": ""0"",
+                        ""val1"": ""https://www.google.com"",
+                       ""val2"": """"
+                    },
+                    {
+                        ""name"": ""전화걸기"",
+                        ""type"": ""1"",
+                        ""val1"": ""01030985066"",
+                        ""val2"": """"
+                    }
+                ]
+            },
+            ""urlLink"": {
+                ""list"": [
+                    ""https://www.google.com""
+                ]
+            },
+            ""opts"": {
+                ""list"": [
+                    {
+                        ""link"": ""https://www.tworld.co.kr/web/home"",
+                        ""descr"": ""SKT 홈 1"",
+                        ""rcsId"": ""eb235bd37a3e30a0a474dbed8f71e2f3"",
+                        ""origId"": ""25dc9efa851e376eb33358a664716a5e504202""
+                    },
+                    {
+                        ""link"": ""https://www.tworld.co.kr/web/home"",
+                        ""descr"": ""SKT 홈 2"",
+                        ""rcsId"": ""eb235bd37a3e30a0a474dbed8f71e2f3"",
+                        ""origId"": ""25dc9efa851e376eb33358a664716a5e504202""
+                    },
+                    {
+                        ""link"": ""https://www.tworld.co.kr/web/home"",
+                        ""descr"": ""SKT 홈 3"",
+                        ""rcsId"": ""eb235bd37a3e30a0a474dbed8f71e2f3"",
+                        ""origId"": ""25dc9efa851e376eb33358a664716a5e504202""
+                    }
+                ]
+            },
+            ""crtDate"": 1716948433,
+            ""updDate"": 1716948433
+        }
+    ]
+}"				

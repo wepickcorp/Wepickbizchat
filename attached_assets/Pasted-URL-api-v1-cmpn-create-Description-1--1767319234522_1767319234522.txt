@@ -1,0 +1,264 @@
+URL	/api/v1/cmpn/create				
+Description	"캠패인 생성. [승인 요청] 상태로 생성된다.
+
+1. 캠페인은 캠페인의 시작 날짜는 캠페인 등록 하는 현재 시간 대비 1시간 이후여야 하며 10분 단위로 시간 체크 된다.
+예) 
+- 10시 11분에 11시 15분 시작하는 캠페인 등록(실패)
+- 10시 11분에 11시 19분 시작하는 캠페인 등록(실패)
+- 10시 11분에 11시 20분 시작하는 캠페인 등록(성공)
+
+billingType 에 따른 메시지 생성 규칙은 다음과 같다.
+- LMS (0) : mms 데이터만 존재 하면 되고, mms 데이터에 파일이 없어야 한다.
+- RCS MMS (1) : mms, rcs 데이터 모두 존재 해야 하며, mms 데이터에 파일이 존재 해야 한다.
+                            rcs 발송이 실패하면 mms 에 설정된 메시지가 fallback 으로 발송 된다.
+- MMS (2) : mms 데이터만 존재 하면 되고, mms 데이터에 파일이 존재 해야 한다.  
+- RCS LMS (3) : mms, rcs 데이터 모두 존재 해야 하며, mms 데이터에 파일이 없어야 한다.
+                           rcs 발송이 실패하면 mms 에 설정된 메시지가 fallback 으로 발송 된다.
+
+2. mms.msg 와 rcs[].msg 는 ""URL분석""을 포함하면 실제 발송시 메시지 길이가 변경되며, 변경된 길이가 제한 길이를 넘지 않아야 한다.
+변경되는 길이는 개발기, 상용기 발송일 경우에 따라 다음과 같이 변경 된다.
+
+- 개발기 : ""URL분석"" 하나당 32 만큼 길이가 증가됨 
+- 상용기 : ""URL분석"" 하나당 25 만큼 길이가 증가됨 
+
+예)
+- mms.msg 가 ""[URL분석1]"" 을 포함하고 길이가 1000자 라면, 실제 발송시의 메시지 길이는 1025 가 되기 때문에 제한 길이를 초과 
+- mms.msg 가 ""[URL분석1]"", ""[URL분석2]"" 를 포함하고 길이가 1000자 라면, 실제 발송시의 메시지 길이는 1050 이 되기 때문에 제한 길이를 초과 
+- mms.msg 가 ""[URL분석1]"" 을 포함하고 길이가 900자 라면, 실제 발송시의 메시지 길이는 925 이 되기 때문에 제한 길이를 초과 하지 않음 
+
+3. mms.msg 와 rcs[].msg 는 ""[코드삽입]""을 포함하면 실제 발송시 메시지 길이가 변경되며, 변경된 길이가 제한 길이를 넘지 않아야 한다.
+변경되는 길이는 개발기, 상용기 동일하다.
+
+- 개발기/상용기 : ""[코드삽입]"" 하나당. <쿠폰문자열길이> - 6 만큼 길이가 증가됨.
+
+예)
+- mms.msg 가 ""[코드삽입]""을 하나 포함하고 길이가, 1000자 이고, <쿠폰문자열길이>가 9 라면, 실제 발송시 메시지 길이는 1003자가 되기 때문에 제한 갈이를 초과 
+- mms.msg 가 ""[코드삽입]""을 하나 포함하고 길이가, 900자 이고, <쿠폰문자열길이>가 12 라면, 실제 발송시 메시지 길이는 906자가 되기 때문에 제한 갈이를 초과 하지 않음 
+
+4. 이미 진행한 캠페인에서 사용된 mdn 을 참고하여 수신 mdn 을 제외 할 수 있으며, 이런 기능이 필요하면 retarget 을 사용 한다.
+예)
+- 2일 이전에 진행한 아이디 ""19ca34b180394f15a9c66f798b65df95404203"" 캠페인에서 메시지 수신 성공, 반응(URL/버튼 클릭)한 mdn 을 이번 캠페인 수신자에서 제외 하고 싶으면 retarget 값을 [{""id"": ""19ca34b180394f15a9c66f798b65df95404203"", ""recv"": true, ""react"" true}] 로 설정 한다.
+
+5. 맵틱스 캠페인 생성 시간 보다 과거의 MDN 을 수집 할 수 없다. collStartDate 는 캠페인 생성 요청하는 시간 보다 +1 시간 미래의 시간이어야 한다.
+예)
+- 2025/08/28 10:00:00 에 캠페인 생성 API 를 호출 한다면, collStartDate 는 2025/08/28 11:00:00 이후어야 한다.
+- 캠페인 승인 단계도 거쳐야 하기 때문에, 맵틱스 캠페인은 아무리 늦더라도 MDN 수집일 1일 이전에 생성하여, 승인 완료 까지 진행 되어야 한다.
+- 특별한 이슈 없으면 맵틱스 캠페인 생성은 수신 전화 번호 수집 시작일 보다 하루 이전에 하도록 권장 합니다."				
+Method	POST				
+Header	Authorization: {token}				
+					
+Request					
+In Type	Parameter	Mandatory	Data Type	Value(Example)	Description
+Query Parameter	tid	Y	string	"1705298638704"	transaction ID
+Body	tgtCompanyName	Y	string	"이마트"	고객사명. 최대 100자
+	name	Y	string	"구정 이벤트"	캠패인명. 최대 40자
+	sndNum	Y	string	"001001"	발신 번호 코드
+	rcvType	Y	number	0	"수신자 구분 
+
+- 0 : ATS 일반 타겟팅
+- 1 : Maptics 타겟팅(실시간 보내기)
+- 2 : Maptics 타겟팅(모아서 보내기)
+- 10 : 수신 MDN 직접 지정(개발기에서만 사용 가능)"
+	sndGoalCnt	Y	number	10	"발송 목표 건수. 1이상 200000 이하의 정수.
+rcvType 이 0 일때, sndGoalCnt 값은 sndMosu 보다 같거나 작아야 한다."
+	atsSndStartDate	N	number	1705298638	rcvType이 0, 10 인 경우 메시지 발송 시작 일시. rcvType 이 0, 10 인 경우 반드시 입력해야한다. 현재시간 기준 1시간 이후부터 입력이 가능하다. 시간은 9시부터 19시(19시 포함하지 않음) 이내의 시간이어야 한다. 10분 단위 이하는 0으로 세팅된다. 종료 일시는 시작 일시 +1시간 이후로 설정된다. 초단위 timestamp 형태
+	collStartDate	N	number	1705298638	rcvType이 1, 2 인 경우 수신자 수집 시작 일시. rcvType 이 1, 2 인 경우 반드시 입력해야한다. 현재시간 기준 1시간 이후부터 입력이 가능하다. 10분 단위 이하는 0으로 세팅된다. 초단위 timestamp 형태
+	collEndDate	N	number	1705298638	rcvType이 1, 2 인 경우 수신자 수집 종료 일시. rcvType 이 1, 2 인 경우 반드시 입력해야한다. collStartDate 보다 커야한다. 10분 단위 이하는 0으로 세팅된다. 초단위 timestamp 형태
+	collSndDate	N	number	1705298638	rcvType이 2 인 경우 collStartDate, collEndDate 사이에 수집한 수신자에게 메시지를 발송 시작할 일시. rcvType 이 2 인 경우 반드시 입력해야한다. 9시부터 20시 이내의 시간이어야 하며 10분 단위 이하는 0으로 세팅된다. 수신자 수집 종료 일시보다 커야한다. 초단위 timestamp 형태
+	sndDayDiv	N	number	0	"rcvType이 1인 경우 Maptics 데이터를 일 균등 분할하여 발송 여부. 하루에 보내지는 최대 mdn 개수가 발송 목표 건수/발송 날짜로 제한된다. 입력하지 않으면 0으로 입력된다.
+
+- 0 : 미분할
+- 1 : 분할"
+	rtStartHhmm	N	String	"1600"	rcvType이 1인 경우 수집 기간중 발송 시작 시간. 0900 이상 2000 미만 10분 단위의 HHMM 포맷. rcvType이 1인 경우 반드시 입력해야한다.
+	rtEndHhmm	N	String	"2000"	rcvType이 1인 경우 수집 기간중 발송 종료 시간. 0900 초과 2000 이하 10분 단위의 HHMM 포맷. rcvType이 1인 경우 반드시 입력해야한다.
+	billingType	Y	number	0	"과금 유형 
+
+- 0 : LMS
+- 1 : RCS MMS
+- 2 : MMS
+- 3 : RCS LMS"
+	rcsType	N	number	0	"RCS 템플릿 구분. Billing type 이 RCS 인 경우에는 반드시 입력해야한다.
+
+- 0 : 스탠다드 
+- 1 : LMS 
+- 2 : 슬라이드 
+- 3 : 이미지 강조 A(3:4)
+- 4 : 이미지 강조 B(1:1)
+- 5 : 상품 소개 세로"
+	slideCnt	N	number	0	rcsType 이 2 일 때, 슬라이드 갯수. 슬라이드 템플릿이 아니면 0. 최대 6까지 사용할 수 있다.
+	mdnFileId	N	string	"19ca34b180394f15a9c66f798b65df95404202"	38자리의 mdn 파일 아이디. 최대 20만건의 데이터까지 입력할 수 있다. 파일 포맷은 [REST API - 파일 포맷] 참조. rcvType이 10인 경우 반드시 입력해야한다.
+	isTmp	Y	number	0	"임시 저장 데이터 인지 여부.
+
+- 0 : 아니오 
+- 1 : 네"
+	sndGeofenceId	N	number	571	지오펜스 생성시 받은 지오펜스 아이디. rcvType이 1, 2이면 반드시 입력해야한다.
+	sndMosu	N	number	10256	"ATS 에서 받은 발송 모수 카운트. rcvType이 0이면 반드시 입력해야 한다.
+최소값은 sndGoalCnt 의 150% 이며, 최대값은  400,000 이다."
+	sndMosuFlag	N	number	0	"sndMosu 카운트 150% 체크 사용 여부. 항목이 없으면 자동으로 0 으로 설정 된다.
+
+- 0 : sndMosu 150% 이상 조건 체크 사용 
+- 1 : sndMosu 150% 이상 조건 체크 사용 하지 않음"
+	sndMosuDesc	N	string	"<html><body><p>서울시 강남구, 남자, 25세 이상</p></body></html>"	발송 모수 구할 때 사용한 필터 설명. html 내용. rcvType이 0이면 반드시 입력해야한다.
+	sndMosuQuery	N	string	""	ATS 에서 받은 발송 모수 쿼리. 발송 대상 구할 때 사용. rcvType이 0이면 반드시 입력해야한다.
+	useCoupon	N	number	0	"쿠폰(코드삽입) 사용 여부. useCoupon 이 1 이라면 coupon 은 반듯이 존재 해야 한다.
+
+- 0 : 쿠폰(코드삽입) 사용 하지 않음 
+- 1 : 쿠폰(코드삽입) 사용"
+	coupon	N	string	f71a32d5b6353f7c84798ec94014c17f014202	"쿠폰 csv 파일의 아이디. useCoupon 이 1 이라면 반듯이 존재 해야 하며, useCoupon 이 0 이거나 값이 없으면 본 항목은 무시 된다.
+
+파일에 포함된 모든 쿠폰 문자열의 길이는 동일해야 하며, 쿠폰의 갯수는 sndGoalCnt 의 1.1배 이상이어야 한다"
+	adver	N	number	0	deprecated 항목. 클라이언트에서 전달한 값은 무시됨
+	adverDeny	N	string	"1504"	자동 추가될 광고 문구에서 사용할 무료 수신거부 전화 번호. 값이 없으면 1504로 자동 설정 한다.
+	free	N	number	0	"더 이상 사용 되지 않고 settleCnt 를 사용 하도록 한다.
+정산 금액 유료/무료 캠페인 구분. 값이 없으면 유료로 판단 한다.
+
+- 0 : 유료 
+- 1 : 무료"
+	settleCnt	Y	number	0	정산 건수. 정산시 설정된 건수 이상은 무료로 처리 된다.
+	rewardEndDate	N	number	1705298638	리워드를 사용 할때, 리워드를 지급할 제한 기간. 설정된 시간 이전에만 리워드가 지급 된다. 리워드 기능을 사용 할때는 필수값
+	cb	N	object	{}	캠패인 결과를 수신받을 callback url 정보. 제휴사에 등록된 callback url과 캠패인의 callback url 정보다 모두 없으면 report 하지 않는다.
+	cb.state	N	string	"https://www.google.com"	캠패인 상태 정보 변경 알림을 받을 callback url 정보
+	retarget	N	object list	[ ]	"이전 실행한 캠페인의 수신 mdn 을 참고하여 수신 mdn 을 제외 할 때 사용할 정보. list 에 포함 가능한 object 갯수는 최대 10개 이다.
+
+retarget.recv, retarget.react 둘 중 하나만 true 여야 한다. 둘 모두 true 이거나 false 일 경우 잘못된 요청으로 처리 된다."
+	retarget.id	Y	string	"19ca34b180394f15a9c66f798b65df95404203"	"제외할 mdn 을 포함하는 이전에 진행된 캠페인 아이디. 캠페인은 최소 1일 이전, 최대 6개월 이내에 진행된 캠페인의 아이디여야 한다.
+
+2025.01.17 이후에 진행된 캠페인만 사용 가능"
+	retarget.recv	Y	boolean	true 	수신 성공 mdn 제외 여부. true 일 경우 제외
+	retarget.react	Y	boolean	true 	반응(URL/버튼 클릭)한 mdn 제외 여부. true 일 경우 제외
+	mms	Y	object	{}	MMS 내용. 과금 유형이 RCS인 경우에는 수신자 단말이 RCS 수신이 부락한 경우 대신 보내지는 MMS이다.
+	mms.title	Y	string	"구정 이벤트"	MMS 메시지 제목. 최대 글자수는 30자
+	mms.msg	Y	string	"구정을 맞이하여 만원 이상 구매 고객에게 복조리를 증정해드립니다. [URL분석1]"	"메시지. URL 변수([URL분석1] 등) 입력시 초기 입력 글자 길이가 변경되며, 글자수 제한은 변환된 문자열 기준으로 제한 길이를 초과할 수 없다.
+
+- 최대 1000자"
+	mms.fileInfo	Y	object	{}	MMS 메시지 발송시 포함할 이미지 파일 정보. 파일이 포함되지 않으면 empty object
+	mms.fileInfo.list	N	object list	[ ]	MMS 파일 리스트. 1개까지 사용할 수 있다.
+	mms.fileInfo.list[].origId	Y	string	"19ca34b180394f15a9c66f798b65df95404202"	MMS 파일 아이디. 권장 사이즈는 300KB 미만, 해상도 400x240, 500x300 이며 최대 사이즈는 1MB, 해상도는 2000 x 2000 까지 사용할 수 있다
+	mms.urlFile	N	string	"19ca34b180394f15a9c66f798b65df95404202"	"메시지 마다 다른 URL 을 사용 하고 싶을때 사용하며, 미리 업로드한 URL을 포함하는 csv 파일의 아이디.
+본 항목을 사용하면 mms[].urlLink.list 항목은 무시 한다. 
+
+메시지에 포함된 [URL분석] 의 갯수와 동일한 칼럼을 가져야 하며, row 의 갯수는 발송 목표 보다 1.1배 이상이어야 한다."
+	mms.urlFileReward	N	number	0	"URL CSV 파일에서 리워드 링크로 사용할 URL 의 Index. mms.urlFile 값이 유효하지 않으면 무시 된다. 0 부터 시작하며, 0 보다 작은값이나 값이 없으면 reward 항목을 포함 시키지 않는다.
+
+메시지당 하나의 리워드 링크만 지원되는 되는 것에 유의 한다."
+	mms.urlLink	Y	object	{}	MMS 마케팅 URL 정보. 링크가 없을 때는 empty object
+	mms.urlLink.list	N	string list	[ ]	MMS 마케팅 URL 리스트. 3개까지 사용할 수 있다.
+	mms.urlLink.reward	N	number	0	"리워드가 적용될 URL 의 index. mms[].urlLink.list 에 포함된 URL 의 index 이며, 0 부터 시작 한다. 리워드 링크가 없다면 0 보다 작은 값이나, reward 항목을 포함 시키지 않도록 한다.
+
+메시지당 하나의 리워드 링크만 지원되는 되는 것에 유의 한다."
+	rcs	N	object list	[ ]	RCS 내용. 과금 유형이 RCS인 경우에만 유효하다.
+	rcs[].slideNum	Y	number	1	RCS 슬라이드 index. 슬라이드 템플릿이 아니면 1로 고정
+	rcs[].title	N	string	""	RCS 제목. 최대 글자 수는 30자
+	rcs[].msg	N	string	""	"RCS 메시지 본문. RCS 템플릿에 따라 사이즈 제한됨. URL 변수([URL분석1] 등) 입력시 초기 입력 글자 길이가 변경되며, 글자수 제한은 변환된 문자열 기준으로 제한 길이를 초과할 수 없다.
+
+- 스탠다드 : 1100자 
+- LMS : 1100자 
+- 슬라이드 : 슬라이드당 300자(모든 슬라이드 합산 1300 자 이내)
+- 이미지 강조 A : 1100자 
+- 이미지 강조 B : 1100자 
+- 상품 소개 세로 : 1100자"
+	rcs[].imgOrigId	N	string	"19ca34b180394f15a9c66f798b65df95404202"	"RCS 이미지 파일 아이디. RCS 템플릿에 따라 이미지 용량 제한이 있으며, RCS에 들어가는 전체 이미지 용량이 1MB를 초과할 수 없다. RCS MMS 타입에만 유효하다.
+
+- 스탠다드 : 최대 0.3MB, 400x240, 500x300
+- LMS : 이미지 없음 
+- 슬라이드 : 1MB, 장당 최대 300KB, 464x336
+- 이미지 강조 A : 최대 1MB, 900x1200
+- 이미지 강조 B : 최대 1MB, 900x900
+- 상품 소개 세로 : 최대 1MB, 900x560"
+	rcs[].urlFile	N	string	"19ca34b180394f15a9c66f798b65df95404202"	"각각의 메시지 마다 다른 URL 을 사용 하고 싶을때 사용하며, 미리 업로드한 URL을 포함하는 csv 파일의 아이디. 
+본 항목을 사용하면 rcs[].urlLink.list 항목을 무시 한다.
+
+메시지에 포함된 [URL분석] 의 갯수와 동일한 칼럼을 가져야 하며, row 의 갯수는 발송 목표 보다 1.1배 이상이어야 한다."
+	rcs[].urlFileReward	N	number	0	"URL CSV 파일에서 리워드 링크로 사용할 URL 의 Index. mms.urlFile 값이 유효하지 않으면 무시 된다. 0 부터 시작하며, 0 보다 작은값이나 값이 없으면 reward 항목을 포함 시키지 않는다.
+
+메시지당 하나의 리워드 링크만 지원되는 되는 것에 유의 한다."
+	rcs[].urlLink	Y	object	{}	RCS 마케팅 URL 정보. 링크가 없을 때는 empty object
+	rcs[].urlLink.list	N	string list	[ ]	"RCS 마케팅 URL 리스트. rcs type 별 사용할 수 있는 URL 분석 개수는 아래와 같다.
+
+- LMS : 3개
+- 스탠다드 : 3개
+- 슬라이드 : 슬라이드당 1개
+- 이미지강조A : 3개
+- 이미지강조B : 3개
+- 상품 소개 세로 : 3개"
+	rcs[].urlLink.reward	N	number	0	"리워드가 적용될 URL 의 index. rcs[].urlLink.list 에 포함된 URL 의 index 이며, 0 부터 시작 한다. 리워드 링크가 없다면 0 보다 작은 값이나, reward 항목을 포함 시키지 않도록 한다.
+
+메시지당 하나의 리워드 링크만 지원되는 되는 것에 유의 한다. 만일 버튼의 URL과 본문의 URL이 동일하다면 예외로 동시에 리워드 링크 지정 가능 하다."
+	rcs[].buttons	Y	object	{}	RCS 버튼 정보. 버튼이 없을 때는 empty object
+	rcs[].buttons.list	N	object list	[ ]	RCS 버튼 목록. 각 슬라이드별 최대 2개까지 입력 가능하다.
+	rcs[].buttons.list[].type	Y	string	"0"	"RCS 버튼 종류.
+
+- 0 : URL 연결 
+- 1 : 전화 걸기 
+- 2 : 지도 보여 주기"
+	rcs[].buttons.list[].name	Y	string	""	"RCS 버튼 텍스트
+
+- 스탠다드 : 17자 
+- LMS : 17자 
+- 슬라이드 : 슬라이드당 13자
+- 이미지 강조 A : 16자 
+- 이미지 강조 B : 16자 
+- 상품 소개 세로 : 16자"
+	rcs[].buttons.list[].val1	Y	string	""	"RCS 버튼 값1. 버튼 종류에 따라 다름.
+
+- URL 연결 : 버튼 클릭시 이동하는 URL 
+- 전화 걸기 : 전화 번호 
+- 지도 보여 주기 : 위치 이름(지도에서 검색 쿼리)"
+	rcs[].buttons.list[].val2	N	string	""	RCS 버튼 값2. 버튼 종류가 지도 보여 주기 일때 fallback URL 값. 지도 보여 주기가 아니면 empty string
+	rcs[].buttons.list[].reward	N	string	""	"리워드가 적용될 버튼인지 여부. 리워드가 적용될 버튼이면 1로 설정 한다.
+
+- 1 : 리워드가 설정될 버튼 
+- 그 외의 값 : 리워드가 설정될 버튼이 아님 
+
+메시지당 하나의 리워드 링크만 지원되는 되는 것에 유의 한다. 만일 버튼의 URL과 본문의 URL이 동일하다면 예외로 동시에 리워드 링크 지정 가능 하다."
+	rcs[].opts	Y	object	{}	RCS 상품 소개 옵션 정보. 상품 소개 세로 템플릿이 아닌 경우 empty object
+	rcs[].opts.list	N	object list	[ ]	RCS 옵션 목록. RCS 템플릿이 상품 소개 세로일 경우에 반드시 입력해야한다. 최소 2개에서 최대 3개까지 사용할 수 있다.
+	rcs[].opts.list[].origId	Y	string	"19ca34b180394f15a9c66f798b65df95404202"	RCS 선택 옵션의 이미지 파일 아이디. 해상도는 300x300 이어야 한다.
+	rcs[].opts.list[].descr	Y	string	"SKT 홈"	RCS 선택 옵션의 설명. 최대 33자
+	rcs[].opts.list[].link	Y	string	"https://www.tworld.co.kr/web/home"	RCS 선택 옵션의 링크
+Example(Query string)	tid=1706073253324				
+Example(Body)	"아래 데이터는 실제 데이터로 변환하여 입력해야한다.
+- atsSndStartDate : unix timestamp. 2024-06-05 09:00:00 → 1717545600
+- mdnFileId : 파일 업로드 API Response 로 받은 데이터의 id값. 파일 업로드 이후 받은 값을 사용 하도록 한다.
+
+{
+    ""tgtCompanyName"": ""유엔젤"",
+    ""name"": ""유엔젤 이벤트 (lms)"",
+    ""sndNum"": ""001001"",
+    ""rcvType"": 10,
+    ""sndGoalCnt"": 10,
+    ""atsSndStartDate"": 1717545600,
+    ""billingType"": 0,
+    ""mdnFileId"": ""ebe7525e815d3c01855e30c754bcc34f504202"",
+    ""isTmp"": 0,
+    ""mms"": {
+        ""title"": ""유엔젤 이벤트 (lms)"",
+        ""msg"": ""(lms) 구정을 맞이하여 만원 이상 구매 고객에게 복조리를 증정해드립니다. [URL분석1] [URL분석2] [URL분석3]"",
+        ""fileInfo"": {},
+        ""urlLink"": {
+            ""list"": [
+                ""https://www.google.com"",
+                ""https://www.apple.com"",
+                ""https://www.kakao.com""
+            ]
+        }
+    },
+    ""rcs"": [],
+    ""cb"": {}
+}"				
+					
+Response					
+구분	Parameter	Mandatory	Data Type	Value(Example)	Description
+Body	tid	Y	string	"1705298638704"	request 시 사용한 tid 값
+	code	Y	string	"S000001"	API 성공, 실패 코드
+	msg	Y	string	"success"	API 성공, 실패 메시지
+	data	Y	object	{}	캠패인 정보
+	data.id	Y	string	"19ca34b180394f15a9c66f798b65df95"	아이디
+Example	"{
+    ""tid"": ""1706073253324"",
+    ""code"": ""S000001"",
+    ""msg"": ""success"",
+    ""data"": {
+        ""id"": ""19ca34b180394f15a9c66f798b65df95""
+    }
+}"				
