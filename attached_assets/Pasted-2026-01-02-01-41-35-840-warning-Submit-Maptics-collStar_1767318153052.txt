@@ -1,0 +1,150 @@
+2026-01-02 01:41:35.840 [warning] [Submit] Maptics collStartDate warning: ⚠️ Maptics 캠페인은 수집 시작일 최소 24시간 전에 생성하시는 것을 권장합니다. 승인 절차를 고려해주세요.
+2026-01-02 01:41:35.869 [info] [Submit Create] Using sndMosu: 150 (from calculated)
+2026-01-02 01:41:35.869 [info] [Submit] Image is base64, uploading to BizChat file API...
+2026-01-02 01:41:37.574 [info] [Submit] Image uploaded successfully, fileId: 7c4fe57795cc3781812cc8510c298704106202
+2026-01-02 01:41:37.574 [info] [Submit] effectiveRcsType for slideNum check: 4
+2026-01-02 01:41:37.575 [info] [Submit] Maptics coll* calculation - scheduledSendTimestamp: 1767333600 (2026-01-02T06:00:00.000Z), KST date: 2026-1-2
+2026-01-02 01:41:37.575 [info] [Submit] rcvType=1: rtStart=15:0, rtEnd=17:0
+2026-01-02 01:41:37.575 [info] [Submit] rtStartTimestamp: 1767333600 (2026-01-02T06:00:00.000Z)
+2026-01-02 01:41:37.575 [info] [Submit] rtEndTimestamp: 1767340800 (2026-01-02T08:00:00.000Z)
+2026-01-02 01:41:37.575 [info] [Submit] Calculated collStart: 2026-01-02T06:00:00.000Z, collEnd: 2026-01-02T08:30:00.000Z
+2026-01-02 01:41:37.575 [info] [Submit] Maptics campaign fields - rcvType: 1, sndGeofenceId: 1650, collStartDate: 1767333600 (2026-01-02T06:00:00.000Z), collEndDate: 1767342600 (2026-01-02T08:30:00.000Z), rtStartHhmm: 1500, rtEndHhmm: 1700, sndDayDiv: 0
+2026-01-02 01:41:37.575 [info] [Submit] atsSndStartDate (adjusted): 1767333600 2026-01-02T06:00:00.000Z
+2026-01-02 01:41:37.576 [info] [Submit] Using campaign rcsType: 4
+2026-01-02 01:41:37.576 [info] [Submit] RCS type set to: 4 (campaign.rcsType: 4, billingType: 1, slides: 1)
+2026-01-02 01:41:37.576 [info] [Submit] Creating campaign in BizChat...
+2026-01-02 01:41:37.576 [info] [Submit] Full createPayload: {
+  "tgtCompanyName": "위픽",
+  "name": "251231",
+  "sndNum": "001001",
+  "rcvType": 1,
+  "sndGoalCnt": 100,
+  "billingType": 1,
+  "isTmp": 0,
+  "settleCnt": 100,
+  "sndMosu": 150,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-ccqsjbw3q-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "(광고)[SKT] 몰리또 대학로점 저녁 혜택 안내",
+    "msg": "몰리또 대학로점 저녁 혜택 안내드립니다.\n\n고객님, 안녕하세요.\n몰리도 대학로점에서 저녁 시간에 주문 시 나쵸 무료 서비스를 드립니다.\n \n▶ 저녁 혜택 받기: [URL분석1]\n \n■ 몰리도 대학로점 저녁 혜택 안내\n- 장소: 몰리도 대학로점(혜화역 3번 출구 도보 2분)\n- 시간: 오후 5시~오후 9시\n- 대상: 해당 문자 수신 고객님\n- 혜택\n① 주문 시 나쵸 무료 서비스\n② 매장 방문 시 즉시 혜택 적용\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.\n \n무료 수신거부 1504",
+    "fileInfo": {
+      "list": [
+        {
+          "origId": "7c4fe57795cc3781812cc8510c298704106202"
+        }
+      ]
+    },
+    "urlLink": {
+      "list": [
+        "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+      ]
+    }
+  },
+  "rcs": [
+    {
+      "title": "(광고)[SKT] 몰리또 대학로점 저녁 혜택 안내",
+      "msg": "몰리또 대학로점 저녁 혜택 안내드립니다.\n\n고객님, 안녕하세요.\n몰리도 대학로점에서 저녁 시간에 주문 시 나쵸 무료 서비스를 드립니다.\n \n▶ 저녁 혜택 받기: [URL분석1]\n \n■ 몰리도 대학로점 저녁 혜택 안내\n- 장소: 몰리도 대학로점(혜화역 3번 출구 도보 2분)\n- 시간: 오후 5시~오후 9시\n- 대상: 해당 문자 수신 고객님\n- 혜택\n① 주문 시 나쵸 무료 서비스\n② 매장 방문 시 즉시 혜택 적용\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.\n \n무료 수신거부 1504",
+      "imgOrigId": "7c4fe57795cc3781812cc8510c298704106202",
+      "urlLink": {
+        "list": [
+          "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+        ]
+      },
+      "buttons": {
+        "list": [
+          {
+            "name": "쿠폰받기",
+            "type": "0",
+            "val1": "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+          }
+        ]
+      },
+      "opts": {}
+    }
+  ],
+  "rtStartHhmm": "1500",
+  "rtEndHhmm": "1700",
+  "sndDayDiv": 0,
+  "sndGeofenceId": 1650,
+  "collStartDate": 1767333600,
+  "collEndDate": 1767342600,
+  "atsSndStartDate": 1767333600,
+  "rcsType": 4
+}
+2026-01-02 01:41:37.576 [info] [BizChat Submit] Environment: DEVELOPMENT
+2026-01-02 01:41:37.576 [info] [BizChat Submit] Looking for env var: BIZCHAT_DEV_API_KEY
+2026-01-02 01:41:37.576 [info] [BizChat Submit] API key exists: true, length: 64
+2026-01-02 01:41:37.576 [info] [BizChat Submit] VERCEL_ENV: production, NODE_ENV: production
+2026-01-02 01:41:37.577 [info] [BizChat] POST https://gw-dev.bizchat1.co.kr:8443/api/v1/cmpn/create?tid=1767318097576
+2026-01-02 01:41:37.577 [info] [BizChat] Request body: {
+  "tgtCompanyName": "위픽",
+  "name": "251231",
+  "sndNum": "001001",
+  "rcvType": 1,
+  "sndGoalCnt": 100,
+  "billingType": 1,
+  "isTmp": 0,
+  "settleCnt": 100,
+  "sndMosu": 150,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-ccqsjbw3q-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "(광고)[SKT] 몰리또 대학로점 저녁 혜택 안내",
+    "msg": "몰리또 대학로점 저녁 혜택 안내드립니다.\n\n고객님, 안녕하세요.\n몰리도 대학로점에서 저녁 시간에 주문 시 나쵸 무료 서비스를 드립니다.\n \n▶ 저녁 혜택 받기: [URL분석1]\n \n■ 몰리도 대학로점 저녁 혜택 안내\n- 장소: 몰리도 대학로점(혜화역 3번 출구 도보 2분)\n- 시간: 오후 5시~오후 9시\n- 대상: 해당 문자 수신 고객님\n- 혜택\n① 주문 시 나쵸 무료 서비스\n② 매장 방문 시 즉시 혜택 적용\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.\n \n무료 수신거부 1504",
+    "fileInfo": {
+      "list": [
+        {
+          "origId": "7c4fe57795cc3781812cc8510c298704106202"
+        }
+      ]
+    },
+    "urlLink": {
+      "list": [
+        "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+      ]
+    }
+  },
+  "rcs": [
+    {
+      "title": "(광고)[SKT] 몰리또 대학로점 저녁 혜택 안내",
+      "msg": "몰리또 대학로점 저녁 혜택 안내드립니다.\n\n고객님, 안녕하세요.\n몰리도 대학로점에서 저녁 시간에 주문 시 나쵸 무료 서비스를 드립니다.\n \n▶ 저녁 혜택 받기: [URL분석1]\n \n■ 몰리도 대학로점 저녁 혜택 안내\n- 장소: 몰리도 대학로점(혜화역 3번 출구 도보 2분)\n- 시간: 오후 5시~오후 9시\n- 대상: 해당 문자 수신 고객님\n- 혜택\n① 주문 시 나쵸 무료 서비스\n② 매장 방문 시 즉시 혜택 적용\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.\n \n무료 수신거부 1504",
+      "imgOrigId": "7c4fe57795cc3781812cc8510c298704106202",
+      "urlLink": {
+        "list": [
+          "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+        ]
+      },
+      "buttons": {
+        "list": [
+          {
+            "name": "쿠폰받기",
+            "type": "0",
+            "val1": "https://map.naver.com/p/entry/place/2082033149?lng=127.0002537&lat=37.5817469&placePath=%2Fhome&entry=plt&searchType=place"
+          }
+        ]
+      },
+      "opts": {}
+    }
+  ],
+  "rtStartHhmm": "1500",
+  "rtEndHhmm": "1700",
+  "sndDayDiv": 0,
+  "sndGeofenceId": 1650,
+  "collStartDate": 1767333600,
+  "collEndDate": 1767342600,
+  "atsSndStartDate": 1767333600,
+  "rcsType": 4
+}
+2026-01-02 01:41:37.789 [info] [BizChat] Response: 500 - {"tid":"1767318097576","code":"E000001","msg":"Failed"}
+2026-01-02 01:41:37.789 [error] [Submit] BizChat API error: { tid: '1767318097576', code: 'E000001', msg: 'Failed' }
+2026-01-02 01:41:33.914 [info] The `fetchConnectionCache` option is deprecated (now always `true`)
+2026-01-02 01:41:33.920 [info] [BizChat Submit] Force DEV mode: BIZCHAT_USE_PROD is not set to "true"
+2026-01-02 01:41:33.921 [info] [BizChat Submit] Environment: DEVELOPMENT (VERCEL_ENV=production)
+2026-01-02 01:41:34.061 [error] (node:4) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
