@@ -1132,15 +1132,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
       
       // RCS 배열 구성 - RCS 타입일 때만 포함, 아니면 완전히 생략
-      // BizChat API 규격: slideNum은 슬라이드형(rcsType=2)에서만 사용
-      // 이미지 강조 A/B (rcsType=3,4)에서는 slideNum 포함 시 E100038 오류 발생
+      // BizChat API 규격: slideNum은 모든 RCS 타입에서 필수 (누락 시 E000001 오류)
       // effectiveRcsType: campaign.rcsType이 유효하면 사용, 아니면 billingType에 따라 결정
       const effectiveRcsType = (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5)
         ? campaign.rcsType
         : (billingType === 1 ? 4 : 1);
-      console.log(`[Submit] effectiveRcsType for slideNum check: ${effectiveRcsType}`);
+      console.log(`[Submit] effectiveRcsType: ${effectiveRcsType}, including slideNum: 1`);
       const rcsSlide: Record<string, unknown> | null = isRcs ? {
-        ...(effectiveRcsType === 2 && { slideNum: 1 }),
+        slideNum: 1, // BizChat API 필수 필드 - 모든 RCS 타입에서 필요
         title: message?.title || '',
         msg: message?.content || '',
         ...(needsFile && imageFileId && { imgOrigId: imageFileId }),
