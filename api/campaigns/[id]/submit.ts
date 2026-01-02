@@ -1153,17 +1153,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         opts: (message as any)?.rcsOpts || {},
       } : null;
 
+      // Maptics 캠페인(rcvType=1,2) 여부 확인
+      // ATS 필드(sndMosu, sndMosuFlag, atsSndStartDate)는 ATS 캠페인(rcvType=0,10)에서만 사용
+      const rcvTypeForPayload = campaign.rcvType ?? 0;
+      const isMapticsCampaign = rcvTypeForPayload === 1 || rcvTypeForPayload === 2;
+      
       const createPayload: Record<string, unknown> = {
         tgtCompanyName: campaign.tgtCompanyName || '위픽',
         name: campaign.name,
         sndNum: campaign.sndNum,
-        rcvType: campaign.rcvType ?? 0,
+        rcvType: rcvTypeForPayload,
         sndGoalCnt: sndGoalCnt,
         billingType: billingType,
         isTmp: 0,
         settleCnt: campaign.settleCnt ?? sndGoalCnt,
-        sndMosu: sndMosu,
-        sndMosuFlag: 0, // 150% 체크 사용
+        // ATS 전용 필드: Maptics 캠페인에서는 제외 (E000001 오류 방지)
+        ...(!isMapticsCampaign && { sndMosu: sndMosu }),
+        ...(!isMapticsCampaign && { sndMosuFlag: 0 }), // 150% 체크 사용
         adverDeny: '1504',
         cb: {
           state: `${CALLBACK_BASE_URL}/api/bizchat/callback/state`,
@@ -1495,8 +1501,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('[Submit] sndMosuDesc:', createPayload.sndMosuDesc?.toString().substring(0, 200) + '...');
       }
 
-      // 10분 단위로 조정된 발송 시간 적용
-      if (adjustedSendDate) {
+      // 10분 단위로 조정된 발송 시간 적용 (ATS 캠페인에서만 - Maptics는 collStartDate 사용)
+      if (adjustedSendDate && !isMapticsCampaign) {
         const adjustedTimestamp = toUnixTimestamp(
           typeof adjustedSendDate === 'string' ? new Date(adjustedSendDate) : adjustedSendDate
         );
@@ -1705,17 +1711,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         opts: (message as any)?.rcsOpts || {},
       } : null;
       
+      // Maptics 캠페인(rcvType=1,2) 여부 확인
+      // ATS 필드(sndMosu, sndMosuFlag, atsSndStartDate)는 ATS 캠페인(rcvType=0,10)에서만 사용
+      const updateRcvTypeForPayload = campaign.rcvType ?? 0;
+      const updateIsMapticsCampaign = updateRcvTypeForPayload === 1 || updateRcvTypeForPayload === 2;
+      
       // 업데이트 페이로드 구성 - 빈 배열/객체 완전히 생략
       const updatePayload: Record<string, unknown> = {
         name: campaign.name,
         tgtCompanyName: campaign.tgtCompanyName || '위픽',
         sndNum: campaign.sndNum,
-        rcvType: campaign.rcvType ?? 0,
+        rcvType: updateRcvTypeForPayload,
         sndGoalCnt: sndGoalCnt,
         billingType: billingType,
         settleCnt: campaign.settleCnt ?? sndGoalCnt,
-        sndMosu: sndMosu,
-        sndMosuFlag: 0,
+        // ATS 전용 필드: Maptics 캠페인에서는 제외 (E000001 오류 방지)
+        ...(!updateIsMapticsCampaign && { sndMosu: sndMosu }),
+        ...(!updateIsMapticsCampaign && { sndMosuFlag: 0 }),
         isTmp: 0, // 필수 필드: 임시저장 여부 (0=아니오, 1=예) - BizChat API 규격: number 타입만 허용
         mms: updateMmsObject,
         // RCS 타입일 때만 rcs 배열 포함 (빈 배열 생략 - E000002 방지)
@@ -1966,8 +1978,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[Submit Update] Maptics campaign fields - rcvType: ${updateRcvType}, sndGeofenceId: ${updateBizchatGeofenceId}, collStartDate: ${updateCollStartTimestamp} (${new Date(updateCollStartTimestamp * 1000).toISOString()}), collEndDate: ${updateCollEndTimestamp} (${new Date(updateCollEndTimestamp * 1000).toISOString()}), rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
       }
       
-      // 발송 시간 업데이트
-      if (adjustedSendDate) {
+      // 발송 시간 업데이트 (ATS 캠페인에서만 - Maptics는 collStartDate 사용)
+      if (adjustedSendDate && !updateIsMapticsCampaign) {
         updatePayload.atsSndStartDate = toUnixTimestamp(
           typeof adjustedSendDate === 'string' ? new Date(adjustedSendDate) : adjustedSendDate
         );
