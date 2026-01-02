@@ -32,7 +32,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Search, ChevronLeft, ChevronRight, Loader2, Crown, UserX, UserCheck, LogIn, Building2 } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Loader2, Crown, UserX, UserCheck, LogIn, Building2, KeyRound } from "lucide-react";
 import type { User, Agency } from "@shared/schema";
 
 interface UsersResponse {
@@ -58,6 +58,8 @@ export default function AdminUsers() {
   const [agencyContactName, setAgencyContactName] = useState("");
   const [agencyContactPhone, setAgencyContactPhone] = useState("");
   const [agencyContactEmail, setAgencyContactEmail] = useState("");
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
   const { data, isLoading } = useQuery<UsersResponse>({
     queryKey: ["/api/admin/users", { search, page }],
@@ -205,6 +207,34 @@ export default function AdminUsers() {
     },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ userId, newPassword }: { userId: string; newPassword: string }) => {
+      const res = await fetch(`/api/admin/users/${userId}/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "비밀번호 재설정에 실패했습니다");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "비밀번호 재설정 완료", 
+        description: `${data.userEmail}의 비밀번호가 변경되었습니다` 
+      });
+      setPasswordDialogOpen(false);
+      setNewPassword("");
+      setSelectedUser(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "비밀번호 재설정 실패", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleBalanceSubmit = () => {
     if (!selectedUser || !balanceAmount || !balanceReason) {
       toast({ title: "모든 필드를 입력해주세요", variant: "destructive" });
@@ -324,6 +354,19 @@ export default function AdminUsers() {
                               data-testid={`button-impersonate-${user.id}`}
                             >
                               <LogIn className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setNewPassword("");
+                                setPasswordDialogOpen(true);
+                              }}
+                              title="비밀번호 재설정"
+                              data-testid={`button-reset-password-${user.id}`}
+                            >
+                              <KeyRound className="h-4 w-4" />
                             </Button>
                             <Button
                               size="sm"
@@ -530,6 +573,60 @@ export default function AdminUsers() {
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               대행사 등록
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>비밀번호 재설정</DialogTitle>
+            <DialogDescription>
+              {selectedUser?.email}의 비밀번호를 재설정합니다
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>새 비밀번호</Label>
+              <Input
+                type="text"
+                placeholder="최소 8자 이상"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                data-testid="input-new-password"
+              />
+              <p className="text-xs text-muted-foreground">
+                사용자에게 이 비밀번호를 전달해주세요. 로그인 후 변경을 권장합니다.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasswordDialogOpen(false)}>
+              취소
+            </Button>
+            <Button
+              onClick={() => {
+                if (!selectedUser || !newPassword) {
+                  toast({ title: "비밀번호를 입력해주세요", variant: "destructive" });
+                  return;
+                }
+                if (newPassword.length < 8) {
+                  toast({ title: "비밀번호는 최소 8자 이상이어야 합니다", variant: "destructive" });
+                  return;
+                }
+                resetPasswordMutation.mutate({
+                  userId: selectedUser.id,
+                  newPassword,
+                });
+              }}
+              disabled={resetPasswordMutation.isPending || newPassword.length < 8}
+              data-testid="button-confirm-password"
+            >
+              {resetPasswordMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              비밀번호 변경
             </Button>
           </DialogFooter>
         </DialogContent>
