@@ -1147,7 +1147,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
         ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(urlReward !== undefined && { reward: urlReward }) } }),
         ...(rcsButtons.length > 0 && { 
-          buttons: { list: rcsButtons.map((btn: any) => ({ ...btn, type: String(btn.type) })) }
+          buttons: { list: rcsButtons.map((btn: any) => ({ 
+            ...btn, 
+            type: String(btn.type),
+            val2: btn.val2 ?? '' // BizChat API 규격: val2 필드 필수 (지도 아니면 빈 문자열)
+          })) }
         }),
         // BizChat API 규격: opts 필드는 빈 객체라도 필수로 포함해야 함 (E100038 오류 방지)
         opts: (message as any)?.rcsOpts || {},
@@ -1705,7 +1709,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
         ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateUrlReward !== undefined && { reward: updateUrlReward }) } }),
         ...(updateRcsButtons.length > 0 && { 
-          buttons: { list: updateRcsButtons.map((btn: any) => ({ ...btn, type: String(btn.type) })) }
+          buttons: { list: updateRcsButtons.map((btn: any) => ({ 
+            ...btn, 
+            type: String(btn.type),
+            val2: btn.val2 ?? '' // BizChat API 규격: val2 필드 필수 (지도 아니면 빈 문자열)
+          })) }
         }),
         // BizChat API 규격: opts 필드는 빈 객체라도 필수로 포함해야 함 (E100038 오류 방지)
         opts: (message as any)?.rcsOpts || {},
