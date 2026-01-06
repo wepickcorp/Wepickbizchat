@@ -8,13 +8,18 @@ import { Image, Smartphone, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface VariableSchemaItem {
-  key: string;
+  key?: string;
+  name?: string;
   label: string;
   type: 'text' | 'number' | 'date' | 'dateRange' | 'tel' | 'url';
   required?: boolean;
   placeholder?: string;
   suffix?: string;
   format?: string;
+}
+
+function getVariableKey(variable: VariableSchemaItem): string {
+  return variable.key || variable.name || '';
 }
 
 interface RecommendedTemplate {
@@ -80,7 +85,7 @@ export default function TemplateVariableEditor({
   const previewContent = replaceVariables(template.contentTemplate, localValues);
 
   const missingRequired = variableSchema.filter(
-    v => v.required && !localValues[v.key]
+    v => v.required && !localValues[getVariableKey(v)]
   );
 
   const getRcsTypeLabel = (type?: number) => {
@@ -108,55 +113,58 @@ export default function TemplateVariableEditor({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {variableSchema.map((variable) => (
-              <div key={variable.key} className="space-y-2">
-                <Label htmlFor={variable.key} className="flex items-center gap-2">
-                  {variable.label}
-                  {variable.required && (
-                    <Badge variant="destructive" className="text-xs">필수</Badge>
-                  )}
-                  {variable.suffix && (
-                    <span className="text-xs text-muted-foreground">({variable.suffix})</span>
-                  )}
-                </Label>
-                
-                {variable.type === 'dateRange' ? (
-                  <div className="grid grid-cols-2 gap-2">
+            {variableSchema.map((variable) => {
+              const varKey = getVariableKey(variable);
+              return (
+                <div key={varKey} className="space-y-2">
+                  <Label htmlFor={varKey} className="flex items-center gap-2">
+                    {variable.label}
+                    {variable.required && (
+                      <Badge variant="destructive" className="text-xs">필수</Badge>
+                    )}
+                    {variable.suffix && (
+                      <span className="text-xs text-muted-foreground">({variable.suffix})</span>
+                    )}
+                  </Label>
+                  
+                  {variable.type === 'dateRange' ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="date"
+                        value={localValues[varKey]?.start || ''}
+                        onChange={(e) => handleChange(varKey, {
+                          ...localValues[varKey],
+                          start: e.target.value
+                        })}
+                        data-testid={`input-variable-${varKey}-start`}
+                      />
+                      <Input
+                        type="date"
+                        value={localValues[varKey]?.end || ''}
+                        onChange={(e) => handleChange(varKey, {
+                          ...localValues[varKey],
+                          end: e.target.value
+                        })}
+                        data-testid={`input-variable-${varKey}-end`}
+                      />
+                    </div>
+                  ) : (
                     <Input
-                      type="date"
-                      value={localValues[variable.key]?.start || ''}
-                      onChange={(e) => handleChange(variable.key, {
-                        ...localValues[variable.key],
-                        start: e.target.value
-                      })}
-                      data-testid={`input-variable-${variable.key}-start`}
+                      id={varKey}
+                      type={variable.type === 'number' ? 'number' : variable.type === 'date' ? 'date' : 'text'}
+                      placeholder={variable.placeholder || `${variable.label} 입력`}
+                      value={localValues[varKey] || ''}
+                      onChange={(e) => handleChange(varKey, e.target.value)}
+                      data-testid={`input-variable-${varKey}`}
                     />
-                    <Input
-                      type="date"
-                      value={localValues[variable.key]?.end || ''}
-                      onChange={(e) => handleChange(variable.key, {
-                        ...localValues[variable.key],
-                        end: e.target.value
-                      })}
-                      data-testid={`input-variable-${variable.key}-end`}
-                    />
-                  </div>
-                ) : (
-                  <Input
-                    id={variable.key}
-                    type={variable.type === 'number' ? 'number' : variable.type === 'date' ? 'date' : 'text'}
-                    placeholder={variable.placeholder || `${variable.label} 입력`}
-                    value={localValues[variable.key] || ''}
-                    onChange={(e) => handleChange(variable.key, e.target.value)}
-                    data-testid={`input-variable-${variable.key}`}
-                  />
-                )}
-                
-                {variable.format && (
-                  <p className="text-xs text-muted-foreground">형식: {variable.format}</p>
-                )}
-              </div>
-            ))}
+                  )}
+                  
+                  {variable.format && (
+                    <p className="text-xs text-muted-foreground">형식: {variable.format}</p>
+                  )}
+                </div>
+              );
+            })}
 
             {variableSchema.length === 0 && (
               <div className="text-center py-6 text-muted-foreground">
