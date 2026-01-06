@@ -92,6 +92,78 @@ export interface RcsButtonsConfig {
   list: RcsButton[]; // 버튼 목록 (최대 2개)
 }
 
+// 추천 메시지 업종 분류
+export const RECOMMENDED_CATEGORIES = [
+  { value: 'commerce', label: '커머스/쇼핑' },
+  { value: 'cafe_food', label: '카페/외식/프랜차이즈' },
+  { value: 'travel_culture', label: '여행/문화' },
+  { value: 'sports_health', label: '스포츠/건강' },
+  { value: 'education_life', label: '교육/라이프' },
+] as const;
+
+// 추천 메시지 목적 분류
+export const RECOMMENDED_PURPOSES = [
+  { value: 'signup', label: '회원가입 유도' },
+  { value: 'review_event', label: '리뷰 이벤트' },
+  { value: 'holiday_discount', label: '명절 특별 할인' },
+  { value: 'product_discount', label: '상품 할인 안내' },
+  { value: 'new_product', label: '신규 상품 안내' },
+  { value: 'new_product_discount', label: '신제품 할인 안내' },
+  { value: 'app_download', label: '앱 다운로드 이벤트' },
+  { value: 'offline_product_discount', label: '오프라인 행사 상품 할인 안내' },
+  { value: 'offline_event', label: '오프라인 행사 안내' },
+  { value: 'event', label: '이벤트 안내' },
+  { value: 'timedeal', label: '타임딜 이벤트' },
+  { value: 'special_product', label: '특가상품 안내' },
+] as const;
+
+export type RecommendedCategory = typeof RECOMMENDED_CATEGORIES[number]['value'];
+export type RecommendedPurpose = typeof RECOMMENDED_PURPOSES[number]['value'];
+
+// 변수 스키마 타입
+export interface VariableSchemaItem {
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'date' | 'dateRange' | 'tel' | 'url';
+  required?: boolean;
+  placeholder?: string;
+  suffix?: string;
+  format?: string;
+}
+
+// Recommended Templates table (추천 메시지 템플릿)
+export const recommendedTemplates = pgTable("recommended_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 200 }).notNull(),
+  category: varchar("category", { length: 50 }).notNull(), // 업종
+  purpose: varchar("purpose", { length: 50 }).notNull(), // 목적
+  version: varchar("version", { length: 20 }), // 버전 (v1, v1.1 등)
+  
+  // 메시지 내용 (변수 포함)
+  titleTemplate: varchar("title_template", { length: 60 }),
+  contentTemplate: text("content_template").notNull(),
+  variableSchema: jsonb("variable_schema").$type<VariableSchemaItem[]>(),
+  
+  // 이미지 및 메시지 타입
+  defaultImageUrl: text("default_image_url"),
+  messageType: varchar("message_type", { length: 10 }).default("RCS"),
+  rcsType: integer("rcs_type").default(4), // 이미지강조B가 기본
+  
+  // URL 및 버튼
+  urlLinks: jsonb("url_links").$type<UrlLinkConfig>(),
+  buttons: jsonb("buttons").$type<RcsButtonsConfig>(),
+  
+  // 상태
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  
+  // 원본 템플릿 참조 (선택적)
+  sourceTemplateId: varchar("source_template_id"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Message Templates table (검수용 템플릿)
 export const templates = pgTable("templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -188,6 +260,11 @@ export const campaigns = pgTable("campaigns", {
   
   // BizChat 연동
   bizchatCampaignId: varchar("bizchat_campaign_id", { length: 100 }),
+  
+  // 추천 메시지 관련
+  creationMode: varchar("creation_mode", { length: 20 }), // 'recommended' | 'self'
+  recommendedTemplateId: varchar("recommended_template_id"), // 추천 템플릿 ID
+  variableValues: jsonb("variable_values"), // 변수 입력값 저장
   
   // 기타
   rejectionReason: text("rejection_reason"),
@@ -429,6 +506,12 @@ export const insertTemplateSchema = createInsertSchema(templates).omit({
   reviewedAt: true,
 });
 
+export const insertRecommendedTemplateSchema = createInsertSchema(recommendedTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertCampaignSchema = createInsertSchema(campaigns).omit({
   id: true,
   createdAt: true,
@@ -498,6 +581,9 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 
 export type Template = typeof templates.$inferSelect;
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
+
+export type RecommendedTemplate = typeof recommendedTemplates.$inferSelect;
+export type InsertRecommendedTemplate = z.infer<typeof insertRecommendedTemplateSchema>;
 
 export type Campaign = typeof campaigns.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
