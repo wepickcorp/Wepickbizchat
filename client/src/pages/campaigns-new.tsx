@@ -57,7 +57,33 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import TargetingAdvanced, { type AdvancedTargetingState } from "@/components/targeting-advanced";
+import CreationModeSelector, { type CreationMode } from "@/components/campaign-creation-mode-selector";
+import RecommendedTemplateSelector from "@/components/recommended-template-selector";
+import TemplateVariableEditor from "@/components/template-variable-editor";
 import type { Template } from "@shared/schema";
+
+interface RecommendedTemplate {
+  id: string;
+  name: string;
+  category: string;
+  purpose: string;
+  titleTemplate?: string;
+  contentTemplate: string;
+  variableSchema?: {
+    key: string;
+    label: string;
+    type: 'text' | 'number' | 'date' | 'dateRange' | 'tel' | 'url';
+    required?: boolean;
+    placeholder?: string;
+    suffix?: string;
+    format?: string;
+  }[];
+  defaultImageUrl?: string;
+  messageType?: string;
+  rcsType?: number;
+  urlLinks?: { list: string[]; reward?: number };
+  buttons?: { list: { type: string; name: string; val1: string; val2?: string }[] };
+}
 
 interface BizChatSenderNumber {
   id?: string;           // 발신번호코드 (캠페인 생성 시 sndNum에 사용)
@@ -84,11 +110,29 @@ const campaignSchema = z.object({
 
 type CampaignFormData = z.infer<typeof campaignSchema>;
 
-const steps = [
-  { id: 1, title: "템플릿 선택", icon: FileText },
-  { id: 2, title: "타겟 설정", icon: Users },
-  { id: 3, title: "예산 및 확인", icon: CheckCircle2 },
-];
+// 스텝 0: 발송 방식 선택 (공통)
+// 추천 메시지 경로: 1=추천메시지선택, 2=변수입력+타겟, 3=예산
+// 셀프 메시지 경로: 1=템플릿선택, 2=타겟, 3=예산
+const getSteps = (mode: CreationMode) => {
+  if (!mode) {
+    return [{ id: 0, title: "발송 방식 선택", icon: FilePlus }];
+  }
+  if (mode === 'recommended') {
+    return [
+      { id: 0, title: "발송 방식", icon: FilePlus },
+      { id: 1, title: "추천 메시지", icon: MessageSquare },
+      { id: 2, title: "상세 설정", icon: Users },
+      { id: 3, title: "예산 및 확인", icon: CheckCircle2 },
+    ];
+  }
+  // self mode
+  return [
+    { id: 0, title: "발송 방식", icon: FilePlus },
+    { id: 1, title: "템플릿 선택", icon: FileText },
+    { id: 2, title: "타겟 설정", icon: Users },
+    { id: 3, title: "예산 및 확인", icon: CheckCircle2 },
+  ];
+};
 
 const regions = [
   "서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종",
@@ -120,7 +164,14 @@ export default function CampaignsNew() {
   
   const { user } = useAuth();
   const { toast } = useToast();
-  const [currentStep, setCurrentStep] = useState(1);
+  
+  // 발송 방식 선택 (추천 메시지 vs 셀프 메시지)
+  const [creationMode, setCreationMode] = useState<CreationMode>(null);
+  const [selectedRecommendedTemplate, setSelectedRecommendedTemplate] = useState<RecommendedTemplate | null>(null);
+  const [variableValues, setVariableValues] = useState<Record<string, any>>({});
+  
+  // 스텝: 0=발송방식선택, 추천메시지(1=템플릿선택,2=변수입력+타겟,3=예산), 셀프(1=템플릿,2=타겟,3=예산)
+  const [currentStep, setCurrentStep] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showAdvancedTargeting, setShowAdvancedTargeting] = useState(false);
   const [advancedTargeting, setAdvancedTargetingState] = useState<AdvancedTargetingState>({
@@ -586,7 +637,7 @@ export default function CampaignsNew() {
       </div>
 
       <div className="flex items-center justify-center gap-2 mb-8">
-        {steps.map((step, index) => (
+        {getSteps(creationMode).map((step, index, arr) => (
           <div key={step.id} className="flex items-center">
             <button
               onClick={() => currentStep > step.id && setCurrentStep(step.id)}
@@ -605,7 +656,7 @@ export default function CampaignsNew() {
               <span className="text-small font-medium hidden md:inline">{step.title}</span>
               <span className="text-small font-medium md:hidden">{step.id}</span>
             </button>
-            {index < steps.length - 1 && (
+            {index < arr.length - 1 && (
               <div className={cn(
                 "w-8 h-0.5 mx-1",
                 currentStep > step.id ? "bg-success" : "bg-muted"
@@ -617,7 +668,247 @@ export default function CampaignsNew() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} onKeyDown={handleKeyDown} className="space-y-6">
-          {currentStep === 1 && (
+          {/* Step 0: 발송 방식 선택 */}
+          {currentStep === 0 && (
+            <div className="space-y-6">
+              <CreationModeSelector
+                selectedMode={creationMode}
+                onSelectMode={(mode) => {
+                  setCreationMode(mode);
+                  // 모드 선택시 바로 다음 스텝으로
+                  if (mode) {
+                    setCurrentStep(1);
+                    // 셀프 모드 선택 시 추천 템플릿 관련 상태 초기화
+                    if (mode === 'self') {
+                      setSelectedRecommendedTemplate(null);
+                      setVariableValues({});
+                    }
+                  }
+                }}
+              />
+            </div>
+          )}
+          
+          {/* Step 1: 추천 메시지 선택 (추천 모드) */}
+          {currentStep === 1 && creationMode === 'recommended' && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>캠페인 정보</CardTitle>
+                  <CardDescription>캠페인 이름을 입력해주세요</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>캠페인 이름</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="예: 2024년 연말 프로모션" 
+                            {...field} 
+                            data-testid="input-campaign-name-recommended"
+                          />
+                        </FormControl>
+                        <FormDescription>캠페인을 구분할 수 있는 이름을 입력해주세요</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+              
+              <RecommendedTemplateSelector
+                selectedTemplateId={selectedRecommendedTemplate?.id || null}
+                onSelectTemplate={(template) => {
+                  setSelectedRecommendedTemplate(template);
+                  setVariableValues({});
+                }}
+              />
+              
+              <div className="flex justify-between pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => {
+                    setCurrentStep(0);
+                    setCreationMode(null);
+                  }}
+                  data-testid="button-prev-step"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  이전
+                </Button>
+                <Button 
+                  type="button" 
+                  onClick={() => setCurrentStep(2)}
+                  disabled={!selectedRecommendedTemplate || !form.watch("name")}
+                  data-testid="button-next-step"
+                >
+                  다음
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          {/* Step 2: 변수 입력 + 타겟팅 (추천 모드) */}
+          {currentStep === 2 && creationMode === 'recommended' && selectedRecommendedTemplate && (
+            <div className="space-y-6">
+              <TemplateVariableEditor
+                template={selectedRecommendedTemplate}
+                variableValues={variableValues}
+                onVariableChange={(key, value) => {
+                  setVariableValues(prev => ({ ...prev, [key]: value }));
+                }}
+                onAllVariablesChange={setVariableValues}
+              />
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>타겟팅 설정</CardTitle>
+                  <CardDescription>광고를 받을 대상을 설정해주세요</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="sndNum"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>발신번호</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-sender-number-recommended">
+                              <SelectValue placeholder="발신번호를 선택해주세요" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {senderNumbers.map((sender) => (
+                              <SelectItem 
+                                key={sender.id || sender.code} 
+                                value={sender.id || sender.code || ''}
+                              >
+                                {sender.name} ({sender.num || sender.number})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="gender"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>성별</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-gender-recommended">
+                                <SelectValue placeholder="성별 선택" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="all">전체</SelectItem>
+                              <SelectItem value="male">남성</SelectItem>
+                              <SelectItem value="female">여성</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <div className="space-y-2">
+                      <Label>연령대</Label>
+                      <div className="flex items-center gap-2">
+                        <FormField
+                          control={form.control}
+                          name="ageMin"
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              min={10}
+                              max={100}
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value) || 20)}
+                              data-testid="input-age-min-recommended"
+                            />
+                          )}
+                        />
+                        <span>~</span>
+                        <FormField
+                          control={form.control}
+                          name="ageMax"
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              min={10}
+                              max={100}
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value) || 60)}
+                              data-testid="input-age-max-recommended"
+                            />
+                          )}
+                        />
+                        <span>세</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <FormField
+                    control={form.control}
+                    name="targetCount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>발송 목표 건수</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={100}
+                            step={100}
+                            {...field}
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || 1000)}
+                            data-testid="input-target-count-recommended"
+                          />
+                        </FormControl>
+                        <FormDescription>최소 100건 이상</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+              
+              <div className="flex justify-between pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setCurrentStep(1)}
+                  data-testid="button-prev-step-2"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  이전
+                </Button>
+                <Button 
+                  type="button" 
+                  onClick={() => setCurrentStep(3)}
+                  disabled={!form.watch("sndNum")}
+                  data-testid="button-next-step-2"
+                >
+                  다음
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          {/* Step 1: 기존 템플릿 선택 (셀프 모드) */}
+          {currentStep === 1 && creationMode === 'self' && (
             <div className="space-y-6">
               <Card>
                 <CardHeader>
@@ -825,10 +1116,35 @@ export default function CampaignsNew() {
                   </CardContent>
                 </Card>
               )}
+              
+              <div className="flex justify-between pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => {
+                    setCurrentStep(0);
+                    setCreationMode(null);
+                  }}
+                  data-testid="button-prev-step-self"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  이전
+                </Button>
+                <Button 
+                  type="button" 
+                  onClick={() => setCurrentStep(2)}
+                  disabled={!form.watch("templateId") || !form.watch("name") || !form.watch("sndNum")}
+                  data-testid="button-next-step-self"
+                >
+                  다음
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
             </div>
           )}
 
-          {currentStep === 2 && (
+          {/* Step 2: 타겟 설정 (셀프 모드) */}
+          {currentStep === 2 && creationMode === 'self' && (
             <div className="space-y-6">
             <Card>
               <CardHeader>
