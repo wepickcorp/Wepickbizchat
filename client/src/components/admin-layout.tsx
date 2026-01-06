@@ -14,7 +14,8 @@ import {
   RefreshCcw,
   Receipt,
   BarChart3,
-  TrendingUp
+  TrendingUp,
+  MessageSquarePlus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const navItems = [
   { href: "/admin", icon: LayoutDashboard, label: "대시보드" },
   { href: "/admin/users", icon: Users, label: "광고주 관리" },
   { href: "/admin/campaigns", icon: Megaphone, label: "캠페인" },
+  { href: "/admin/recommended-templates", icon: MessageSquarePlus, label: "추천 메시지" },
   { href: "/admin/transactions", icon: CreditCard, label: "결제 내역" },
   { href: "/admin/announcements", icon: Bell, label: "공지사항" },
   { href: "/admin/refunds", icon: RefreshCcw, label: "환불 관리" },
