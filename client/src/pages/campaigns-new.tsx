@@ -260,14 +260,15 @@ export default function CampaignsNew() {
     const slots: { value: string; label: string; period: string }[] = [];
     
     const isToday = date.toDateString() === new Date().toDateString();
-    const startHour = isToday ? minTime.getHours() : 9;
-    const startMinute = isToday ? minTime.getMinutes() : 0;
+    // 발송 가능 시간: 오전 8시 ~ 오후 8시 (KST)
+    const startHour = isToday ? Math.max(minTime.getHours(), 8) : 8;
+    const startMinute = isToday && minTime.getHours() >= 8 ? minTime.getMinutes() : 0;
     
     const slotDate = new Date(date);
     slotDate.setHours(startHour, startMinute, 0, 0);
     
     const endTime = new Date(date);
-    endTime.setHours(21, 0, 0, 0);
+    endTime.setHours(20, 0, 0, 0); // 오후 8시까지
     
     while (slotDate <= endTime) {
       const hours = slotDate.getHours();
@@ -355,7 +356,7 @@ export default function CampaignsNew() {
   // 실제 BizChat 발신번호 코드 매핑 (API 문서 기준)
   // 발신번호코드(id)를 캠페인 생성 시 sndNum으로 사용해야 함
   const FALLBACK_SENDER_NUMBERS: BizChatSenderNumber[] = [
-    { id: "001001", num: "16700823", name: "SK텔레콤 혜택 알림", state: 1 },
+    { id: "001001", num: "16700823", name: "SK텔레콤 제휴 혜택 알림", state: 1 },
     { id: "001005", num: "16702305", name: "SK텔레콤 우리 동네 혜택 알림", state: 1 },
   ];
 
@@ -1629,62 +1630,74 @@ export default function CampaignsNew() {
                   ) : (
                     /* 일반 ATS 모드: 발송 일시 설정 */
                     <div className="space-y-4">
-                    <RadioGroup
-                      value={useScheduledSend ? "scheduled" : "immediate"}
-                      onValueChange={(value) => {
-                        setUseScheduledSend(value === "scheduled");
-                        if (value === "immediate") {
-                          form.setValue("scheduledAt", undefined);
-                        } else {
-                          const minTime = getMinScheduledTime();
-                          form.setValue("scheduledAt", minTime.toISOString());
-                        }
-                      }}
-                      className="grid grid-cols-2 gap-4"
-                    >
-                      <div className="relative">
-                        <RadioGroupItem
-                          value="immediate"
-                          id="send-immediate"
-                          className="peer sr-only"
-                        />
-                        <Label
-                          htmlFor="send-immediate"
-                          className={cn(
-                            "flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 cursor-pointer transition-colors",
-                            "hover:bg-accent hover:text-accent-foreground",
-                            !useScheduledSend && "border-primary bg-primary/5"
-                          )}
-                          data-testid="radio-send-immediate"
-                        >
-                          <Clock className="mb-2 h-6 w-6" />
-                          <span className="font-medium">바로 발송</span>
-                          <span className="text-tiny text-muted-foreground mt-1">승인 후 즉시 발송</span>
-                        </Label>
+                    {/* 셀프 모드: 예약발송만 가능, 추천 모드: 빠른발송/예약발송 선택 가능 */}
+                    {creationMode === 'self' ? (
+                      /* 셀프 모드: 예약발송만 표시 */
+                      <div className="flex flex-col items-center justify-center rounded-lg border-2 border-primary bg-primary/5 p-4">
+                        <Calendar className="mb-2 h-6 w-6 text-primary" />
+                        <span className="font-medium">예약 발송</span>
+                        <span className="text-tiny text-muted-foreground mt-1">원하는 시간에 발송</span>
                       </div>
-                      <div className="relative">
-                        <RadioGroupItem
-                          value="scheduled"
-                          id="send-scheduled"
-                          className="peer sr-only"
-                        />
-                        <Label
-                          htmlFor="send-scheduled"
-                          className={cn(
-                            "flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 cursor-pointer transition-colors",
-                            "hover:bg-accent hover:text-accent-foreground",
-                            useScheduledSend && "border-primary bg-primary/5"
-                          )}
-                          data-testid="radio-send-scheduled"
-                        >
-                          <Calendar className="mb-2 h-6 w-6" />
-                          <span className="font-medium">예약 발송</span>
-                          <span className="text-tiny text-muted-foreground mt-1">원하는 시간에 발송</span>
-                        </Label>
-                      </div>
-                    </RadioGroup>
+                    ) : (
+                      /* 추천 모드: 빠른발송/예약발송 선택 가능 */
+                      <RadioGroup
+                        value={useScheduledSend ? "scheduled" : "immediate"}
+                        onValueChange={(value) => {
+                          setUseScheduledSend(value === "scheduled");
+                          if (value === "immediate") {
+                            form.setValue("scheduledAt", undefined);
+                          } else {
+                            const minTime = getMinScheduledTime();
+                            form.setValue("scheduledAt", minTime.toISOString());
+                          }
+                        }}
+                        className="grid grid-cols-2 gap-4"
+                      >
+                        <div className="relative">
+                          <RadioGroupItem
+                            value="immediate"
+                            id="send-immediate"
+                            className="peer sr-only"
+                          />
+                          <Label
+                            htmlFor="send-immediate"
+                            className={cn(
+                              "flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 cursor-pointer transition-colors",
+                              "hover:bg-accent hover:text-accent-foreground",
+                              !useScheduledSend && "border-primary bg-primary/5"
+                            )}
+                            data-testid="radio-send-immediate"
+                          >
+                            <Clock className="mb-2 h-6 w-6" />
+                            <span className="font-medium">빠른 발송</span>
+                            <span className="text-tiny text-muted-foreground mt-1">SKT 자동검수 후 발송</span>
+                          </Label>
+                        </div>
+                        <div className="relative">
+                          <RadioGroupItem
+                            value="scheduled"
+                            id="send-scheduled"
+                            className="peer sr-only"
+                          />
+                          <Label
+                            htmlFor="send-scheduled"
+                            className={cn(
+                              "flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 cursor-pointer transition-colors",
+                              "hover:bg-accent hover:text-accent-foreground",
+                              useScheduledSend && "border-primary bg-primary/5"
+                            )}
+                            data-testid="radio-send-scheduled"
+                          >
+                            <Calendar className="mb-2 h-6 w-6" />
+                            <span className="font-medium">예약 발송</span>
+                            <span className="text-tiny text-muted-foreground mt-1">원하는 시간에 발송</span>
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    )}
 
-                    {useScheduledSend && (
+                    {/* 셀프 모드는 항상 예약발송, 추천 모드는 예약발송 선택 시에만 표시 */}
+                    {(creationMode === 'self' || useScheduledSend) && (
                       <div className="space-y-4">
                         {/* 빠른 선택 */}
                         <div>
@@ -1746,7 +1759,7 @@ export default function CampaignsNew() {
                               {getGroupedTimeSlots(selectedScheduleDate).map((group) => (
                                 <div key={group.period}>
                                   <div className="text-tiny font-medium text-muted-foreground mb-1.5 sticky top-0 bg-background py-1">
-                                    {group.period} ({group.period === "오전" ? "9:00-11:50" : group.period === "오후" ? "12:00-17:50" : "18:00-21:00"})
+                                    {group.period} ({group.period === "오전" ? "8:00-11:50" : group.period === "오후" ? "12:00-17:50" : "18:00-20:00"})
                                   </div>
                                   <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-1.5">
                                     {group.slots.map((slot) => (
