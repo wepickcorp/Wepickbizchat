@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +36,11 @@ interface VariableSchemaEditorProps {
 
 export function VariableSchemaEditor({ value, onChange, contentTemplate }: VariableSchemaEditorProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+  // 템플릿 변경 시 편집 상태 리셋
+  useEffect(() => {
+    setEditingIndex(null);
+  }, [value]);
 
   const addVariable = () => {
     const newVariable: VariableSchemaItem = {

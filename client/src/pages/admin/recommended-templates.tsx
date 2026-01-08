@@ -12,38 +12,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Eye, Search, Copy, Check } from "lucide-react";
-
-interface VariableSchemaItem {
-  key: string;
-  label: string;
-  type: 'text' | 'number' | 'date' | 'dateRange' | 'tel' | 'url';
-  required?: boolean;
-  placeholder?: string;
-  suffix?: string;
-  format?: string;
-}
-
-// 추천 템플릿용 타겟팅 설정 타입
-interface RecommendedTargetingConfig {
-  mode: 'ats-general' | 'ats-advanced' | 'maptics';
-  targetGender?: 'all' | 'male' | 'female';
-  targetAgeStart?: number;
-  targetAgeEnd?: number;
-  advancedOptions?: {
-    sndMosu?: number;
-    areas?: string[];
-    interests?: string[];
-  };
-  mapticsOptions?: {
-    radius?: number;
-    geofences?: Array<{ lat: number; lng: number; radius: number; name?: string }>;
-    rcvType?: 1 | 2;
-    rtStartHhmm?: string;
-    rtEndHhmm?: string;
-  };
-}
+import { VariableSchemaEditor, type VariableSchemaItem } from "@/components/admin/variable-schema-editor";
+import { TargetingConfigEditor, type RecommendedTargetingConfig } from "@/components/admin/targeting-config-editor";
 
 interface RecommendedTemplate {
   id: string;
@@ -103,8 +76,8 @@ export default function AdminRecommendedTemplates() {
     sortOrder: 0,
     targetingConfig: undefined,
   });
-  const [variableSchemaText, setVariableSchemaText] = useState('[]');
-  const [targetingConfigText, setTargetingConfigText] = useState('');
+  const [variableSchema, setVariableSchema] = useState<VariableSchemaItem[]>([]);
+  const [targetingConfig, setTargetingConfig] = useState<RecommendedTargetingConfig | undefined>(undefined);
 
   const { data, isLoading } = useQuery<{ templates: RecommendedTemplate[]; categories: FilterOption[]; purposes: FilterOption[] }>({
     queryKey: ["/api/recommended-templates", categoryFilter, purposeFilter],
@@ -206,8 +179,8 @@ export default function AdminRecommendedTemplates() {
       sortOrder: 0,
       targetingConfig: undefined,
     });
-    setVariableSchemaText('[]');
-    setTargetingConfigText('');
+    setVariableSchema([]);
+    setTargetingConfig(undefined);
   };
 
   const openEditDialog = (template: RecommendedTemplate) => {
@@ -226,60 +199,39 @@ export default function AdminRecommendedTemplates() {
       sortOrder: template.sortOrder ?? 0,
       targetingConfig: template.targetingConfig,
     });
-    setVariableSchemaText(JSON.stringify(template.variableSchema || [], null, 2));
-    setTargetingConfigText(template.targetingConfig ? JSON.stringify(template.targetingConfig, null, 2) : '');
+    setVariableSchema(template.variableSchema || []);
+    setTargetingConfig(template.targetingConfig);
   };
 
   const handleSubmit = () => {
-    try {
-      const variableSchema = JSON.parse(variableSchemaText);
-      let targetingConfig = undefined;
-      if (targetingConfigText.trim()) {
-        const parsed = JSON.parse(targetingConfigText);
-        // 타겟팅 설정 유효성 검사
-        if (!parsed.mode || !['ats-general', 'ats-advanced', 'maptics'].includes(parsed.mode)) {
-          toast({ 
-            title: "타겟팅 설정 오류", 
-            description: "mode 필드는 'ats-general', 'ats-advanced', 'maptics' 중 하나여야 합니다",
-            variant: "destructive" 
-          });
-          return;
-        }
-        if (parsed.targetGender && !['all', 'male', 'female'].includes(parsed.targetGender)) {
-          toast({ 
-            title: "타겟팅 설정 오류", 
-            description: "targetGender 필드는 'all', 'male', 'female' 중 하나여야 합니다",
-            variant: "destructive" 
-          });
-          return;
-        }
-        if (parsed.mode === 'maptics' && parsed.mapticsOptions?.geofences) {
-          for (const geo of parsed.mapticsOptions.geofences) {
-            if (typeof geo.lat !== 'number' || typeof geo.lng !== 'number') {
-              toast({ 
-                title: "타겟팅 설정 오류", 
-                description: "geofences의 lat, lng 필드는 숫자여야 합니다",
-                variant: "destructive" 
-              });
-              return;
-            }
-          }
-        }
-        targetingConfig = parsed;
-      }
-      const submitData = {
-        ...formData,
-        variableSchema,
-        targetingConfig,
-      };
-      
-      if (editingTemplate) {
-        updateMutation.mutate({ id: editingTemplate.id, data: submitData });
-      } else {
-        createMutation.mutate(submitData);
-      }
-    } catch {
-      toast({ title: "JSON 형식이 올바르지 않습니다 (변수 스키마 또는 타겟팅 설정)", variant: "destructive" });
+    // 필수 필드 검증
+    if (!formData.name?.trim()) {
+      toast({ title: "템플릿 이름을 입력해주세요", variant: "destructive" });
+      return;
+    }
+    if (!formData.category) {
+      toast({ title: "업종을 선택해주세요", variant: "destructive" });
+      return;
+    }
+    if (!formData.purpose) {
+      toast({ title: "목적을 선택해주세요", variant: "destructive" });
+      return;
+    }
+    if (!formData.contentTemplate?.trim()) {
+      toast({ title: "본문 템플릿을 입력해주세요", variant: "destructive" });
+      return;
+    }
+
+    const submitData = {
+      ...formData,
+      variableSchema,
+      targetingConfig,
+    };
+    
+    if (editingTemplate) {
+      updateMutation.mutate({ id: editingTemplate.id, data: submitData });
+    } else {
+      createMutation.mutate(submitData);
     }
   };
 
@@ -298,8 +250,8 @@ export default function AdminRecommendedTemplates() {
       sortOrder: (template.sortOrder ?? 0) + 1,
       targetingConfig: template.targetingConfig,
     });
-    setVariableSchemaText(JSON.stringify(template.variableSchema || [], null, 2));
-    setTargetingConfigText(template.targetingConfig ? JSON.stringify(template.targetingConfig, null, 2) : '');
+    setVariableSchema(template.variableSchema || []);
+    setTargetingConfig(template.targetingConfig);
     setShowCreateDialog(true);
   };
 
@@ -336,10 +288,10 @@ export default function AdminRecommendedTemplates() {
             <TemplateForm 
               formData={formData}
               setFormData={setFormData}
-              variableSchemaText={variableSchemaText}
-              setVariableSchemaText={setVariableSchemaText}
-              targetingConfigText={targetingConfigText}
-              setTargetingConfigText={setTargetingConfigText}
+              variableSchema={variableSchema}
+              setVariableSchema={setVariableSchema}
+              targetingConfig={targetingConfig}
+              setTargetingConfig={setTargetingConfig}
               categories={data?.categories || []}
               purposes={data?.purposes || []}
             />
@@ -467,10 +419,10 @@ export default function AdminRecommendedTemplates() {
                               <TemplateForm 
                                 formData={formData}
                                 setFormData={setFormData}
-                                variableSchemaText={variableSchemaText}
-                                setVariableSchemaText={setVariableSchemaText}
-                                targetingConfigText={targetingConfigText}
-                                setTargetingConfigText={setTargetingConfigText}
+                                variableSchema={variableSchema}
+                                setVariableSchema={setVariableSchema}
+                                targetingConfig={targetingConfig}
+                                setTargetingConfig={setTargetingConfig}
                                 categories={data?.categories || []}
                                 purposes={data?.purposes || []}
                               />
@@ -546,198 +498,186 @@ export default function AdminRecommendedTemplates() {
 function TemplateForm({
   formData,
   setFormData,
-  variableSchemaText,
-  setVariableSchemaText,
-  targetingConfigText,
-  setTargetingConfigText,
+  variableSchema,
+  setVariableSchema,
+  targetingConfig,
+  setTargetingConfig,
   categories,
   purposes,
 }: {
   formData: Partial<RecommendedTemplate>;
   setFormData: (data: Partial<RecommendedTemplate>) => void;
-  variableSchemaText: string;
-  setVariableSchemaText: (text: string) => void;
-  targetingConfigText: string;
-  setTargetingConfigText: (text: string) => void;
+  variableSchema: VariableSchemaItem[];
+  setVariableSchema: (schema: VariableSchemaItem[]) => void;
+  targetingConfig: RecommendedTargetingConfig | undefined;
+  setTargetingConfig: (config: RecommendedTargetingConfig | undefined) => void;
   categories: FilterOption[];
   purposes: FilterOption[];
 }) {
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">템플릿 이름 *</Label>
-          <Input
-            id="name"
-            value={formData.name || ''}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="예: 커머스 회원가입 유도"
-            data-testid="input-template-name"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="sortOrder">정렬 순서</Label>
-          <Input
-            id="sortOrder"
-            type="number"
-            value={formData.sortOrder || 0}
-            onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
-            data-testid="input-sort-order"
-          />
-        </div>
-      </div>
+    <ScrollArea className="h-[70vh] pr-4">
+      <div className="space-y-6">
+        {/* 기본 정보 */}
+        <div className="space-y-4">
+          <h3 className="font-medium text-sm text-muted-foreground">기본 정보</h3>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">템플릿 이름 *</Label>
+              <Input
+                id="name"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="예: 커머스 회원가입 유도"
+                data-testid="input-template-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sortOrder">정렬 순서</Label>
+              <Input
+                id="sortOrder"
+                type="number"
+                value={formData.sortOrder || 0}
+                onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
+                data-testid="input-sort-order"
+              />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>업종 *</Label>
-          <Select 
-            value={formData.category || ''} 
-            onValueChange={(v) => setFormData({ ...formData, category: v })}
-          >
-            <SelectTrigger data-testid="select-category">
-              <SelectValue placeholder="업종 선택" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((cat) => (
-                <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label>목적 *</Label>
-          <Select 
-            value={formData.purpose || ''} 
-            onValueChange={(v) => setFormData({ ...formData, purpose: v })}
-          >
-            <SelectTrigger data-testid="select-purpose">
-              <SelectValue placeholder="목적 선택" />
-            </SelectTrigger>
-            <SelectContent>
-              {purposes.map((pur) => (
-                <SelectItem key={pur.value} value={pur.value}>{pur.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>업종 *</Label>
+              <Select 
+                value={formData.category || ''} 
+                onValueChange={(v) => setFormData({ ...formData, category: v })}
+              >
+                <SelectTrigger data-testid="select-category">
+                  <SelectValue placeholder="업종 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>목적 *</Label>
+              <Select 
+                value={formData.purpose || ''} 
+                onValueChange={(v) => setFormData({ ...formData, purpose: v })}
+              >
+                <SelectTrigger data-testid="select-purpose">
+                  <SelectValue placeholder="목적 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {purposes.map((pur) => (
+                    <SelectItem key={pur.value} value={pur.value}>{pur.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>메시지 타입</Label>
-          <Select 
-            value={formData.messageType || 'RCS'} 
-            onValueChange={(v) => setFormData({ ...formData, messageType: v })}
-          >
-            <SelectTrigger data-testid="select-message-type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="RCS">RCS</SelectItem>
-              <SelectItem value="MMS">MMS</SelectItem>
-              <SelectItem value="LMS">LMS</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label>RCS 타입</Label>
-          <Select 
-            value={String(formData.rcsType ?? 4)} 
-            onValueChange={(v) => setFormData({ ...formData, rcsType: parseInt(v) })}
-          >
-            <SelectTrigger data-testid="select-rcs-type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(RCS_TYPE_LABELS).map(([val, label]) => (
-                <SelectItem key={val} value={val}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>메시지 타입</Label>
+              <Select 
+                value={formData.messageType || 'RCS'} 
+                onValueChange={(v) => setFormData({ ...formData, messageType: v })}
+              >
+                <SelectTrigger data-testid="select-message-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="RCS">RCS</SelectItem>
+                  <SelectItem value="MMS">MMS</SelectItem>
+                  <SelectItem value="LMS">LMS</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>RCS 타입</Label>
+              <Select 
+                value={String(formData.rcsType ?? 4)} 
+                onValueChange={(v) => setFormData({ ...formData, rcsType: parseInt(v) })}
+              >
+                <SelectTrigger data-testid="select-rcs-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(RCS_TYPE_LABELS).map(([val, label]) => (
+                    <SelectItem key={val} value={val}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="titleTemplate">제목 템플릿</Label>
-        <Input
-          id="titleTemplate"
-          value={formData.titleTemplate || ''}
-          onChange={(e) => setFormData({ ...formData, titleTemplate: e.target.value })}
-          placeholder="예: {브랜드명} 회원가입 혜택 안내"
-          data-testid="input-title-template"
+          <div className="flex items-center gap-2">
+            <Switch
+              id="isActive"
+              checked={formData.isActive ?? true}
+              onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+              data-testid="switch-is-active"
+            />
+            <Label htmlFor="isActive">활성화</Label>
+          </div>
+        </div>
+
+        {/* 메시지 내용 */}
+        <div className="space-y-4">
+          <h3 className="font-medium text-sm text-muted-foreground">메시지 내용</h3>
+          
+          <div className="space-y-2">
+            <Label htmlFor="titleTemplate">제목 템플릿</Label>
+            <Input
+              id="titleTemplate"
+              value={formData.titleTemplate || ''}
+              onChange={(e) => setFormData({ ...formData, titleTemplate: e.target.value })}
+              placeholder="예: {브랜드명} 회원가입 혜택 안내"
+              data-testid="input-title-template"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="contentTemplate">본문 템플릿 *</Label>
+            <Textarea
+              id="contentTemplate"
+              value={formData.contentTemplate || ''}
+              onChange={(e) => setFormData({ ...formData, contentTemplate: e.target.value })}
+              placeholder="예: 지금 {브랜드명} 신규가입하고 {할인율}% 할인받으세요!"
+              rows={6}
+              data-testid="input-content-template"
+            />
+            <p className="text-xs text-muted-foreground">변수는 {`{변수명}`} 형식으로 입력합니다</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="defaultImageUrl">기본 이미지 URL</Label>
+            <Input
+              id="defaultImageUrl"
+              value={formData.defaultImageUrl || ''}
+              onChange={(e) => setFormData({ ...formData, defaultImageUrl: e.target.value })}
+              placeholder="https://..."
+              data-testid="input-default-image"
+            />
+          </div>
+        </div>
+
+        {/* 변수 설정 - 시각적 편집기 */}
+        <VariableSchemaEditor
+          value={variableSchema}
+          onChange={setVariableSchema}
+          contentTemplate={formData.contentTemplate}
+        />
+
+        {/* 타겟팅 설정 - 시각적 편집기 */}
+        <TargetingConfigEditor
+          value={targetingConfig}
+          onChange={setTargetingConfig}
         />
       </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="contentTemplate">본문 템플릿 *</Label>
-        <Textarea
-          id="contentTemplate"
-          value={formData.contentTemplate || ''}
-          onChange={(e) => setFormData({ ...formData, contentTemplate: e.target.value })}
-          placeholder="예: 지금 {브랜드명} 신규가입하고 {할인율}% 할인받으세요!"
-          rows={6}
-          data-testid="input-content-template"
-        />
-        <p className="text-xs text-muted-foreground">변수는 {`{변수명}`} 형식으로 입력합니다</p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="defaultImageUrl">기본 이미지 URL</Label>
-        <Input
-          id="defaultImageUrl"
-          value={formData.defaultImageUrl || ''}
-          onChange={(e) => setFormData({ ...formData, defaultImageUrl: e.target.value })}
-          placeholder="https://..."
-          data-testid="input-default-image"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="variableSchema">변수 스키마 (JSON)</Label>
-        <Textarea
-          id="variableSchema"
-          value={variableSchemaText}
-          onChange={(e) => setVariableSchemaText(e.target.value)}
-          rows={8}
-          className="font-mono text-sm"
-          placeholder='[{"key": "brandName", "label": "브랜드명", "type": "text", "required": true}]'
-          data-testid="input-variable-schema"
-        />
-        <p className="text-xs text-muted-foreground">
-          type: text, number, date, dateRange, tel, url
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="targetingConfig">타겟팅 설정 (JSON, 선택)</Label>
-        <Textarea
-          id="targetingConfig"
-          value={targetingConfigText}
-          onChange={(e) => setTargetingConfigText(e.target.value)}
-          rows={6}
-          className="font-mono text-sm"
-          placeholder={`{
-  "mode": "ats-general",
-  "targetGender": "all",
-  "targetAgeStart": 20,
-  "targetAgeEnd": 50
-}`}
-          data-testid="input-targeting-config"
-        />
-        <p className="text-xs text-muted-foreground">
-          mode: ats-general (일반 ATS), ats-advanced (고급 ATS), maptics (지오펜스)
-        </p>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Switch
-          id="isActive"
-          checked={formData.isActive ?? true}
-          onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
-          data-testid="switch-is-active"
-        />
-        <Label htmlFor="isActive">활성화</Label>
-      </div>
-    </div>
+    </ScrollArea>
   );
 }
