@@ -25,6 +25,26 @@ interface VariableSchemaItem {
   format?: string;
 }
 
+// 추천 템플릿용 타겟팅 설정 타입
+interface RecommendedTargetingConfig {
+  mode: 'ats-general' | 'ats-advanced' | 'maptics';
+  targetGender?: 'all' | 'male' | 'female';
+  targetAgeStart?: number;
+  targetAgeEnd?: number;
+  advancedOptions?: {
+    sndMosu?: number;
+    areas?: string[];
+    interests?: string[];
+  };
+  mapticsOptions?: {
+    radius?: number;
+    geofences?: Array<{ lat: number; lng: number; radius: number; name?: string }>;
+    rcvType?: 1 | 2;
+    rtStartHhmm?: string;
+    rtEndHhmm?: string;
+  };
+}
+
 interface RecommendedTemplate {
   id: string;
   name: string;
@@ -41,6 +61,7 @@ interface RecommendedTemplate {
   buttons?: { list: { type: string; name: string; val1: string; val2?: string }[] };
   isActive?: boolean;
   sortOrder?: number;
+  targetingConfig?: RecommendedTargetingConfig;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -80,8 +101,10 @@ export default function AdminRecommendedTemplates() {
     rcsType: 4,
     isActive: true,
     sortOrder: 0,
+    targetingConfig: undefined,
   });
   const [variableSchemaText, setVariableSchemaText] = useState('[]');
+  const [targetingConfigText, setTargetingConfigText] = useState('');
 
   const { data, isLoading } = useQuery<{ templates: RecommendedTemplate[]; categories: FilterOption[]; purposes: FilterOption[] }>({
     queryKey: ["/api/recommended-templates", categoryFilter, purposeFilter],
@@ -181,8 +204,10 @@ export default function AdminRecommendedTemplates() {
       rcsType: 4,
       isActive: true,
       sortOrder: 0,
+      targetingConfig: undefined,
     });
     setVariableSchemaText('[]');
+    setTargetingConfigText('');
   };
 
   const openEditDialog = (template: RecommendedTemplate) => {
@@ -199,16 +224,23 @@ export default function AdminRecommendedTemplates() {
       rcsType: template.rcsType ?? 4,
       isActive: template.isActive ?? true,
       sortOrder: template.sortOrder ?? 0,
+      targetingConfig: template.targetingConfig,
     });
     setVariableSchemaText(JSON.stringify(template.variableSchema || [], null, 2));
+    setTargetingConfigText(template.targetingConfig ? JSON.stringify(template.targetingConfig, null, 2) : '');
   };
 
   const handleSubmit = () => {
     try {
       const variableSchema = JSON.parse(variableSchemaText);
+      let targetingConfig = undefined;
+      if (targetingConfigText.trim()) {
+        targetingConfig = JSON.parse(targetingConfigText);
+      }
       const submitData = {
         ...formData,
         variableSchema,
+        targetingConfig,
       };
       
       if (editingTemplate) {
@@ -217,7 +249,7 @@ export default function AdminRecommendedTemplates() {
         createMutation.mutate(submitData);
       }
     } catch {
-      toast({ title: "변수 스키마 JSON 형식이 올바르지 않습니다", variant: "destructive" });
+      toast({ title: "JSON 형식이 올바르지 않습니다 (변수 스키마 또는 타겟팅 설정)", variant: "destructive" });
     }
   };
 
@@ -234,8 +266,10 @@ export default function AdminRecommendedTemplates() {
       rcsType: template.rcsType ?? 4,
       isActive: false,
       sortOrder: (template.sortOrder ?? 0) + 1,
+      targetingConfig: template.targetingConfig,
     });
     setVariableSchemaText(JSON.stringify(template.variableSchema || [], null, 2));
+    setTargetingConfigText(template.targetingConfig ? JSON.stringify(template.targetingConfig, null, 2) : '');
     setShowCreateDialog(true);
   };
 
@@ -274,6 +308,8 @@ export default function AdminRecommendedTemplates() {
               setFormData={setFormData}
               variableSchemaText={variableSchemaText}
               setVariableSchemaText={setVariableSchemaText}
+              targetingConfigText={targetingConfigText}
+              setTargetingConfigText={setTargetingConfigText}
               categories={data?.categories || []}
               purposes={data?.purposes || []}
             />
@@ -403,6 +439,8 @@ export default function AdminRecommendedTemplates() {
                                 setFormData={setFormData}
                                 variableSchemaText={variableSchemaText}
                                 setVariableSchemaText={setVariableSchemaText}
+                                targetingConfigText={targetingConfigText}
+                                setTargetingConfigText={setTargetingConfigText}
                                 categories={data?.categories || []}
                                 purposes={data?.purposes || []}
                               />
@@ -480,6 +518,8 @@ function TemplateForm({
   setFormData,
   variableSchemaText,
   setVariableSchemaText,
+  targetingConfigText,
+  setTargetingConfigText,
   categories,
   purposes,
 }: {
@@ -487,6 +527,8 @@ function TemplateForm({
   setFormData: (data: Partial<RecommendedTemplate>) => void;
   variableSchemaText: string;
   setVariableSchemaText: (text: string) => void;
+  targetingConfigText: string;
+  setTargetingConfigText: (text: string) => void;
   categories: FilterOption[];
   purposes: FilterOption[];
 }) {
@@ -633,6 +675,27 @@ function TemplateForm({
         />
         <p className="text-xs text-muted-foreground">
           type: text, number, date, dateRange, tel, url
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="targetingConfig">타겟팅 설정 (JSON, 선택)</Label>
+        <Textarea
+          id="targetingConfig"
+          value={targetingConfigText}
+          onChange={(e) => setTargetingConfigText(e.target.value)}
+          rows={6}
+          className="font-mono text-sm"
+          placeholder={`{
+  "mode": "ats-general",
+  "targetGender": "all",
+  "targetAgeStart": 20,
+  "targetAgeEnd": 50
+}`}
+          data-testid="input-targeting-config"
+        />
+        <p className="text-xs text-muted-foreground">
+          mode: ats-general (일반 ATS), ats-advanced (고급 ATS), maptics (지오펜스)
         </p>
       </div>
 
