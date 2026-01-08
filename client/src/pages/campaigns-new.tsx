@@ -755,48 +755,26 @@ export default function CampaignsNew() {
                     if (config.mode === 'maptics') {
                       newTargeting.targetingMode = 'maptics';
                       if (config.mapticsOptions) {
-                        newTargeting.rcvType = config.mapticsOptions.rcvType || 1;
+                        newTargeting.mapticsSendType = config.mapticsOptions.rcvType === 2 ? 'batch' : 'realtime';
                         newTargeting.rtStartHhmm = config.mapticsOptions.rtStartHhmm || '0900';
                         newTargeting.rtEndHhmm = config.mapticsOptions.rtEndHhmm || '2000';
-                        // geofence radius 포함하여 모든 필드 적용
-                        if (config.mapticsOptions.geofences) {
-                          newTargeting.geofences = config.mapticsOptions.geofences.map((g, i) => ({
-                            id: `preset-${i}`,
-                            lat: g.lat,
-                            lng: g.lng,
-                            radius: g.radius, // 저장된 radius 값 그대로 사용
-                            name: g.name || `위치 ${i + 1}`,
-                          }));
-                        }
-                        // 기본 반경 설정
-                        if (config.mapticsOptions.radius) {
-                          newTargeting.defaultRadius = config.mapticsOptions.radius;
-                        }
                       }
                     } else if (config.mode === 'ats-advanced') {
                       // 고급 ATS 모드 - ats 모드 + 고급 옵션 활성화
                       newTargeting.targetingMode = 'ats';
-                      newTargeting.rcvType = 0; // ATS
                       // 고급 설정 UI 표시 (별도 상태 변수 사용)
                       setShowAdvancedTargeting(true);
                       if (config.advancedOptions?.sndMosu) {
                         newTargeting.sndMosu = config.advancedOptions.sndMosu;
                       }
-                      if (config.advancedOptions?.areas) {
-                        newTargeting.areaIds = config.advancedOptions.areas;
-                      }
-                      if (config.advancedOptions?.interests) {
-                        newTargeting.interestIds = config.advancedOptions.interests;
-                      }
+                      // areas와 interests는 locations/profiling으로 변환 필요
+                      // 현재는 단순 매핑이므로 UI에서 직접 선택하도록 안내
                     } else {
                       // 일반 ATS 모드 - 고급 설정 숨김
                       newTargeting.targetingMode = 'ats';
-                      newTargeting.rcvType = 0; // ATS
                       setShowAdvancedTargeting(false);
                       // 이전 고급 설정 값 초기화
                       newTargeting.sndMosu = undefined;
-                      newTargeting.areaIds = [];
-                      newTargeting.interestIds = [];
                     }
                     
                     // 성별/나이 설정

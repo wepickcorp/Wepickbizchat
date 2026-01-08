@@ -15,7 +15,27 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Eye, Search, Copy, Check } from "lucide-react";
 import { VariableSchemaEditor, type VariableSchemaItem } from "@/components/admin/variable-schema-editor";
-import { TargetingConfigEditor, type RecommendedTargetingConfig } from "@/components/admin/targeting-config-editor";
+import TargetingAdvanced, { type AdvancedTargetingState } from "@/components/targeting-advanced";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
+interface RecommendedTargetingConfig {
+  mode: 'ats-general' | 'ats-advanced' | 'maptics';
+  targetGender?: 'all' | 'male' | 'female';
+  targetAgeStart?: number;
+  targetAgeEnd?: number;
+  advancedOptions?: {
+    sndMosu?: number;
+    areas?: string[];
+    interests?: string[];
+  };
+  mapticsOptions?: {
+    radius?: number;
+    geofences?: Array<{ lat: number; lng: number; radius: number; name?: string }>;
+    rcvType?: 1 | 2;
+    rtStartHhmm?: string;
+    rtEndHhmm?: string;
+  };
+}
 
 interface RecommendedTemplate {
   id: string;
@@ -77,6 +97,24 @@ export default function AdminRecommendedTemplates() {
   });
   const [variableSchema, setVariableSchema] = useState<VariableSchemaItem[]>([]);
   const [targetingConfig, setTargetingConfig] = useState<RecommendedTargetingConfig | undefined>(undefined);
+  
+  // TargetingAdvanced 컴포넌트용 상태
+  const [advancedTargeting, setAdvancedTargeting] = useState<AdvancedTargetingState>({
+    targetingMode: 'ats',
+    shopping11stCategories: [],
+    webappCategories: [],
+    callCategories: [],
+    locations: [],
+    profiling: [],
+    geofences: [],
+  });
+  const [basicTargeting, setBasicTargeting] = useState({
+    gender: 'all' as 'all' | 'male' | 'female',
+    ageMin: 20,
+    ageMax: 60,
+    regions: [] as string[],
+  });
+  const [targetingEnabled, setTargetingEnabled] = useState(false);
 
   const { data, isLoading } = useQuery<{ templates: RecommendedTemplate[]; categories: FilterOption[]; purposes: FilterOption[] }>({
     queryKey: ["/api/recommended-templates", categoryFilter, purposeFilter],
@@ -180,6 +218,22 @@ export default function AdminRecommendedTemplates() {
     });
     setVariableSchema([]);
     setTargetingConfig(undefined);
+    setAdvancedTargeting({
+      targetingMode: 'ats',
+      shopping11stCategories: [],
+      webappCategories: [],
+      callCategories: [],
+      locations: [],
+      profiling: [],
+      geofences: [],
+    });
+    setBasicTargeting({
+      gender: 'all',
+      ageMin: 20,
+      ageMax: 60,
+      regions: [],
+    });
+    setTargetingEnabled(false);
   };
 
   const openEditDialog = (template: RecommendedTemplate) => {
@@ -200,6 +254,64 @@ export default function AdminRecommendedTemplates() {
     });
     setVariableSchema(template.variableSchema || []);
     setTargetingConfig(template.targetingConfig);
+    
+    // 타겟팅 상태 복원
+    const tpl = template as RecommendedTemplate & { 
+      advancedTargetingState?: AdvancedTargetingState;
+      basicTargetingState?: { gender: 'all' | 'male' | 'female'; ageMin: number; ageMax: number; regions: string[] };
+    };
+    
+    if (tpl.advancedTargetingState) {
+      setAdvancedTargeting(tpl.advancedTargetingState);
+      setTargetingEnabled(true);
+    } else if (template.targetingConfig) {
+      // targetingConfig에서 변환 (카테고리, 지오펜스 포함)
+      const advOpts = template.targetingConfig.advancedOptions;
+      const mapOpts = template.targetingConfig.mapticsOptions;
+      
+      setTargetingEnabled(true);
+      setAdvancedTargeting({
+        targetingMode: template.targetingConfig.mode === 'maptics' ? 'maptics' : 'ats',
+        sndMosu: typeof advOpts?.sndMosu === 'number' ? advOpts.sndMosu : 0,
+        mapticsSendType: mapOpts?.rcvType === 2 ? 'batch' : 'realtime',
+        rtStartHhmm: mapOpts?.rtStartHhmm || '0900',
+        rtEndHhmm: mapOpts?.rtEndHhmm || '1800',
+        shopping11stCategories: advOpts?.shopping11stCategories || [],
+        webappCategories: advOpts?.webappCategories || [],
+        callCategories: advOpts?.callCategories || [],
+        locations: [], // areas 코드를 Location 객체로 변환하려면 추가 로직 필요
+        profiling: [], // interests 코드를 Profiling 객체로 변환하려면 추가 로직 필요
+        geofences: mapOpts?.geofences || [],
+      });
+    } else {
+      setTargetingEnabled(false);
+      setAdvancedTargeting({
+        targetingMode: 'ats',
+        sndMosu: 0,
+        mapticsSendType: 'realtime',
+        rtStartHhmm: '0900',
+        rtEndHhmm: '1800',
+        shopping11stCategories: [],
+        webappCategories: [],
+        callCategories: [],
+        locations: [],
+        profiling: [],
+        geofences: [],
+      });
+    }
+    
+    if (tpl.basicTargetingState) {
+      setBasicTargeting(tpl.basicTargetingState);
+    } else if (template.targetingConfig) {
+      setBasicTargeting({
+        gender: template.targetingConfig.targetGender || 'all',
+        ageMin: template.targetingConfig.targetAgeStart || 20,
+        ageMax: template.targetingConfig.targetAgeEnd || 60,
+        regions: [],
+      });
+    } else {
+      setBasicTargeting({ gender: 'all', ageMin: 20, ageMax: 60, regions: [] });
+    }
   };
 
   const handleSubmit = () => {
@@ -221,10 +333,56 @@ export default function AdminRecommendedTemplates() {
       return;
     }
 
+    // 타겟팅 데이터 변환: advancedTargeting + basicTargeting -> targetingConfig
+    let finalTargetingConfig: RecommendedTargetingConfig | undefined = undefined;
+    if (targetingEnabled) {
+      const hasAdvancedAts = (advancedTargeting.sndMosu && advancedTargeting.sndMosu > 0) || 
+                    advancedTargeting.shopping11stCategories.length > 0 ||
+                    advancedTargeting.webappCategories.length > 0 ||
+                    advancedTargeting.callCategories.length > 0 ||
+                    advancedTargeting.locations.length > 0 ||
+                    advancedTargeting.profiling.length > 0;
+      
+      const mode = advancedTargeting.targetingMode === 'maptics' ? 'maptics' : 
+                   hasAdvancedAts ? 'ats-advanced' : 'ats-general';
+      
+      finalTargetingConfig = {
+        mode,
+        targetGender: basicTargeting.gender as 'all' | 'male' | 'female',
+        targetAgeStart: basicTargeting.ageMin,
+        targetAgeEnd: basicTargeting.ageMax,
+      };
+
+      // 고급 ATS 옵션 저장 (카테고리 포함)
+      if (mode === 'ats-advanced') {
+        finalTargetingConfig.advancedOptions = {
+          sndMosu: typeof advancedTargeting.sndMosu === 'number' ? advancedTargeting.sndMosu : 0,
+          areas: advancedTargeting.locations.map(l => l.code),
+          interests: advancedTargeting.profiling.map(p => p.code),
+          shopping11stCategories: advancedTargeting.shopping11stCategories,
+          webappCategories: advancedTargeting.webappCategories,
+          callCategories: advancedTargeting.callCategories,
+        };
+      }
+
+      // Maptics 옵션 저장 (지오펜스 포함)
+      if (mode === 'maptics') {
+        finalTargetingConfig.mapticsOptions = {
+          rcvType: advancedTargeting.mapticsSendType === 'batch' ? 2 : 1,
+          rtStartHhmm: advancedTargeting.rtStartHhmm,
+          rtEndHhmm: advancedTargeting.rtEndHhmm,
+          geofences: advancedTargeting.geofences,
+        };
+      }
+    }
+
     const submitData = {
       ...formData,
       variableSchema,
-      targetingConfig,
+      targetingConfig: finalTargetingConfig,
+      // AdvancedTargetingState도 저장 (캠페인 생성 시 그대로 사용)
+      advancedTargetingState: targetingEnabled ? advancedTargeting : undefined,
+      basicTargetingState: targetingEnabled ? basicTargeting : undefined,
     };
     
     if (editingTemplate) {
@@ -289,8 +447,12 @@ export default function AdminRecommendedTemplates() {
               setFormData={setFormData}
               variableSchema={variableSchema}
               setVariableSchema={setVariableSchema}
-              targetingConfig={targetingConfig}
-              setTargetingConfig={setTargetingConfig}
+              advancedTargeting={advancedTargeting}
+              setAdvancedTargeting={setAdvancedTargeting}
+              basicTargeting={basicTargeting}
+              setBasicTargeting={setBasicTargeting}
+              targetingEnabled={targetingEnabled}
+              setTargetingEnabled={setTargetingEnabled}
               categories={data?.categories || []}
               purposes={data?.purposes || []}
             />
@@ -420,8 +582,12 @@ export default function AdminRecommendedTemplates() {
                                 setFormData={setFormData}
                                 variableSchema={variableSchema}
                                 setVariableSchema={setVariableSchema}
-                                targetingConfig={targetingConfig}
-                                setTargetingConfig={setTargetingConfig}
+                                advancedTargeting={advancedTargeting}
+                                setAdvancedTargeting={setAdvancedTargeting}
+                                basicTargeting={basicTargeting}
+                                setBasicTargeting={setBasicTargeting}
+                                targetingEnabled={targetingEnabled}
+                                setTargetingEnabled={setTargetingEnabled}
                                 categories={data?.categories || []}
                                 purposes={data?.purposes || []}
                               />
@@ -499,8 +665,12 @@ function TemplateForm({
   setFormData,
   variableSchema,
   setVariableSchema,
-  targetingConfig,
-  setTargetingConfig,
+  advancedTargeting,
+  setAdvancedTargeting,
+  basicTargeting,
+  setBasicTargeting,
+  targetingEnabled,
+  setTargetingEnabled,
   categories,
   purposes,
 }: {
@@ -508,8 +678,12 @@ function TemplateForm({
   setFormData: (data: Partial<RecommendedTemplate>) => void;
   variableSchema: VariableSchemaItem[];
   setVariableSchema: (schema: VariableSchemaItem[]) => void;
-  targetingConfig: RecommendedTargetingConfig | undefined;
-  setTargetingConfig: (config: RecommendedTargetingConfig | undefined) => void;
+  advancedTargeting: AdvancedTargetingState;
+  setAdvancedTargeting: (state: AdvancedTargetingState) => void;
+  basicTargeting: { gender: 'all' | 'male' | 'female'; ageMin: number; ageMax: number; regions: string[] };
+  setBasicTargeting: (state: { gender: 'all' | 'male' | 'female'; ageMin: number; ageMax: number; regions: string[] }) => void;
+  targetingEnabled: boolean;
+  setTargetingEnabled: (enabled: boolean) => void;
   categories: FilterOption[];
   purposes: FilterOption[];
 }) {
@@ -671,11 +845,85 @@ function TemplateForm({
           contentTemplate={formData.contentTemplate}
         />
 
-        {/* 타겟팅 설정 - 시각적 편집기 */}
-        <TargetingConfigEditor
-          value={targetingConfig}
-          onChange={setTargetingConfig}
-        />
+        {/* 타겟팅 설정 - 셀프 메시지와 동일한 컴포넌트 */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">타겟팅 설정</CardTitle>
+                <CardDescription className="text-sm">
+                  이 템플릿에 적용할 기본 타겟팅 조건을 설정합니다
+                </CardDescription>
+              </div>
+              <Switch
+                checked={targetingEnabled}
+                onCheckedChange={setTargetingEnabled}
+                data-testid="switch-targeting-enabled"
+              />
+            </div>
+          </CardHeader>
+          
+          {targetingEnabled && (
+            <CardContent className="pt-0 space-y-4">
+              {/* 기본 타겟팅: 성별 */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">대상 성별</Label>
+                <RadioGroup
+                  value={basicTargeting.gender}
+                  onValueChange={(v) => setBasicTargeting({ ...basicTargeting, gender: v as 'all' | 'male' | 'female' })}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="all" id="gender-all" />
+                    <Label htmlFor="gender-all" className="font-normal cursor-pointer">전체</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="male" id="gender-male" />
+                    <Label htmlFor="gender-male" className="font-normal cursor-pointer">남성</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="female" id="gender-female" />
+                    <Label htmlFor="gender-female" className="font-normal cursor-pointer">여성</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {/* 기본 타겟팅: 연령대 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">최소 연령</Label>
+                  <Input
+                    type="number"
+                    min={15}
+                    max={70}
+                    value={basicTargeting.ageMin}
+                    onChange={(e) => setBasicTargeting({ ...basicTargeting, ageMin: parseInt(e.target.value) || 20 })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">최대 연령</Label>
+                  <Input
+                    type="number"
+                    min={15}
+                    max={70}
+                    value={basicTargeting.ageMax}
+                    onChange={(e) => setBasicTargeting({ ...basicTargeting, ageMax: parseInt(e.target.value) || 60 })}
+                  />
+                </div>
+              </div>
+
+              {/* 고급 타겟팅 - TargetingAdvanced 컴포넌트 */}
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-medium mb-4">고급 타겟팅 (BizChat ATS/Maptics)</h4>
+                <TargetingAdvanced
+                  targeting={advancedTargeting}
+                  onTargetingChange={setAdvancedTargeting}
+                  basicTargeting={basicTargeting}
+                />
+              </div>
+            </CardContent>
+          )}
+        </Card>
       </div>
     </div>
   );
