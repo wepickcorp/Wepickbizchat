@@ -131,6 +131,38 @@ export interface VariableSchemaItem {
   format?: string;
 }
 
+// 추천 템플릿용 타겟팅 설정 타입
+// 3가지 모드: 'ats-general' (일반 ATS), 'ats-advanced' (고급 ATS), 'maptics' (지오펜스)
+export interface RecommendedTargetingConfig {
+  mode: 'ats-general' | 'ats-advanced' | 'maptics';
+  
+  // ATS 일반/고급 공통
+  targetGender?: 'all' | 'male' | 'female';
+  targetAgeStart?: number;
+  targetAgeEnd?: number;
+  
+  // ATS 고급 타겟팅 옵션
+  advancedOptions?: {
+    sndMosu?: number; // 모수 (최소 10,000)
+    areas?: string[]; // 지역 코드 배열
+    interests?: string[]; // 관심사 코드 배열
+  };
+  
+  // 지오펜스 타겟팅 옵션
+  mapticsOptions?: {
+    radius?: number; // 반경 (미터)
+    geofences?: Array<{
+      lat: number;
+      lng: number;
+      radius: number;
+      name?: string;
+    }>;
+    rcvType?: 1 | 2; // 1=실시간, 2=모아서보내기
+    rtStartHhmm?: string; // 실시간 발송 시작시간
+    rtEndHhmm?: string; // 실시간 발송 종료시간
+  };
+}
+
 // Recommended Templates table (추천 메시지 템플릿)
 export const recommendedTemplates = pgTable("recommended_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -159,6 +191,9 @@ export const recommendedTemplates = pgTable("recommended_templates", {
   
   // 원본 템플릿 참조 (선택적)
   sourceTemplateId: varchar("source_template_id"),
+  
+  // 타겟팅 설정 (추천 모드에서 자동 적용)
+  targetingConfig: jsonb("targeting_config").$type<RecommendedTargetingConfig>(),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
