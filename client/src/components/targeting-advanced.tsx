@@ -39,6 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { GeofenceMap, type GeofenceMapItem } from "@/components/geofence-map";
+import { type SelectedCategory, type SavedGeofence, type GeofenceTarget } from "@shared/schema";
 
 // BizChat 카테고리 타입 (11st, webapp)
 interface BizChatCategory {
@@ -89,35 +90,7 @@ interface BizChatFilterResponse {
   list: BizChatFilterMeta[];
 }
 
-// 선택된 카테고리 (ATS mosu 형식)
-// cat1/cat2/cat3에는 cateid 코드를 저장, *Name에는 표시명을 저장
-interface SelectedCategory {
-  cat1: string;       // cateid 코드 (예: "01")
-  cat1Name?: string;  // 표시명 (예: "가구/인테리어")
-  cat2?: string;      // cateid 코드 (예: "0101")
-  cat2Name?: string;  // 표시명
-  cat3?: string;      // cateid 코드 (예: "010101")
-  cat3Name?: string;  // 표시명
-}
-
-// 지오펜스 타겟 정보
-export interface GeofenceTarget {
-  gender: number; // 0: 전체, 1: 남자, 2: 여자
-  minAge: number; // 19-90
-  maxAge: number; // 19-90
-  stayMin: number; // 5-30분
-  radius: number; // 50-2000m
-  address: string; // POI 주소
-  lat?: string; // 위도
-  lon?: string; // 경도
-}
-
-// 저장된 지오펜스 정보
-export interface SavedGeofence {
-  id: number; // BizChat에서 반환된 지오펜스 ID
-  name: string;
-  targets: GeofenceTarget[];
-}
+// SelectedCategory, GeofenceTarget, SavedGeofence 타입은 @shared/schema에서 import
 
 // 타겟팅 모드: ATS (고급 타겟팅) vs Maptics (지오펜스)
 // BizChat API에서 두 방식은 상호 배타적 (rcvType=0 vs rcvType=1,2)

@@ -17,25 +17,7 @@ import { Plus, Pencil, Trash2, Eye, Search, Copy, Check } from "lucide-react";
 import { VariableSchemaEditor, type VariableSchemaItem } from "@/components/admin/variable-schema-editor";
 import TargetingAdvanced, { type AdvancedTargetingState } from "@/components/targeting-advanced";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-
-interface RecommendedTargetingConfig {
-  mode: 'ats-general' | 'ats-advanced' | 'maptics';
-  targetGender?: 'all' | 'male' | 'female';
-  targetAgeStart?: number;
-  targetAgeEnd?: number;
-  advancedOptions?: {
-    sndMosu?: number;
-    areas?: string[];
-    interests?: string[];
-  };
-  mapticsOptions?: {
-    radius?: number;
-    geofences?: Array<{ lat: number; lng: number; radius: number; name?: string }>;
-    rcvType?: 1 | 2;
-    rtStartHhmm?: string;
-    rtEndHhmm?: string;
-  };
-}
+import { type RecommendedTargetingConfig } from "@shared/schema";
 
 interface RecommendedTemplate {
   id: string;

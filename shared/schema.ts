@@ -131,6 +131,36 @@ export interface VariableSchemaItem {
   format?: string;
 }
 
+// 선택된 카테고리 (ATS mosu 형식)
+// cat1/cat2/cat3에는 cateid 코드를 저장, *Name에는 표시명을 저장
+export interface SelectedCategory {
+  cat1: string;       // cateid 코드 (예: "01")
+  cat1Name?: string;  // 표시명 (예: "가구/인테리어")
+  cat2?: string;      // cateid 코드 (예: "0101")
+  cat2Name?: string;  // 표시명
+  cat3?: string;      // cateid 코드 (예: "010101")
+  cat3Name?: string;  // 표시명
+}
+
+// 지오펜스 타겟 정보
+export interface GeofenceTarget {
+  gender: number; // 0: 전체, 1: 남자, 2: 여자
+  minAge: number; // 19-90
+  maxAge: number; // 19-90
+  stayMin: number; // 5-30분
+  radius: number; // 50-2000m
+  address: string; // POI 주소
+  lat?: string; // 위도
+  lon?: string; // 경도
+}
+
+// 저장된 지오펜스 정보
+export interface SavedGeofence {
+  id: number; // BizChat에서 반환된 지오펜스 ID
+  name: string;
+  targets: GeofenceTarget[];
+}
+
 // 추천 템플릿용 타겟팅 설정 타입
 // 3가지 모드: 'ats-general' (일반 ATS), 'ats-advanced' (고급 ATS), 'maptics' (지오펜스)
 export interface RecommendedTargetingConfig {
@@ -146,17 +176,15 @@ export interface RecommendedTargetingConfig {
     sndMosu?: number; // 모수 (최소 10,000)
     areas?: string[]; // 지역 코드 배열
     interests?: string[]; // 관심사 코드 배열
+    shopping11stCategories?: SelectedCategory[]; // 11번가 쇼핑 카테고리
+    webappCategories?: SelectedCategory[]; // 웹앱 카테고리
+    callCategories?: SelectedCategory[]; // 통화 카테고리
   };
   
   // 지오펜스 타겟팅 옵션
   mapticsOptions?: {
     radius?: number; // 반경 (미터)
-    geofences?: Array<{
-      lat: number;
-      lng: number;
-      radius: number;
-      name?: string;
-    }>;
+    geofences?: SavedGeofence[]; // 지오펜스 목록
     rcvType?: 1 | 2; // 1=실시간, 2=모아서보내기
     rtStartHhmm?: string; // 실시간 발송 시작시간
     rtEndHhmm?: string; // 실시간 발송 종료시간
