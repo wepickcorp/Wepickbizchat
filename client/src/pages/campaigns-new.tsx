@@ -21,6 +21,9 @@ import {
   ChevronUp,
   Clock,
   Calendar,
+  Target,
+  Zap,
+  MapPin,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency, formatNumber, getMessageTypeLabel } from "@/lib/authUtils";
@@ -34,6 +37,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Form,
   FormControl,
@@ -233,6 +237,9 @@ export default function CampaignsNew() {
   const [useScheduledSend, setUseScheduledSend] = useState(false);
   const [selectedScheduleDate, setSelectedScheduleDate] = useState<Date | null>(null);
   const [selectedScheduleTime, setSelectedScheduleTime] = useState<string | null>(null);
+  
+  // 추천 템플릿 타겟팅 사용 여부 (true = 템플릿 타겟팅 사용, false = 사용자가 직접 수정)
+  const [useTemplateTargeting, setUseTemplateTargeting] = useState(true);
 
   // 10분 단위 올림, 현재+1시간 이후의 유효한 발송 시간 계산
   const getMinScheduledTime = () => {
@@ -745,10 +752,13 @@ export default function CampaignsNew() {
                 onSelectTemplate={(template) => {
                   setSelectedRecommendedTemplate(template);
                   setVariableValues({});
+                  // 템플릿 선택 시 템플릿 타겟팅 사용 모드로 리셋
+                  setUseTemplateTargeting(true);
                   
                   // 추천 템플릿에 저장된 타겟팅 설정 자동 적용
-                  if (template?.targetingConfig) {
-                    const config = template.targetingConfig;
+                  const templateWithConfig = template as RecommendedTemplate | null;
+                  if (templateWithConfig?.targetingConfig) {
+                    const config = templateWithConfig.targetingConfig;
                     const newTargeting: Partial<AdvancedTargetingState> = {};
                     
                     // 모드에 따라 타겟팅 설정 적용
@@ -833,8 +843,29 @@ export default function CampaignsNew() {
               
               <Card>
                 <CardHeader>
-                  <CardTitle>타겟팅 설정</CardTitle>
-                  <CardDescription>광고를 받을 대상을 설정해주세요</CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>타겟팅 설정</CardTitle>
+                      <CardDescription>
+                        {selectedRecommendedTemplate?.targetingConfig 
+                          ? "추천 템플릿에 설정된 타겟팅이 적용됩니다"
+                          : "광고를 받을 대상을 설정해주세요"}
+                      </CardDescription>
+                    </div>
+                    {selectedRecommendedTemplate?.targetingConfig && (
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="use-template-targeting" className="text-sm">
+                          {useTemplateTargeting ? "템플릿 설정 사용" : "직접 수정"}
+                        </Label>
+                        <Switch
+                          id="use-template-targeting"
+                          checked={!useTemplateTargeting}
+                          onCheckedChange={(checked) => setUseTemplateTargeting(!checked)}
+                          data-testid="switch-template-targeting"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField
@@ -865,66 +896,107 @@ export default function CampaignsNew() {
                     )}
                   />
                   
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="gender"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>성별</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-gender-recommended">
-                                <SelectValue placeholder="성별 선택" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="all">전체</SelectItem>
-                              <SelectItem value="male">남성</SelectItem>
-                              <SelectItem value="female">여성</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
+                  {/* 템플릿 타겟팅 사용 시 읽기 전용 요약 표시 */}
+                  {selectedRecommendedTemplate?.targetingConfig && useTemplateTargeting ? (
+                    <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Target className="h-4 w-4 text-primary" />
+                        적용된 타겟팅
+                      </div>
+                      <div className="grid md:grid-cols-2 gap-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">성별:</span>
+                          <Badge variant="secondary">
+                            {form.watch("gender") === "all" ? "전체" : form.watch("gender") === "male" ? "남성" : "여성"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">연령대:</span>
+                          <Badge variant="secondary">
+                            {form.watch("ageMin")}세 ~ {form.watch("ageMax")}세
+                          </Badge>
+                        </div>
+                      </div>
+                      {selectedRecommendedTemplate.targetingConfig.mode === 'ats-advanced' && (
+                        <div className="pt-2 border-t">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                            <Zap className="h-3 w-3" />
+                            ATS 고급 타겟팅 적용됨
+                          </div>
+                        </div>
                       )}
-                    />
-                    
-                    <div className="space-y-2">
-                      <Label>연령대</Label>
-                      <div className="flex items-center gap-2">
-                        <FormField
-                          control={form.control}
-                          name="ageMin"
-                          render={({ field }) => (
-                            <Input
-                              type="number"
-                              min={10}
-                              max={100}
-                              {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 20)}
-                              data-testid="input-age-min-recommended"
-                            />
-                          )}
-                        />
-                        <span>~</span>
-                        <FormField
-                          control={form.control}
-                          name="ageMax"
-                          render={({ field }) => (
-                            <Input
-                              type="number"
-                              min={10}
-                              max={100}
-                              {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 60)}
-                              data-testid="input-age-max-recommended"
-                            />
-                          )}
-                        />
-                        <span>세</span>
+                      {selectedRecommendedTemplate.targetingConfig.mode === 'maptics' && (
+                        <div className="pt-2 border-t">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                            <MapPin className="h-3 w-3" />
+                            Maptics 지오펜스 타겟팅 적용됨
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* 직접 수정 모드 또는 템플릿 타겟팅이 없는 경우 */
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="gender"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>성별</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-gender-recommended">
+                                  <SelectValue placeholder="성별 선택" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="all">전체</SelectItem>
+                                <SelectItem value="male">남성</SelectItem>
+                                <SelectItem value="female">여성</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <div className="space-y-2">
+                        <Label>연령대</Label>
+                        <div className="flex items-center gap-2">
+                          <FormField
+                            control={form.control}
+                            name="ageMin"
+                            render={({ field }) => (
+                              <Input
+                                type="number"
+                                min={10}
+                                max={100}
+                                {...field}
+                                onChange={(e) => field.onChange(parseInt(e.target.value) || 20)}
+                                data-testid="input-age-min-recommended"
+                              />
+                            )}
+                          />
+                          <span>~</span>
+                          <FormField
+                            control={form.control}
+                            name="ageMax"
+                            render={({ field }) => (
+                              <Input
+                                type="number"
+                                min={10}
+                                max={100}
+                                {...field}
+                                onChange={(e) => field.onChange(parseInt(e.target.value) || 60)}
+                                data-testid="input-age-max-recommended"
+                              />
+                            )}
+                          />
+                          <span>세</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                   
                   <FormField
                     control={form.control}
