@@ -62,6 +62,25 @@ import RecommendedTemplateSelector from "@/components/recommended-template-selec
 import TemplateVariableEditor from "@/components/template-variable-editor";
 import type { Template } from "@shared/schema";
 
+interface RecommendedTargetingConfig {
+  mode: 'ats-general' | 'ats-advanced' | 'maptics';
+  targetGender?: 'all' | 'male' | 'female';
+  targetAgeStart?: number;
+  targetAgeEnd?: number;
+  advancedOptions?: {
+    sndMosu?: number;
+    areas?: string[];
+    interests?: string[];
+  };
+  mapticsOptions?: {
+    radius?: number;
+    geofences?: Array<{ lat: number; lng: number; radius: number; name?: string }>;
+    rcvType?: 1 | 2;
+    rtStartHhmm?: string;
+    rtEndHhmm?: string;
+  };
+}
+
 interface RecommendedTemplate {
   id: string;
   name: string;
@@ -83,6 +102,7 @@ interface RecommendedTemplate {
   rcsType?: number;
   urlLinks?: { list: string[]; reward?: number };
   buttons?: { list: { type: string; name: string; val1: string; val2?: string }[] };
+  targetingConfig?: RecommendedTargetingConfig;
 }
 
 interface BizChatSenderNumber {
@@ -725,6 +745,73 @@ export default function CampaignsNew() {
                 onSelectTemplate={(template) => {
                   setSelectedRecommendedTemplate(template);
                   setVariableValues({});
+                  
+                  // 추천 템플릿에 저장된 타겟팅 설정 자동 적용
+                  if (template?.targetingConfig) {
+                    const config = template.targetingConfig;
+                    const newTargeting: Partial<AdvancedTargetingState> = {};
+                    
+                    // 모드에 따라 타겟팅 설정 적용
+                    if (config.mode === 'maptics') {
+                      newTargeting.targetingMode = 'maptics';
+                      if (config.mapticsOptions) {
+                        newTargeting.rcvType = config.mapticsOptions.rcvType || 1;
+                        newTargeting.rtStartHhmm = config.mapticsOptions.rtStartHhmm || '0900';
+                        newTargeting.rtEndHhmm = config.mapticsOptions.rtEndHhmm || '2000';
+                        // geofence radius 포함하여 모든 필드 적용
+                        if (config.mapticsOptions.geofences) {
+                          newTargeting.geofences = config.mapticsOptions.geofences.map((g, i) => ({
+                            id: `preset-${i}`,
+                            lat: g.lat,
+                            lng: g.lng,
+                            radius: g.radius, // 저장된 radius 값 그대로 사용
+                            name: g.name || `위치 ${i + 1}`,
+                          }));
+                        }
+                        // 기본 반경 설정
+                        if (config.mapticsOptions.radius) {
+                          newTargeting.defaultRadius = config.mapticsOptions.radius;
+                        }
+                      }
+                    } else if (config.mode === 'ats-advanced') {
+                      // 고급 ATS 모드 - ats 모드 + 고급 옵션 활성화
+                      newTargeting.targetingMode = 'ats';
+                      newTargeting.rcvType = 0; // ATS
+                      // 고급 설정 UI 표시 (별도 상태 변수 사용)
+                      setShowAdvancedTargeting(true);
+                      if (config.advancedOptions?.sndMosu) {
+                        newTargeting.sndMosu = config.advancedOptions.sndMosu;
+                      }
+                      if (config.advancedOptions?.areas) {
+                        newTargeting.areaIds = config.advancedOptions.areas;
+                      }
+                      if (config.advancedOptions?.interests) {
+                        newTargeting.interestIds = config.advancedOptions.interests;
+                      }
+                    } else {
+                      // 일반 ATS 모드 - 고급 설정 숨김
+                      newTargeting.targetingMode = 'ats';
+                      newTargeting.rcvType = 0; // ATS
+                      setShowAdvancedTargeting(false);
+                      // 이전 고급 설정 값 초기화
+                      newTargeting.sndMosu = undefined;
+                      newTargeting.areaIds = [];
+                      newTargeting.interestIds = [];
+                    }
+                    
+                    // 성별/나이 설정
+                    if (config.targetGender) {
+                      form.setValue("gender", config.targetGender);
+                    }
+                    if (config.targetAgeStart) {
+                      form.setValue("ageMin", config.targetAgeStart);
+                    }
+                    if (config.targetAgeEnd) {
+                      form.setValue("ageMax", config.targetAgeEnd);
+                    }
+                    
+                    setAdvancedTargeting(prev => ({ ...prev, ...newTargeting }));
+                  }
                 }}
               />
               

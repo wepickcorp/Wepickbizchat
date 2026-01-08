@@ -235,7 +235,37 @@ export default function AdminRecommendedTemplates() {
       const variableSchema = JSON.parse(variableSchemaText);
       let targetingConfig = undefined;
       if (targetingConfigText.trim()) {
-        targetingConfig = JSON.parse(targetingConfigText);
+        const parsed = JSON.parse(targetingConfigText);
+        // 타겟팅 설정 유효성 검사
+        if (!parsed.mode || !['ats-general', 'ats-advanced', 'maptics'].includes(parsed.mode)) {
+          toast({ 
+            title: "타겟팅 설정 오류", 
+            description: "mode 필드는 'ats-general', 'ats-advanced', 'maptics' 중 하나여야 합니다",
+            variant: "destructive" 
+          });
+          return;
+        }
+        if (parsed.targetGender && !['all', 'male', 'female'].includes(parsed.targetGender)) {
+          toast({ 
+            title: "타겟팅 설정 오류", 
+            description: "targetGender 필드는 'all', 'male', 'female' 중 하나여야 합니다",
+            variant: "destructive" 
+          });
+          return;
+        }
+        if (parsed.mode === 'maptics' && parsed.mapticsOptions?.geofences) {
+          for (const geo of parsed.mapticsOptions.geofences) {
+            if (typeof geo.lat !== 'number' || typeof geo.lng !== 'number') {
+              toast({ 
+                title: "타겟팅 설정 오류", 
+                description: "geofences의 lat, lng 필드는 숫자여야 합니다",
+                variant: "destructive" 
+              });
+              return;
+            }
+          }
+        }
+        targetingConfig = parsed;
       }
       const submitData = {
         ...formData,
