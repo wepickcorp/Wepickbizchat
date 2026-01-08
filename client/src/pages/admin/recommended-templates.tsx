@@ -12,7 +12,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Eye, Search, Copy, Check } from "lucide-react";
 import { VariableSchemaEditor, type VariableSchemaItem } from "@/components/admin/variable-schema-editor";
@@ -515,8 +514,8 @@ function TemplateForm({
   purposes: FilterOption[];
 }) {
   return (
-    <ScrollArea className="h-[70vh] pr-4">
-      <div className="space-y-6">
+    <div className="max-h-[70vh] overflow-y-auto pr-4">
+      <div className="space-y-6 pb-4">
         {/* 기본 정보 */}
         <div className="space-y-4">
           <h3 className="font-medium text-sm text-muted-foreground">기본 정보</h3>
@@ -678,6 +677,6 @@ function TemplateForm({
           onChange={setTargetingConfig}
         />
       </div>
-    </ScrollArea>
+    </div>
   );
 }

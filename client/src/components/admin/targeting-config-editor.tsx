@@ -8,8 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Users, MapPin, Target, ChevronDown, Info } from "lucide-react";
+import { Users, MapPin, Target, Info } from "lucide-react";
 
 export interface RecommendedTargetingConfig {
   mode: 'ats-general' | 'ats-advanced' | 'maptics';
@@ -268,62 +267,52 @@ export function TargetingConfigEditor({ value, onChange }: TargetingConfigEditor
               </div>
 
               {/* 지역 선택 */}
-              <Collapsible>
-                <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary">
-                  <span>지역 선택</span>
-                  <div className="flex items-center gap-2">
-                    {(config.advancedOptions?.areas?.length || 0) > 0 && (
-                      <Badge variant="secondary">{config.advancedOptions?.areas?.length}개 선택</Badge>
-                    )}
-                    <ChevronDown className="h-4 w-4" />
-                  </div>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-2">
-                  <div className="grid grid-cols-4 gap-2">
-                    {AREA_OPTIONS.map((area) => (
-                      <label
-                        key={area.value}
-                        className="flex items-center gap-2 p-2 border rounded cursor-pointer hover-elevate"
-                      >
-                        <Checkbox
-                          checked={config.advancedOptions?.areas?.includes(area.value) || false}
-                          onCheckedChange={() => toggleArea(area.value)}
-                        />
-                        <span className="text-sm">{area.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">지역 선택</Label>
+                  {(config.advancedOptions?.areas?.length || 0) > 0 && (
+                    <Badge variant="secondary">{config.advancedOptions?.areas?.length}개 선택</Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {AREA_OPTIONS.map((area) => (
+                    <label
+                      key={area.value}
+                      className="flex items-center gap-2 p-2 border rounded cursor-pointer hover-elevate"
+                    >
+                      <Checkbox
+                        checked={config.advancedOptions?.areas?.includes(area.value) || false}
+                        onCheckedChange={() => toggleArea(area.value)}
+                      />
+                      <span className="text-sm">{area.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
 
               {/* 관심사 선택 */}
-              <Collapsible>
-                <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary">
-                  <span>관심사 선택</span>
-                  <div className="flex items-center gap-2">
-                    {(config.advancedOptions?.interests?.length || 0) > 0 && (
-                      <Badge variant="secondary">{config.advancedOptions?.interests?.length}개 선택</Badge>
-                    )}
-                    <ChevronDown className="h-4 w-4" />
-                  </div>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-2">
-                  <div className="grid grid-cols-3 gap-2">
-                    {INTEREST_OPTIONS.map((interest) => (
-                      <label
-                        key={interest.value}
-                        className="flex items-center gap-2 p-2 border rounded cursor-pointer hover-elevate"
-                      >
-                        <Checkbox
-                          checked={config.advancedOptions?.interests?.includes(interest.value) || false}
-                          onCheckedChange={() => toggleInterest(interest.value)}
-                        />
-                        <span className="text-sm">{interest.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">관심사 선택</Label>
+                  {(config.advancedOptions?.interests?.length || 0) > 0 && (
+                    <Badge variant="secondary">{config.advancedOptions?.interests?.length}개 선택</Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {INTEREST_OPTIONS.map((interest) => (
+                    <label
+                      key={interest.value}
+                      className="flex items-center gap-2 p-2 border rounded cursor-pointer hover-elevate"
+                    >
+                      <Checkbox
+                        checked={config.advancedOptions?.interests?.includes(interest.value) || false}
+                        onCheckedChange={() => toggleInterest(interest.value)}
+                      />
+                      <span className="text-sm">{interest.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
