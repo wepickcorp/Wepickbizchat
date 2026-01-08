@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Eye, Search, Copy, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, Search, Copy, Check, ExternalLink, Phone, MapPin } from "lucide-react";
 import { VariableSchemaEditor, type VariableSchemaItem } from "@/components/admin/variable-schema-editor";
 import TargetingAdvanced, { type AdvancedTargetingState } from "@/components/targeting-advanced";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -54,6 +54,21 @@ const RCS_TYPE_LABELS: Record<number, string> = {
   5: '상품소개세로',
 };
 
+// RCS 버튼 타입 정의
+const BUTTON_TYPES = [
+  { value: "0", label: "URL 연결", icon: ExternalLink, placeholder: "https://example.com" },
+  { value: "1", label: "전화 걸기", icon: Phone, placeholder: "02-1234-5678" },
+  { value: "2", label: "지도 보여주기", icon: MapPin, placeholder: "위치명 (예: 강남역)" },
+];
+
+interface RcsButton {
+  type: "0" | "1" | "2";
+  name: string;
+  val1: string;
+  val2?: string;
+  reward?: "1";
+}
+
 export default function AdminRecommendedTemplates() {
   const { toast } = useToast();
   const adminToken = localStorage.getItem("adminToken");
@@ -79,6 +94,7 @@ export default function AdminRecommendedTemplates() {
   });
   const [variableSchema, setVariableSchema] = useState<VariableSchemaItem[]>([]);
   const [targetingConfig, setTargetingConfig] = useState<RecommendedTargetingConfig | undefined>(undefined);
+  const [buttons, setButtons] = useState<RcsButton[]>([]);
   
   // TargetingAdvanced 컴포넌트용 상태
   const [advancedTargeting, setAdvancedTargeting] = useState<AdvancedTargetingState>({
@@ -216,6 +232,7 @@ export default function AdminRecommendedTemplates() {
       regions: [],
     });
     setTargetingEnabled(false);
+    setButtons([]);
   };
 
   const openEditDialog = (template: RecommendedTemplate) => {
@@ -294,6 +311,19 @@ export default function AdminRecommendedTemplates() {
     } else {
       setBasicTargeting({ gender: 'all', ageMin: 20, ageMax: 60, regions: [] });
     }
+    
+    // 버튼 상태 복원 (reward 필드 포함)
+    if (template.buttons?.list) {
+      setButtons(template.buttons.list.map(btn => ({
+        type: btn.type as "0" | "1" | "2",
+        name: btn.name,
+        val1: btn.val1,
+        val2: btn.val2,
+        reward: (btn as { reward?: "1" }).reward,
+      })));
+    } else {
+      setButtons([]);
+    }
   };
 
   const handleSubmit = () => {
@@ -365,6 +395,8 @@ export default function AdminRecommendedTemplates() {
       // AdvancedTargetingState도 저장 (캠페인 생성 시 그대로 사용)
       advancedTargetingState: targetingEnabled ? advancedTargeting : undefined,
       basicTargetingState: targetingEnabled ? basicTargeting : undefined,
+      // RCS 버튼 저장
+      buttons: buttons.length > 0 ? { list: buttons } : undefined,
     };
     
     if (editingTemplate) {
@@ -391,6 +423,18 @@ export default function AdminRecommendedTemplates() {
     });
     setVariableSchema(template.variableSchema || []);
     setTargetingConfig(template.targetingConfig);
+    // 버튼도 복사 (reward 필드 포함)
+    if (template.buttons?.list) {
+      setButtons(template.buttons.list.map(btn => ({
+        type: btn.type as "0" | "1" | "2",
+        name: btn.name,
+        val1: btn.val1,
+        val2: btn.val2,
+        reward: (btn as { reward?: "1" }).reward,
+      })));
+    } else {
+      setButtons([]);
+    }
     setShowCreateDialog(true);
   };
 
@@ -818,6 +862,132 @@ function TemplateForm({
               data-testid="input-default-image"
             />
           </div>
+
+          {/* RCS 버튼 설정 */}
+          {formData.messageType === 'RCS' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4" />
+                  RCS 버튼 (선택)
+                </Label>
+                {buttons.length > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    {buttons.length}개 설정됨
+                  </Badge>
+                )}
+              </div>
+              
+              <p className="text-xs text-muted-foreground">
+                RCS 메시지 하단에 표시되는 클릭 버튼입니다. URL 연결, 전화 걸기, 지도 보기 중 선택할 수 있어요. (최대 2개)
+              </p>
+
+              <div className="space-y-3">
+                {buttons.map((button, index) => {
+                  const buttonType = BUTTON_TYPES.find(t => t.value === button.type);
+                  const ButtonIcon = buttonType?.icon || ExternalLink;
+                  
+                  return (
+                    <div key={index} className="p-3 border rounded-lg space-y-2 bg-muted/30">
+                      <div className="flex items-center justify-between">
+                        <Badge variant="secondary" className="gap-1">
+                          <ButtonIcon className="h-3 w-3" />
+                          버튼 {index + 1}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setButtons(buttons.filter((_, i) => i !== index))}
+                          data-testid={`button-remove-rcs-btn-${index}`}
+                        >
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <Select
+                          value={button.type}
+                          onValueChange={(value: "0" | "1" | "2") => {
+                            const newButtons = [...buttons];
+                            newButtons[index] = { ...button, type: value, val1: "", val2: "" };
+                            setButtons(newButtons);
+                          }}
+                        >
+                          <SelectTrigger data-testid={`select-rcs-btn-type-${index}`}>
+                            <SelectValue placeholder="버튼 타입" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {BUTTON_TYPES.map((type) => {
+                              const Icon = type.icon;
+                              return (
+                                <SelectItem key={type.value} value={type.value}>
+                                  <div className="flex items-center gap-2">
+                                    <Icon className="h-4 w-4" />
+                                    {type.label}
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                        
+                        <Input
+                          placeholder="버튼 텍스트"
+                          value={button.name}
+                          maxLength={17}
+                          onChange={(e) => {
+                            const newButtons = [...buttons];
+                            newButtons[index] = { ...button, name: e.target.value };
+                            setButtons(newButtons);
+                          }}
+                          data-testid={`input-rcs-btn-name-${index}`}
+                        />
+                      </div>
+                      
+                      <Input
+                        placeholder={buttonType?.placeholder || "값 입력"}
+                        value={button.val1}
+                        onChange={(e) => {
+                          const newButtons = [...buttons];
+                          newButtons[index] = { ...button, val1: e.target.value };
+                          setButtons(newButtons);
+                        }}
+                        data-testid={`input-rcs-btn-val1-${index}`}
+                      />
+                      
+                      {button.type === "2" && (
+                        <Input
+                          placeholder="대체 URL (지도 미지원 시)"
+                          value={button.val2 || ""}
+                          onChange={(e) => {
+                            const newButtons = [...buttons];
+                            newButtons[index] = { ...button, val2: e.target.value };
+                            setButtons(newButtons);
+                          }}
+                          data-testid={`input-rcs-btn-val2-${index}`}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+                
+                {buttons.length < 2 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={() => setButtons([...buttons, { type: "0", name: "", val1: "" }])}
+                    data-testid="button-add-rcs-btn"
+                  >
+                    <Plus className="h-4 w-4" />
+                    버튼 추가
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 변수 설정 - 시각적 편집기 */}
