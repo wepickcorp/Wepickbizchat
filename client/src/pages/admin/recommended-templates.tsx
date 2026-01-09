@@ -479,6 +479,8 @@ export default function AdminRecommendedTemplates() {
               setBasicTargeting={setBasicTargeting}
               targetingEnabled={targetingEnabled}
               setTargetingEnabled={setTargetingEnabled}
+              buttons={buttons}
+              setButtons={setButtons}
               categories={data?.categories || []}
               purposes={data?.purposes || []}
             />
@@ -614,6 +616,8 @@ export default function AdminRecommendedTemplates() {
                                 setBasicTargeting={setBasicTargeting}
                                 targetingEnabled={targetingEnabled}
                                 setTargetingEnabled={setTargetingEnabled}
+                                buttons={buttons}
+                                setButtons={setButtons}
                                 categories={data?.categories || []}
                                 purposes={data?.purposes || []}
                               />
@@ -697,6 +701,8 @@ function TemplateForm({
   setBasicTargeting,
   targetingEnabled,
   setTargetingEnabled,
+  buttons,
+  setButtons,
   categories,
   purposes,
 }: {
@@ -710,6 +716,8 @@ function TemplateForm({
   setBasicTargeting: (state: { gender: 'all' | 'male' | 'female'; ageMin: number; ageMax: number; regions: string[] }) => void;
   targetingEnabled: boolean;
   setTargetingEnabled: (enabled: boolean) => void;
+  buttons: RcsButton[];
+  setButtons: (buttons: RcsButton[]) => void;
   categories: FilterOption[];
   purposes: FilterOption[];
 }) {
