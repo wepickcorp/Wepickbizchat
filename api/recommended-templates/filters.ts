@@ -7,6 +7,7 @@ const RECOMMENDED_CATEGORIES = [
   { value: 'travel_culture', label: '여행/문화' },
   { value: 'sports_health', label: '스포츠/건강' },
   { value: 'education_life', label: '교육/라이프' },
+  { value: 'medical', label: '병의원' },
 ];
 
 // 목적 분류
@@ -23,6 +24,7 @@ const RECOMMENDED_PURPOSES = [
   { value: 'event', label: '이벤트 안내' },
   { value: 'timedeal', label: '타임딜 이벤트' },
   { value: 'special_product', label: '특가상품 안내' },
+  { value: 'consultation', label: '상담신청유도' },
 ];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
