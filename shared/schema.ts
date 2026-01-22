@@ -60,6 +60,7 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   companyName: varchar("company_name"),
   businessNumber: varchar("business_number"),
+  representativeName: varchar("representative_name"),
   phone: varchar("phone"),
   balance: decimal("balance", { precision: 12, scale: 0 }).default("0"),
   stripeCustomerId: varchar("stripe_customer_id"),

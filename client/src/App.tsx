@@ -33,6 +33,7 @@ import Announcements from "@/pages/announcements";
 import Reports from "@/pages/reports";
 import TestCampaign from "@/pages/test-campaign";
 import Geofences from "@/pages/geofences";
+import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
 import AdminLogin from "@/pages/admin/login";
@@ -228,6 +229,7 @@ function Router() {
       <Route path="/announcements" component={() => <ProtectedRoute component={Announcements} />} />
       <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
       <Route path="/geofences" component={() => <ProtectedRoute component={Geofences} />} />
+      <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
       
       {/* Admin Routes */}
       <Route path="/admin/login" component={AdminLogin} />
