@@ -1161,8 +1161,8 @@ export default function TemplatesNew() {
                   </div>
                 )}
 
-                {/* RCS 버튼 관리 */}
-                {watchedValues.messageType === "RCS" && (
+                {/* RCS 버튼 관리 - RCS 탭 선택 시에만 표시 */}
+                {watchedValues.messageType === "RCS" && rcsContentTab === "rcs" && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <FormLabel className="flex items-center gap-2">
