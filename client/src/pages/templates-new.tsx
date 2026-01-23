@@ -866,18 +866,18 @@ export default function TemplatesNew() {
                     <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
                       <Info className="h-4 w-4 text-blue-600" />
                       <AlertDescription className="text-xs text-blue-700 dark:text-blue-300">
-                        <strong>아이폰</strong>은 RCS 메시지로, <strong>안드로이드</strong>는 일반(LMS) 메시지로 발송됩니다. 각 탭에서 메시지를 작성해주세요.
+                        RCS를 지원하는 기기에는 <strong>RCS</strong> 메시지로, 미지원 기기에는 <strong>일반(LMS)</strong> 메시지로 발송됩니다. 각 탭에서 메시지를 작성해주세요.
                       </AlertDescription>
                     </Alert>
                     <Tabs value={rcsContentTab} onValueChange={(v) => setRcsContentTab(v as "lms" | "rcs")} className="w-full">
                       <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="lms" className="gap-2" data-testid="tab-lms">
                           <MessageSquare className="h-4 w-4" />
-                          일반 (안드로이드)
+                          일반 (LMS)
                         </TabsTrigger>
                         <TabsTrigger value="rcs" className="gap-2" data-testid="tab-rcs">
                           <Smartphone className="h-4 w-4" />
-                          RCS (아이폰)
+                          RCS
                         </TabsTrigger>
                       </TabsList>
                       <TabsContent value="lms" className="mt-4">
@@ -888,7 +888,7 @@ export default function TemplatesNew() {
                             <FormItem>
                               <FormControl>
                                 <Textarea
-                                  placeholder="안드로이드 기기에서 보여질 LMS 메시지를 입력하세요..."
+                                  placeholder="RCS 미지원 기기에서 보여질 LMS 메시지를 입력하세요..."
                                   className="min-h-[200px] resize-none"
                                   maxLength={2000}
                                   data-testid="input-template-lms-content"
@@ -897,7 +897,7 @@ export default function TemplatesNew() {
                                 />
                               </FormControl>
                               <FormDescription>
-                                {(field.value || "").length} / 2,000자 (안드로이드 기기에 LMS로 발송)
+                                {(field.value || "").length} / 2,000자 (RCS 미지원 기기에 LMS로 발송)
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
@@ -912,7 +912,7 @@ export default function TemplatesNew() {
                             <FormItem>
                               <FormControl>
                                 <Textarea
-                                  placeholder="아이폰에서 보여질 RCS 메시지를 입력하세요..."
+                                  placeholder="RCS 지원 기기에서 보여질 RCS 메시지를 입력하세요..."
                                   className="min-h-[200px] resize-none"
                                   maxLength={getMaxContentLength(watchedValues.messageType, watchedValues.rcsType)}
                                   data-testid="input-template-rcs-content"
@@ -921,7 +921,7 @@ export default function TemplatesNew() {
                                 />
                               </FormControl>
                               <FormDescription>
-                                {field.value.length} / {getMaxContentLength(watchedValues.messageType, watchedValues.rcsType)}자 (아이폰에 RCS로 발송)
+                                {field.value.length} / {getMaxContentLength(watchedValues.messageType, watchedValues.rcsType)}자 (RCS 지원 기기에 발송)
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
