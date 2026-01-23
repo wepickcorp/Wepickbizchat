@@ -205,6 +205,7 @@ export const recommendedTemplates = pgTable("recommended_templates", {
   // 메시지 내용 (변수 포함)
   titleTemplate: varchar("title_template", { length: 60 }),
   contentTemplate: text("content_template").notNull(),
+  lmsContentTemplate: text("lms_content_template"), // RCS 메시지의 안드로이드용 LMS 대체 텍스트 템플릿
   variableSchema: jsonb("variable_schema").$type<VariableSchemaItem[]>(),
   
   // 이미지 및 메시지 타입
@@ -239,6 +240,7 @@ export const templates = pgTable("templates", {
   rcsType: integer("rcs_type"), // 0=스탠다드, 1=LMS, 2=슬라이드, 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
   title: varchar("title", { length: 60 }),
   content: text("content").notNull(),
+  lmsContent: text("lms_content"), // RCS 메시지의 안드로이드용 LMS 대체 텍스트
   imageUrl: text("image_url"), // 미리보기용 URL (base64 또는 외부 URL)
   imageFileId: varchar("image_file_id", { length: 100 }), // BizChat 파일 업로드 후 반환된 ID
   urlLinks: jsonb("url_links").$type<UrlLinkConfig>(), // MMS/RCS URL 링크 설정
@@ -347,6 +349,7 @@ export const messages = pgTable("messages", {
   campaignId: varchar("campaign_id").references(() => campaigns.id).notNull(),
   title: varchar("title", { length: 60 }),
   content: text("content").notNull(),
+  lmsContent: text("lms_content"), // RCS 메시지의 안드로이드용 LMS 대체 텍스트
   imageUrl: text("image_url"),
   
   // RCS URL 링크 및 버튼 (템플릿에서 복사)

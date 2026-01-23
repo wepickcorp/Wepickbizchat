@@ -284,6 +284,7 @@ export async function registerRoutes(
     rcsType: z.number().optional(),
     title: z.string().max(30).optional(),
     content: z.string().min(1).max(2000),
+    lmsContent: z.string().max(2000).optional(), // RCS 메시지의 안드로이드용 LMS 대체 텍스트
     imageUrl: z.string().optional(),
     imageFileId: z.string().optional(),
     // RCS URL 링크: { list: string[], reward?: number }
@@ -314,6 +315,7 @@ export async function registerRoutes(
         rcsType: data.rcsType,
         title: data.title,
         content: data.content,
+        lmsContent: data.lmsContent,
         imageUrl: data.imageUrl,
         imageFileId: data.imageFileId,
         urlLinks: data.urlLinks,
@@ -483,6 +485,7 @@ export async function registerRoutes(
         campaignId: campaign.id,
         title: template.title || null,
         content: template.content,
+        lmsContent: (template as any).lmsContent || null,
         imageUrl: template.imageUrl,
       });
       

@@ -53,6 +53,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Template, RcsButton, UrlLinkConfig, RcsButtonsConfig } from "@shared/schema";
 import { getMessageTypeLabel } from "@/lib/authUtils";
 
@@ -76,6 +77,7 @@ const templateFormSchema = z.object({
   rcsType: z.number().optional(),
   title: z.string().max(30, "제목은 30자 이하로 입력해주세요").optional(),
   content: z.string().min(1, "메시지 내용을 입력해주세요").max(2000),
+  lmsContent: z.string().max(2000).optional(), // RCS 메시지의 안드로이드용 LMS 대체 텍스트
   imageUrl: z.string().optional().or(z.literal("")),
   imageFileId: z.string().optional().or(z.literal("")),
   urlLinks: z.object({
@@ -218,6 +220,7 @@ export default function TemplatesNew() {
       rcsType: template.rcsType || 0,
       title: template.title || "",
       content: template.content,
+      lmsContent: (template as any).lmsContent || "",
       imageUrl: template.imageUrl || "",
       imageFileId: template.imageFileId || "",
       urlLinks: templateUrlLinks || { list: [], reward: undefined },
@@ -252,12 +255,16 @@ export default function TemplatesNew() {
       rcsType: 0,
       title: "",
       content: "",
+      lmsContent: "",
       imageUrl: "",
       imageFileId: "",
       urlLinks: { list: [], reward: undefined },
       buttons: { list: [] },
     },
   });
+  
+  // RCS 메시지 내용 탭 상태
+  const [rcsContentTab, setRcsContentTab] = useState<"lms" | "rcs">("lms");
 
   // URL Links 상태 관리
   const [urlLinks, setUrlLinks] = useState<string[]>([]);
@@ -277,6 +284,7 @@ export default function TemplatesNew() {
         rcsType: existingTemplate.rcsType || 0,
         title: existingTemplate.title || "",
         content: existingTemplate.content,
+        lmsContent: (existingTemplate as any).lmsContent || "",
         imageUrl: existingTemplate.imageUrl || "",
         imageFileId: existingTemplate.imageFileId || "",
         urlLinks: templateUrlLinks || { list: [], reward: undefined },
@@ -851,29 +859,102 @@ export default function TemplatesNew() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="content"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>메시지 내용</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="메시지 내용을 입력하세요..."
-                          className="min-h-[200px] resize-none"
-                          maxLength={getMaxContentLength(watchedValues.messageType, watchedValues.rcsType)}
-                          data-testid="input-template-content"
-                          disabled={isViewMode}
-                          {...field}
+                {/* RCS 메시지인 경우 일반/RCS 탭으로 분리 */}
+                {watchedValues.messageType === "RCS" ? (
+                  <div className="space-y-3">
+                    <FormLabel>메시지 내용</FormLabel>
+                    <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                      <Info className="h-4 w-4 text-blue-600" />
+                      <AlertDescription className="text-xs text-blue-700 dark:text-blue-300">
+                        <strong>아이폰</strong>은 RCS 메시지로, <strong>안드로이드</strong>는 일반(LMS) 메시지로 발송됩니다. 각 탭에서 메시지를 작성해주세요.
+                      </AlertDescription>
+                    </Alert>
+                    <Tabs value={rcsContentTab} onValueChange={(v) => setRcsContentTab(v as "lms" | "rcs")} className="w-full">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="lms" className="gap-2" data-testid="tab-lms">
+                          <MessageSquare className="h-4 w-4" />
+                          일반 (안드로이드)
+                        </TabsTrigger>
+                        <TabsTrigger value="rcs" className="gap-2" data-testid="tab-rcs">
+                          <Smartphone className="h-4 w-4" />
+                          RCS (아이폰)
+                        </TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="lms" className="mt-4">
+                        <FormField
+                          control={form.control}
+                          name="lmsContent"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="안드로이드 기기에서 보여질 LMS 메시지를 입력하세요..."
+                                  className="min-h-[200px] resize-none"
+                                  maxLength={2000}
+                                  data-testid="input-template-lms-content"
+                                  disabled={isViewMode}
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                {(field.value || "").length} / 2,000자 (안드로이드 기기에 LMS로 발송)
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
-                      </FormControl>
-                      <FormDescription>
-                        {field.value.length} / {getMaxContentLength(watchedValues.messageType, watchedValues.rcsType)}자
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                      </TabsContent>
+                      <TabsContent value="rcs" className="mt-4">
+                        <FormField
+                          control={form.control}
+                          name="content"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="아이폰에서 보여질 RCS 메시지를 입력하세요..."
+                                  className="min-h-[200px] resize-none"
+                                  maxLength={getMaxContentLength(watchedValues.messageType, watchedValues.rcsType)}
+                                  data-testid="input-template-rcs-content"
+                                  disabled={isViewMode}
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                {field.value.length} / {getMaxContentLength(watchedValues.messageType, watchedValues.rcsType)}자 (아이폰에 RCS로 발송)
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name="content"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>메시지 내용</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="메시지 내용을 입력하세요..."
+                            className="min-h-[200px] resize-none"
+                            maxLength={getMaxContentLength(watchedValues.messageType, watchedValues.rcsType)}
+                            data-testid="input-template-content"
+                            disabled={isViewMode}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {field.value.length} / {getMaxContentLength(watchedValues.messageType, watchedValues.rcsType)}자
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 {showImageUpload && (
                   <div className="space-y-3">
