@@ -593,9 +593,11 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
   
   // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
   // mms 객체 구성 - 조건부 필드 포함 (빈 객체 생략)
+  // RCS 메시지의 경우 lmsContent가 있으면 fallback 메시지로 사용 (RCS 미지원 기기용)
+  const fallbackMsg = message?.lmsContent || message?.content || '';
   const mmsObj: Record<string, unknown> = {
     title: message?.title || '',
-    msg: message?.content || '',
+    msg: fallbackMsg,
     ...(message?.urlFile && { urlFile: message.urlFile }),
     ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), reward: message?.urlLinkReward } }),
     ...(needsFileForBilling && hasImage && { fileInfo: { list: [{ origId: message.imageUrl }] } }),
