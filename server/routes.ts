@@ -283,7 +283,7 @@ export async function registerRoutes(
     messageType: z.enum(["LMS", "MMS", "RCS"]),
     rcsType: z.number().optional(),
     title: z.string().max(30).optional(),
-    content: z.string().min(1).max(2000),
+    content: z.string().max(2000),
     lmsContent: z.string().max(2000).optional(),
     imageUrl: z.string().optional(),
     imageFileId: z.string().optional(),
@@ -308,6 +308,16 @@ export async function registerRoutes(
   });
 
   const createTemplateSchema = baseTemplateSchema.refine((data) => {
+    // RCS 이외의 유형에서는 content 필수
+    if (data.messageType !== "RCS") {
+      return data.content && data.content.trim().length > 0;
+    }
+    return true;
+  }, {
+    message: "메시지 내용을 입력해주세요",
+    path: ["content"],
+  }).refine((data) => {
+    // RCS 유형에서는 lmsContent 필수
     if (data.messageType === "RCS") {
       return data.lmsContent && data.lmsContent.trim().length > 0;
     }
@@ -315,6 +325,15 @@ export async function registerRoutes(
   }, {
     message: "RCS 메시지의 경우 일반(LMS) 메시지도 필수로 입력해주세요",
     path: ["lmsContent"],
+  }).refine((data) => {
+    // RCS 유형에서는 content(RCS 메시지)도 필수
+    if (data.messageType === "RCS") {
+      return data.content && data.content.trim().length > 0;
+    }
+    return true;
+  }, {
+    message: "RCS 메시지의 경우 RCS 메시지도 필수로 입력해주세요",
+    path: ["content"],
   });
   
   const updateTemplateSchema = baseTemplateSchema.partial();

@@ -77,7 +77,7 @@ const templateFormSchema = z.object({
   }),
   rcsType: z.number().optional(),
   title: z.string().max(30, "제목은 30자 이하로 입력해주세요").optional(),
-  content: z.string().min(1, "메시지 내용을 입력해주세요").max(2000),
+  content: z.string().max(2000),
   lmsContent: z.string().max(2000).optional(),
   imageUrl: z.string().optional().or(z.literal("")),
   imageFileId: z.string().optional().or(z.literal("")),
@@ -95,13 +95,32 @@ const templateFormSchema = z.object({
     list: z.array(rcsButtonSchema),
   }).optional(),
 }).refine((data) => {
+  // RCS 이외의 유형에서는 content 필수
+  if (data.messageType !== "RCS") {
+    return data.content && data.content.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "메시지 내용을 입력해주세요",
+  path: ["content"],
+}).refine((data) => {
+  // RCS 유형에서는 lmsContent 필수
   if (data.messageType === "RCS") {
     return data.lmsContent && data.lmsContent.trim().length > 0;
   }
   return true;
 }, {
-  message: "RCS 메시지의 경우 일반(LMS) 메시지도 필수로 입력해주세요",
+  message: "RCS 메시지의 경우 일반(LMS) 탭의 메시지도 필수로 입력해주세요",
   path: ["lmsContent"],
+}).refine((data) => {
+  // RCS 유형에서는 content(RCS 메시지)도 필수
+  if (data.messageType === "RCS") {
+    return data.content && data.content.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "RCS 메시지의 경우 RCS 탭의 메시지도 필수로 입력해주세요",
+  path: ["content"],
 });
 
 type TemplateFormValues = z.infer<typeof templateFormSchema>;
