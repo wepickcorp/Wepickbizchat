@@ -77,7 +77,7 @@ const templateFormSchema = z.object({
   rcsType: z.number().optional(),
   title: z.string().max(30, "제목은 30자 이하로 입력해주세요").optional(),
   content: z.string().min(1, "메시지 내용을 입력해주세요").max(2000),
-  lmsContent: z.string().max(2000).optional(), // RCS 메시지의 안드로이드용 LMS 대체 텍스트
+  lmsContent: z.string().max(2000).optional(),
   imageUrl: z.string().optional().or(z.literal("")),
   imageFileId: z.string().optional().or(z.literal("")),
   urlLinks: z.object({
@@ -87,6 +87,14 @@ const templateFormSchema = z.object({
   buttons: z.object({
     list: z.array(rcsButtonSchema),
   }).optional(),
+}).refine((data) => {
+  if (data.messageType === "RCS") {
+    return data.lmsContent && data.lmsContent.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "RCS 메시지의 경우 일반(LMS) 메시지도 필수로 입력해주세요",
+  path: ["lmsContent"],
 });
 
 type TemplateFormValues = z.infer<typeof templateFormSchema>;

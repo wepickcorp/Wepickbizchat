@@ -278,21 +278,19 @@ export async function registerRoutes(
     }
   });
 
-  const createTemplateSchema = z.object({
+  const baseTemplateSchema = z.object({
     name: z.string().min(1).max(200),
     messageType: z.enum(["LMS", "MMS", "RCS"]),
     rcsType: z.number().optional(),
     title: z.string().max(30).optional(),
     content: z.string().min(1).max(2000),
-    lmsContent: z.string().max(2000).optional(), // RCS 메시지의 안드로이드용 LMS 대체 텍스트
+    lmsContent: z.string().max(2000).optional(),
     imageUrl: z.string().optional(),
     imageFileId: z.string().optional(),
-    // RCS URL 링크: { list: string[], reward?: number }
     urlLinks: z.object({
       list: z.array(z.string()),
       reward: z.number().optional(),
     }).optional(),
-    // RCS 버튼: { list: [{ type: '0'|'1'|'2', name: string, val1: string, val2?: string }] }
     buttons: z.object({
       list: z.array(z.object({
         type: z.enum(["0", "1", "2"]),
@@ -302,6 +300,18 @@ export async function registerRoutes(
       })),
     }).optional(),
   });
+
+  const createTemplateSchema = baseTemplateSchema.refine((data) => {
+    if (data.messageType === "RCS") {
+      return data.lmsContent && data.lmsContent.trim().length > 0;
+    }
+    return true;
+  }, {
+    message: "RCS 메시지의 경우 일반(LMS) 메시지도 필수로 입력해주세요",
+    path: ["lmsContent"],
+  });
+  
+  const updateTemplateSchema = baseTemplateSchema.partial();
 
   app.post("/api/templates", isAuthenticated, async (req, res) => {
     try {
@@ -346,8 +356,16 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Access denied" });
       }
       
-      const updateSchema = createTemplateSchema.partial();
-      const data = updateSchema.parse(req.body);
+      const data = updateTemplateSchema.parse(req.body);
+      
+      // RCS 메시지 업데이트 시 lmsContent 검증 (기존 템플릿과 병합하여 확인)
+      const mergedData = { ...template, ...data };
+      if (mergedData.messageType === "RCS" && (!mergedData.lmsContent || mergedData.lmsContent.trim().length === 0)) {
+        return res.status(400).json({ 
+          error: "Invalid template data", 
+          details: [{ path: ["lmsContent"], message: "RCS 메시지의 경우 일반(LMS) 메시지도 필수로 입력해주세요" }] 
+        });
+      }
       
       const updatedTemplate = await storage.updateTemplate(req.params.id, data);
       res.json(updatedTemplate);
