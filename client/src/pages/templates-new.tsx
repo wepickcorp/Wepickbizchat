@@ -456,6 +456,7 @@ export default function TemplatesNew() {
         imageFileId: data.imageFileId || undefined,
         title: data.title || undefined,
         rcsType: data.messageType === "RCS" ? data.rcsType : undefined,
+        lmsContent: data.messageType === "RCS" ? (data.lmsContent || undefined) : undefined,
         urlLinks: data.urlLinksData?.list?.length ? data.urlLinksData : undefined,
         buttons: data.buttonsData?.list?.length ? data.buttonsData : undefined,
       };
@@ -486,6 +487,7 @@ export default function TemplatesNew() {
         imageFileId: data.imageFileId || undefined,
         title: data.title || undefined,
         rcsType: data.messageType === "RCS" ? data.rcsType : undefined,
+        lmsContent: data.messageType === "RCS" ? (data.lmsContent || undefined) : undefined,
         urlLinks: data.urlLinksData?.list?.length ? data.urlLinksData : undefined,
         buttons: data.buttonsData?.list?.length ? data.buttonsData : undefined,
       };
