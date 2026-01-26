@@ -239,11 +239,14 @@ export const templates = pgTable("templates", {
   messageType: varchar("message_type", { length: 10 }).notNull(), // LMS, MMS, RCS
   rcsType: integer("rcs_type"), // 0=스탠다드, 1=LMS, 2=슬라이드, 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
   title: varchar("title", { length: 60 }),
-  content: text("content").notNull(),
-  lmsContent: text("lms_content"), // RCS 메시지의 안드로이드용 LMS 대체 텍스트
-  imageUrl: text("image_url"), // 미리보기용 URL (base64 또는 외부 URL)
-  imageFileId: varchar("image_file_id", { length: 100 }), // BizChat 파일 업로드 후 반환된 ID
-  urlLinks: jsonb("url_links").$type<UrlLinkConfig>(), // MMS/RCS URL 링크 설정
+  content: text("content").notNull(), // RCS 메시지 내용
+  lmsContent: text("lms_content"), // LMS fallback 메시지 내용
+  imageUrl: text("image_url"), // RCS용 미리보기 이미지 URL
+  imageFileId: varchar("image_file_id", { length: 100 }), // RCS용 BizChat 파일 업로드 ID
+  lmsImageUrl: text("lms_image_url"), // LMS용 미리보기 이미지 URL
+  lmsImageFileId: varchar("lms_image_file_id", { length: 100 }), // LMS용 BizChat 파일 업로드 ID
+  urlLinks: jsonb("url_links").$type<UrlLinkConfig>(), // RCS URL 링크 설정
+  lmsUrlLinks: jsonb("lms_url_links").$type<UrlLinkConfig>(), // LMS URL 링크 설정
   buttons: jsonb("buttons").$type<RcsButtonsConfig>(), // RCS 버튼 설정
   status: varchar("status", { length: 20 }).default("draft").notNull(), // draft, pending, approved, rejected
   rejectionReason: text("rejection_reason"),
@@ -348,13 +351,15 @@ export const messages = pgTable("messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   campaignId: varchar("campaign_id").references(() => campaigns.id).notNull(),
   title: varchar("title", { length: 60 }),
-  content: text("content").notNull(),
-  lmsContent: text("lms_content"), // RCS 메시지의 안드로이드용 LMS 대체 텍스트
-  imageUrl: text("image_url"),
+  content: text("content").notNull(), // RCS 메시지 내용
+  lmsContent: text("lms_content"), // LMS fallback 메시지 내용
+  imageUrl: text("image_url"), // RCS용 이미지 URL
+  lmsImageUrl: text("lms_image_url"), // LMS용 이미지 URL
   
   // RCS URL 링크 및 버튼 (템플릿에서 복사)
-  urlLinks: jsonb("url_links"), // { list: string[], reward?: number }
-  buttons: jsonb("buttons"), // { list: [{ type: '0'|'1'|'2', name: string, val1: string, val2?: string }] }
+  urlLinks: jsonb("url_links"), // RCS용 { list: string[], reward?: number }
+  lmsUrlLinks: jsonb("lms_url_links"), // LMS용 { list: string[], reward?: number }
+  buttons: jsonb("buttons"), // RCS 버튼 { list: [{ type: '0'|'1'|'2', name: string, val1: string, val2?: string }] }
   
   createdAt: timestamp("created_at").defaultNow(),
 });
