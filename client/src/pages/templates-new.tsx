@@ -80,7 +80,13 @@ const templateFormSchema = z.object({
   lmsContent: z.string().max(2000).optional(),
   imageUrl: z.string().optional().or(z.literal("")),
   imageFileId: z.string().optional().or(z.literal("")),
+  lmsImageUrl: z.string().optional().or(z.literal("")),
+  lmsImageFileId: z.string().optional().or(z.literal("")),
   urlLinks: z.object({
+    list: z.array(z.string()),
+    reward: z.number().optional(),
+  }).optional(),
+  lmsUrlLinks: z.object({
     list: z.array(z.string()),
     reward: z.number().optional(),
   }).optional(),
@@ -266,7 +272,10 @@ export default function TemplatesNew() {
       lmsContent: "",
       imageUrl: "",
       imageFileId: "",
+      lmsImageUrl: "",
+      lmsImageFileId: "",
       urlLinks: { list: [], reward: undefined },
+      lmsUrlLinks: { list: [], reward: undefined },
       buttons: { list: [] },
     },
   });
@@ -274,9 +283,13 @@ export default function TemplatesNew() {
   // RCS 메시지 내용 탭 상태
   const [rcsContentTab, setRcsContentTab] = useState<"lms" | "rcs">("lms");
 
-  // URL Links 상태 관리
+  // URL Links 상태 관리 (RCS용)
   const [urlLinks, setUrlLinks] = useState<string[]>([]);
   const [urlRewardIndex, setUrlRewardIndex] = useState<number | undefined>(undefined);
+  
+  // LMS URL Links 상태 관리
+  const [lmsUrlLinks, setLmsUrlLinks] = useState<string[]>([]);
+  const [lmsUrlRewardIndex, setLmsUrlRewardIndex] = useState<number | undefined>(undefined);
 
   // Buttons 상태 관리
   const [buttons, setButtons] = useState<RcsButton[]>([]);
