@@ -252,13 +252,17 @@ export default function TemplatesNew() {
     const templateUrlLinks = template.urlLinks as UrlLinkConfig | null;
     const templateButtons = template.buttons as RcsButtonsConfig | null;
     
+    // RCS 유형일 때 lmsContent가 없으면 content를 기본값으로 사용
+    const lmsContentValue = (template as any).lmsContent || 
+      (template.messageType === "RCS" ? template.content : "");
+    
     form.reset({
       name: `${template.name} (복사본)`,
       messageType: template.messageType as "LMS" | "MMS" | "RCS",
       rcsType: template.rcsType || 0,
       title: template.title || "",
       content: template.content,
-      lmsContent: (template as any).lmsContent || "",
+      lmsContent: lmsContentValue,
       imageUrl: template.imageUrl || "",
       imageFileId: template.imageFileId || "",
       urlLinks: templateUrlLinks || { list: [], reward: undefined },
@@ -324,13 +328,17 @@ export default function TemplatesNew() {
       const templateLmsUrlLinks = (existingTemplate as any).lmsUrlLinks as UrlLinkConfig | null;
       const templateButtons = existingTemplate.buttons as RcsButtonsConfig | null;
       
+      // RCS 유형일 때 lmsContent가 없으면 content를 기본값으로 사용
+      const lmsContentValue = (existingTemplate as any).lmsContent || 
+        (existingTemplate.messageType === "RCS" ? existingTemplate.content : "");
+      
       form.reset({
         name: existingTemplate.name,
         messageType: existingTemplate.messageType as "LMS" | "MMS" | "RCS",
         rcsType: existingTemplate.rcsType || 0,
         title: existingTemplate.title || "",
         content: existingTemplate.content,
-        lmsContent: (existingTemplate as any).lmsContent || "",
+        lmsContent: lmsContentValue,
         imageUrl: existingTemplate.imageUrl || "",
         imageFileId: existingTemplate.imageFileId || "",
         lmsImageUrl: (existingTemplate as any).lmsImageUrl || "",
