@@ -13,6 +13,7 @@ import {
   Eye,
   Save,
   Edit,
+  Check,
   CheckCircle,
   Upload,
   X,
@@ -200,8 +201,12 @@ export default function TemplatesNew() {
   const [showPreview, setShowPreview] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFileId, setImageFileId] = useState<string | null>(null);
+  const [lmsImagePreview, setLmsImagePreview] = useState<string | null>(null);
+  const [lmsImageFileId, setLmsImageFileId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLmsUploading, setIsLmsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lmsFileInputRef = useRef<HTMLInputElement>(null);
   
   const [, viewParams] = useRoute("/templates/:id");
   const [, editParams] = useRoute("/templates/:id/edit");
@@ -297,6 +302,7 @@ export default function TemplatesNew() {
   useEffect(() => {
     if (existingTemplate) {
       const templateUrlLinks = existingTemplate.urlLinks as UrlLinkConfig | null;
+      const templateLmsUrlLinks = (existingTemplate as any).lmsUrlLinks as UrlLinkConfig | null;
       const templateButtons = existingTemplate.buttons as RcsButtonsConfig | null;
       
       form.reset({
@@ -308,18 +314,35 @@ export default function TemplatesNew() {
         lmsContent: (existingTemplate as any).lmsContent || "",
         imageUrl: existingTemplate.imageUrl || "",
         imageFileId: existingTemplate.imageFileId || "",
+        lmsImageUrl: (existingTemplate as any).lmsImageUrl || "",
+        lmsImageFileId: (existingTemplate as any).lmsImageFileId || "",
         urlLinks: templateUrlLinks || { list: [], reward: undefined },
+        lmsUrlLinks: templateLmsUrlLinks || { list: [], reward: undefined },
         buttons: templateButtons || { list: [] },
       });
+      // RCS 이미지
       if (existingTemplate.imageUrl) {
         setImagePreview(existingTemplate.imageUrl);
       }
       if (existingTemplate.imageFileId) {
         setImageFileId(existingTemplate.imageFileId);
       }
+      // LMS 이미지
+      if ((existingTemplate as any).lmsImageUrl) {
+        setLmsImagePreview((existingTemplate as any).lmsImageUrl);
+      }
+      if ((existingTemplate as any).lmsImageFileId) {
+        setLmsImageFileId((existingTemplate as any).lmsImageFileId);
+      }
+      // RCS URL 링크
       if (templateUrlLinks?.list) {
         setUrlLinks(templateUrlLinks.list);
         setUrlRewardIndex(templateUrlLinks.reward);
+      }
+      // LMS URL 링크
+      if (templateLmsUrlLinks?.list) {
+        setLmsUrlLinks(templateLmsUrlLinks.list);
+        setLmsUrlRewardIndex(templateLmsUrlLinks.reward);
       }
       if (templateButtons?.list) {
         setButtons(templateButtons.list);
@@ -469,16 +492,114 @@ export default function TemplatesNew() {
     }
   };
 
+  // LMS용 이미지 업로드 핸들러
+  const handleLmsImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ["image/jpeg"];
+    if (!validTypes.includes(file.type)) {
+      toast({
+        title: "지원하지 않는 파일 형식",
+        description: "LMS/MMS는 JPG 파일만 지원해요",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLmsUploading(true);
+
+    try {
+      // MMS 규격으로 리사이즈 (640x480, 300KB)
+      const result = await resizeImageToRcsSpec(file, 640, 480, 300);
+      const base64Data = result.base64;
+      
+      if (result.resized) {
+        toast({
+          title: "이미지 크기 자동 조정됨",
+          description: `${result.originalSize} → ${result.newSize} (LMS/MMS 규격)`,
+        });
+      }
+      
+      setLmsImagePreview(base64Data);
+      form.setValue("lmsImageUrl", base64Data);
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const response = await fetch("/api/bizchat/file", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileType: file.type,
+            base64Data: base64Data.split(",")[1],
+            fileUseType: "image",
+          }),
+        });
+        
+        const result = await response.json();
+        
+        if (result.success && result.fileId) {
+          setLmsImageFileId(result.fileId);
+          form.setValue("lmsImageFileId", result.fileId);
+          toast({
+            title: "LMS 이미지 업로드 완료",
+            description: "BizChat에 파일이 등록되었어요",
+          });
+        } else {
+          toast({
+            title: "LMS 이미지 업로드 실패",
+            description: result.error || "다시 시도해주세요",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error("LMS Image upload error:", error);
+        toast({
+          title: "LMS 이미지 업로드 실패",
+          description: "서버 연결에 실패했어요. 나중에 다시 시도해주세요",
+          variant: "destructive",
+        });
+      }
+
+      setIsLmsUploading(false);
+    } catch (error) {
+      setIsLmsUploading(false);
+      toast({
+        title: "이미지 처리 실패",
+        description: "파일을 읽을 수 없어요",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const removeLmsImage = () => {
+    setLmsImagePreview(null);
+    setLmsImageFileId(null);
+    form.setValue("lmsImageUrl", "");
+    form.setValue("lmsImageFileId", "");
+    if (lmsFileInputRef.current) {
+      lmsFileInputRef.current.value = "";
+    }
+  };
+
   const createMutation = useMutation({
-    mutationFn: async (data: TemplateFormValues & { urlLinksData?: UrlLinkConfig; buttonsData?: RcsButtonsConfig }) => {
+    mutationFn: async (data: TemplateFormValues & { urlLinksData?: UrlLinkConfig; buttonsData?: RcsButtonsConfig; lmsUrlLinksData?: UrlLinkConfig }) => {
       const cleanedData = {
         ...data,
         imageUrl: data.imageUrl || undefined,
         imageFileId: data.imageFileId || undefined,
+        lmsImageUrl: data.messageType === "RCS" ? (data.lmsImageUrl || undefined) : undefined,
+        lmsImageFileId: data.messageType === "RCS" ? (data.lmsImageFileId || undefined) : undefined,
         title: data.title || undefined,
         rcsType: data.messageType === "RCS" ? data.rcsType : undefined,
         lmsContent: data.messageType === "RCS" ? (data.lmsContent || undefined) : undefined,
         urlLinks: data.urlLinksData?.list?.length ? data.urlLinksData : undefined,
+        lmsUrlLinks: data.messageType === "RCS" && data.lmsUrlLinksData?.list?.length ? data.lmsUrlLinksData : undefined,
         buttons: data.buttonsData?.list?.length ? data.buttonsData : undefined,
       };
       return apiRequest("POST", "/api/templates", cleanedData);
@@ -501,15 +622,18 @@ export default function TemplatesNew() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: TemplateFormValues & { urlLinksData?: UrlLinkConfig; buttonsData?: RcsButtonsConfig }) => {
+    mutationFn: async (data: TemplateFormValues & { urlLinksData?: UrlLinkConfig; buttonsData?: RcsButtonsConfig; lmsUrlLinksData?: UrlLinkConfig }) => {
       const cleanedData = {
         ...data,
         imageUrl: data.imageUrl || undefined,
         imageFileId: data.imageFileId || undefined,
+        lmsImageUrl: data.messageType === "RCS" ? (data.lmsImageUrl || undefined) : undefined,
+        lmsImageFileId: data.messageType === "RCS" ? (data.lmsImageFileId || undefined) : undefined,
         title: data.title || undefined,
         rcsType: data.messageType === "RCS" ? data.rcsType : undefined,
         lmsContent: data.messageType === "RCS" ? (data.lmsContent || undefined) : undefined,
         urlLinks: data.urlLinksData?.list?.length ? data.urlLinksData : undefined,
+        lmsUrlLinks: data.messageType === "RCS" && data.lmsUrlLinksData?.list?.length ? data.lmsUrlLinksData : undefined,
         buttons: data.buttonsData?.list?.length ? data.buttonsData : undefined,
       };
       return apiRequest("PATCH", `/api/templates/${templateId}`, cleanedData);
@@ -536,6 +660,7 @@ export default function TemplatesNew() {
     const submitData = {
       ...data,
       urlLinksData: urlLinks.length > 0 ? { list: urlLinks, reward: urlRewardIndex } : undefined,
+      lmsUrlLinksData: lmsUrlLinks.length > 0 ? { list: lmsUrlLinks, reward: lmsUrlRewardIndex } : undefined,
       buttonsData: buttons.length > 0 ? { list: buttons } : undefined,
     };
     
@@ -903,7 +1028,7 @@ export default function TemplatesNew() {
                           RCS
                         </TabsTrigger>
                       </TabsList>
-                      <TabsContent value="lms" className="mt-4">
+                      <TabsContent value="lms" className="mt-4 space-y-4">
                         <FormField
                           control={form.control}
                           name="lmsContent"
@@ -926,6 +1051,137 @@ export default function TemplatesNew() {
                             </FormItem>
                           )}
                         />
+                        
+                        {/* LMS 이미지 업로드 */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <FormLabel className="flex items-center gap-2">
+                              <ImageIcon className="h-4 w-4" />
+                              이미지 (선택)
+                            </FormLabel>
+                          </div>
+                          
+                          <input
+                            ref={lmsFileInputRef}
+                            type="file"
+                            accept="image/jpeg"
+                            onChange={handleLmsImageUpload}
+                            className="hidden"
+                            data-testid="input-lms-image-upload"
+                            disabled={isViewMode}
+                          />
+                          
+                          {lmsImagePreview ? (
+                            <div className="relative">
+                              <img
+                                src={lmsImagePreview}
+                                alt="LMS 이미지 미리보기"
+                                className="w-full rounded-lg border"
+                                data-testid="img-lms-preview"
+                              />
+                              {!isViewMode && (
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="icon"
+                                  className="absolute top-2 right-2 h-8 w-8"
+                                  onClick={removeLmsImage}
+                                  data-testid="button-remove-lms-image"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {lmsImageFileId && (
+                                <Badge variant="secondary" className="absolute bottom-2 left-2">
+                                  <Check className="h-3 w-3 mr-1" />
+                                  업로드 완료
+                                </Badge>
+                              )}
+                            </div>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full h-24 border-dashed"
+                              onClick={() => lmsFileInputRef.current?.click()}
+                              disabled={isLmsUploading || isViewMode}
+                              data-testid="button-upload-lms-image"
+                            >
+                              {isLmsUploading ? (
+                                <Loader2 className="h-6 w-6 animate-spin" />
+                              ) : (
+                                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                  <Upload className="h-6 w-6" />
+                                  <span className="text-sm">JPG 이미지 업로드</span>
+                                  <span className="text-xs">640×480, 최대 300KB</span>
+                                </div>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* LMS URL 링크 */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <FormLabel className="flex items-center gap-2">
+                              <ExternalLink className="h-4 w-4" />
+                              URL 링크 (최대 3개)
+                            </FormLabel>
+                            {!isViewMode && lmsUrlLinks.length < 3 && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setLmsUrlLinks([...lmsUrlLinks, ""])}
+                                data-testid="button-add-lms-url"
+                              >
+                                <Plus className="h-4 w-4 mr-1" />
+                                URL 추가
+                              </Button>
+                            )}
+                          </div>
+                          
+                          {lmsUrlLinks.length > 0 ? (
+                            <div className="space-y-2">
+                              {lmsUrlLinks.map((url, index) => (
+                                <div key={index} className="flex gap-2">
+                                  <Input
+                                    placeholder="https://example.com"
+                                    value={url}
+                                    onChange={(e) => {
+                                      const newUrls = [...lmsUrlLinks];
+                                      newUrls[index] = e.target.value;
+                                      setLmsUrlLinks(newUrls);
+                                    }}
+                                    disabled={isViewMode}
+                                    data-testid={`input-lms-url-${index}`}
+                                  />
+                                  {!isViewMode && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => {
+                                        const newUrls = lmsUrlLinks.filter((_, i) => i !== index);
+                                        setLmsUrlLinks(newUrls);
+                                        if (lmsUrlRewardIndex === index) {
+                                          setLmsUrlRewardIndex(undefined);
+                                        } else if (lmsUrlRewardIndex && lmsUrlRewardIndex > index) {
+                                          setLmsUrlRewardIndex(lmsUrlRewardIndex - 1);
+                                        }
+                                      }}
+                                      data-testid={`button-remove-lms-url-${index}`}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">URL 링크가 없습니다</p>
+                          )}
+                        </div>
                       </TabsContent>
                       <TabsContent value="rcs" className="mt-4">
                         <FormField
@@ -979,7 +1235,8 @@ export default function TemplatesNew() {
                   />
                 )}
 
-                {showImageUpload && (
+                {/* RCS 유형일 때는 RCS 탭에서만 이미지 업로드 표시 */}
+                {showImageUpload && (watchedValues.messageType !== "RCS" || rcsContentTab === "rcs") && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <FormLabel>이미지 {watchedValues.messageType === "MMS" && "(필수)"}</FormLabel>
@@ -1087,8 +1344,9 @@ export default function TemplatesNew() {
                   </div>
                 )}
 
-                {/* URL 링크 관리 (MMS/RCS) */}
-                {(watchedValues.messageType === "MMS" || watchedValues.messageType === "RCS") && (
+                {/* URL 링크 관리 (MMS/RCS) - RCS 유형일 때는 RCS 탭에서만 표시 */}
+                {((watchedValues.messageType === "MMS") || 
+                  (watchedValues.messageType === "RCS" && rcsContentTab === "rcs")) && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <FormLabel className="flex items-center gap-2">
@@ -1381,46 +1639,98 @@ export default function TemplatesNew() {
           <CardContent>
             {showPreview && (
               <div className="bg-muted rounded-2xl p-4 max-w-[320px] mx-auto">
+                {/* RCS 유형일 때 탭 선택 표시 */}
+                {watchedValues.messageType === "RCS" && (
+                  <div className="flex gap-1 mb-3 p-1 bg-background/50 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setRcsContentTab("lms")}
+                      className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        rcsContentTab === "lms" 
+                          ? "bg-background shadow text-foreground" 
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      LMS
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRcsContentTab("rcs")}
+                      className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        rcsContentTab === "rcs" 
+                          ? "bg-background shadow text-foreground" 
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      RCS
+                    </button>
+                  </div>
+                )}
+                
                 <div className="bg-background rounded-xl p-4 shadow-sm space-y-3">
                   <div className="flex items-center gap-2 text-small text-muted-foreground">
-                    {getMessageTypeIcon(watchedValues.messageType)}
-                    <span>{getMessageTypeLabel(watchedValues.messageType)}</span>
-                    {watchedValues.messageType === "RCS" && (
+                    {getMessageTypeIcon(watchedValues.messageType === "RCS" && rcsContentTab === "lms" ? "LMS" : watchedValues.messageType)}
+                    <span>
+                      {watchedValues.messageType === "RCS" && rcsContentTab === "lms" 
+                        ? "LMS (RCS 미지원 시)" 
+                        : getMessageTypeLabel(watchedValues.messageType)}
+                    </span>
+                    {watchedValues.messageType === "RCS" && rcsContentTab === "rcs" && (
                       <Badge variant="secondary" className="text-xs">
                         {RCS_TYPES.find(t => t.value === watchedValues.rcsType)?.label || "스탠다드"}
                       </Badge>
                     )}
                   </div>
                   
-                  {watchedValues.title && (
+                  {/* 타이틀은 RCS 탭에서만 표시 */}
+                  {watchedValues.title && (watchedValues.messageType !== "RCS" || rcsContentTab === "rcs") && (
                     <div className="font-semibold text-body">
                       {watchedValues.title}
                     </div>
                   )}
                   
-                  {imagePreview && (
-                    <div 
-                      className="rounded-lg overflow-hidden bg-muted flex items-center justify-center"
-                      style={{
-                        aspectRatio: watchedValues.messageType === "RCS" 
-                          ? (RCS_TYPES.find(t => t.value === watchedValues.rcsType)?.aspectRatio || "16/9")
-                          : "4/3"
-                      }}
-                    >
-                      <img 
-                        src={imagePreview} 
-                        alt="미리보기" 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+                  {/* 이미지 미리보기 - 탭에 따라 다른 이미지 표시 */}
+                  {watchedValues.messageType === "RCS" && rcsContentTab === "lms" ? (
+                    lmsImagePreview && (
+                      <div 
+                        className="rounded-lg overflow-hidden bg-muted flex items-center justify-center"
+                        style={{ aspectRatio: "4/3" }}
+                      >
+                        <img 
+                          src={lmsImagePreview} 
+                          alt="LMS 이미지 미리보기" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )
+                  ) : (
+                    imagePreview && (
+                      <div 
+                        className="rounded-lg overflow-hidden bg-muted flex items-center justify-center"
+                        style={{
+                          aspectRatio: watchedValues.messageType === "RCS" 
+                            ? (RCS_TYPES.find(t => t.value === watchedValues.rcsType)?.aspectRatio || "16/9")
+                            : "4/3"
+                        }}
+                      >
+                        <img 
+                          src={imagePreview} 
+                          alt="미리보기" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )
                   )}
                   
+                  {/* 메시지 내용 - 탭에 따라 다른 내용 표시 */}
                   <div className="text-small whitespace-pre-wrap">
-                    {watchedValues.content || "메시지 내용이 여기에 표시됩니다..."}
+                    {watchedValues.messageType === "RCS" && rcsContentTab === "lms"
+                      ? (watchedValues.lmsContent || "LMS 메시지 내용이 여기에 표시됩니다...")
+                      : (watchedValues.content || "메시지 내용이 여기에 표시됩니다...")}
                   </div>
                   
-                  {/* RCS 버튼 미리보기 */}
-                  {watchedValues.messageType === "RCS" && buttons.length > 0 && (
+                  {/* RCS 버튼 미리보기 - RCS 탭에서만 표시 */}
+                  {watchedValues.messageType === "RCS" && rcsContentTab === "rcs" && buttons.length > 0 && (
                     <div className="space-y-2 pt-2">
                       {buttons.map((button, index) => {
                         const buttonType = BUTTON_TYPES.find(t => t.value === button.type);

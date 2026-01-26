@@ -287,7 +287,13 @@ export async function registerRoutes(
     lmsContent: z.string().max(2000).optional(),
     imageUrl: z.string().optional(),
     imageFileId: z.string().optional(),
+    lmsImageUrl: z.string().optional(),
+    lmsImageFileId: z.string().optional(),
     urlLinks: z.object({
+      list: z.array(z.string()),
+      reward: z.number().optional(),
+    }).optional(),
+    lmsUrlLinks: z.object({
       list: z.array(z.string()),
       reward: z.number().optional(),
     }).optional(),
@@ -328,7 +334,10 @@ export async function registerRoutes(
         lmsContent: data.lmsContent,
         imageUrl: data.imageUrl,
         imageFileId: data.imageFileId,
+        lmsImageUrl: data.lmsImageUrl,
+        lmsImageFileId: data.lmsImageFileId,
         urlLinks: data.urlLinks,
+        lmsUrlLinks: data.lmsUrlLinks,
         buttons: data.buttons,
         status: "draft",
       });
