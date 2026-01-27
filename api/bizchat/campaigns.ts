@@ -583,13 +583,36 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
   // - RCS MMS(1): RCS에서 처리
   // - RCS LMS(3): RCS에서 처리
   const needsFileForBilling = payload.billingType === 2; // MMS만 mms.fileInfo 필요
-  const mmsUrlList: string[] = message?.urlLinks || message?.urls || [];
+  
+  // RCS 메시지의 경우: LMS fallback에 전용 필드 사용 (lmsUrlLinks, lmsImageUrl)
+  // RCS가 아닌 경우: 일반 필드 사용 (urlLinks, imageUrl)
+  const isRcsMessage = campaign.messageType === 'RCS';
+  
+  // URL 링크 정규화 - 배열 또는 {list: []} 형식 모두 지원
+  const normalizeUrlList = (urls: unknown): string[] => {
+    if (!urls) return [];
+    if (Array.isArray(urls)) return urls;
+    if (typeof urls === 'object' && urls !== null && 'list' in urls) {
+      const list = (urls as { list?: unknown }).list;
+      return Array.isArray(list) ? list : [];
+    }
+    return [];
+  };
+  
+  const lmsUrlLinks = normalizeUrlList(message?.lmsUrlLinks);
+  const rcsUrlLinks = normalizeUrlList(message?.urlLinks);
+  const mmsUrlList: string[] = isRcsMessage && lmsUrlLinks.length > 0 
+    ? lmsUrlLinks 
+    : (rcsUrlLinks.length > 0 ? rcsUrlLinks : (message?.urls || []));
   const mmsUrlLink = mmsUrlList.length > 0 
     ? { list: mmsUrlList.slice(0, 3), reward: message?.urlLinkReward }
     : {}; // 링크가 없으면 빈 객체 {} (문서 규격)
     
   // MMS 이미지 첨부 (MMS billingType=2일 때만)
-  const hasImage = !!message?.imageUrl;
+  // RCS의 경우 LMS fallback 전용 이미지 사용
+  const lmsImageUrl = message?.lmsImageUrl;
+  const mmsImageUrl = isRcsMessage && lmsImageUrl ? lmsImageUrl : message?.imageUrl;
+  const hasImage = !!mmsImageUrl;
   
   // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
   // mms 객체 구성 - 조건부 필드 포함 (빈 객체 생략)
@@ -600,7 +623,7 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
     msg: fallbackMsg,
     ...(message?.urlFile && { urlFile: message.urlFile }),
     ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), reward: message?.urlLinkReward } }),
-    ...(needsFileForBilling && hasImage && { fileInfo: { list: [{ origId: message.imageUrl }] } }),
+    ...(needsFileForBilling && hasImage && { fileInfo: { list: [{ origId: mmsImageUrl }] } }),
   };
   
   payload.mms = mmsObj;
@@ -623,7 +646,8 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
   // BizChat API 규격 v0.29.0: rcs 필드는 항상 포함 (문서 예제: "rcs": [])
   if (campaign.messageType === 'RCS' || isRcsBilling) {
     const rcsSlides = message?.rcsSlides || [{ slideNum: 1 }];
-    const rcsUrlList: string[] = message?.rcsUrls || mmsUrlList;
+    // RCS 전용 URL 사용 (urlLinks - RCS 탭에서 입력된 URL) - 이미 위에서 rcsUrlLinks로 정규화됨
+    const rcsUrlList: string[] = message?.rcsUrls || rcsUrlLinks;
 
     // RCS 메시지 검증 (경고 로깅, 에러는 API에서 반환)
     const rcsValidation = validateRcsMessage(

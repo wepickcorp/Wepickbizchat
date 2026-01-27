@@ -41,6 +41,10 @@ const templates = pgTable('templates', {
   imageFileId: text('image_file_id'),
   urlLinks: jsonb('url_links'),
   buttons: jsonb('buttons'),
+  lmsContent: text('lms_content'),
+  lmsImageUrl: text('lms_image_url'),
+  lmsImageFileId: text('lms_image_file_id'),
+  lmsUrlLinks: jsonb('lms_url_links'),
   status: text('status').default('draft'),
   submittedAt: timestamp('submitted_at'),
   reviewedAt: timestamp('reviewed_at'),
@@ -186,6 +190,13 @@ const createTemplateSchema = z.object({
       val2: z.string().optional(),
     })),
   }).optional(),
+  lmsContent: z.string().max(2000).optional(),
+  lmsImageUrl: z.string().optional(),
+  lmsImageFileId: z.string().optional(),
+  lmsUrlLinks: z.object({
+    list: z.array(z.string()),
+    reward: z.number().optional(),
+  }).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -272,6 +283,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         imageFileId: data.imageFileId,
         urlLinks: data.urlLinks,
         buttons: data.buttons,
+        lmsContent: data.messageType === 'RCS' ? (data.lmsContent || null) : null,
+        lmsImageUrl: data.messageType === 'RCS' ? (data.lmsImageUrl || null) : null,
+        lmsImageFileId: data.messageType === 'RCS' ? (data.lmsImageFileId || null) : null,
+        lmsUrlLinks: data.messageType === 'RCS' ? (data.lmsUrlLinks || null) : null,
         status: 'draft',
       }).returning();
       

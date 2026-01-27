@@ -19,6 +19,10 @@ const templates = pgTable('templates', {
   imageFileId: text('image_file_id'),
   urlLinks: jsonb('url_links'),
   buttons: jsonb('buttons'),
+  lmsContent: text('lms_content'),
+  lmsImageUrl: text('lms_image_url'),
+  lmsImageFileId: text('lms_image_file_id'),
+  lmsUrlLinks: jsonb('lms_url_links'),
   status: text('status').default('draft'),
   submittedAt: timestamp('submitted_at'),
   reviewedAt: timestamp('reviewed_at'),
@@ -93,6 +97,13 @@ const updateTemplateSchema = z.object({
       val2: z.string().optional(),
     })),
   }).optional(),
+  lmsContent: z.string().max(2000).optional().nullable(),
+  lmsImageUrl: z.string().optional().nullable(),
+  lmsImageFileId: z.string().optional().nullable(),
+  lmsUrlLinks: z.object({
+    list: z.array(z.string()),
+    reward: z.number().optional(),
+  }).optional().nullable(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -131,7 +142,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const data = updateTemplateSchema.parse(req.body);
-      const updated = await db.update(templates).set(data).where(eq(templates.id, id)).returning();
+      
+      // RCS 템플릿이 아닌 경우 LMS 필드를 null로 정리
+      const messageType = data.messageType || template.messageType;
+      const updateData: Record<string, unknown> = { ...data };
+      if (messageType !== 'RCS') {
+        updateData.lmsContent = null;
+        updateData.lmsImageUrl = null;
+        updateData.lmsImageFileId = null;
+        updateData.lmsUrlLinks = null;
+      }
+      
+      const updated = await db.update(templates).set(updateData).where(eq(templates.id, id)).returning();
       return res.status(200).json(updated[0]);
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid template data', details: error.errors });
