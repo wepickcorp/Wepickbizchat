@@ -257,9 +257,12 @@ export default function TemplatesNew() {
     const lmsContentValue = (template as any).lmsContent || 
       (template.messageType === "RCS" ? template.content : "");
     
-    // LMS URL 링크가 없으면 RCS URL 링크를 기본값으로 사용
-    const lmsUrlLinksValue = templateLmsUrlLinks || 
-      (template.messageType === "RCS" ? templateUrlLinks : null);
+    // LMS URL 링크가 없거나 빈 배열이면 RCS URL 링크를 기본값으로 사용
+    const lmsUrlLinksValue = (templateLmsUrlLinks?.list && templateLmsUrlLinks.list.length > 0)
+      ? templateLmsUrlLinks
+      : (template.messageType === "RCS" && templateUrlLinks?.list && templateUrlLinks.list.length > 0)
+        ? templateUrlLinks
+        : null;
     
     form.reset({
       name: `${template.name} (복사본)`,
@@ -344,9 +347,12 @@ export default function TemplatesNew() {
       const lmsContentValue = (existingTemplate as any).lmsContent || 
         (existingTemplate.messageType === "RCS" ? existingTemplate.content : "");
       
-      // LMS URL 링크가 없으면 RCS URL 링크를 기본값으로 사용
-      const lmsUrlLinksValue = templateLmsUrlLinks || 
-        (existingTemplate.messageType === "RCS" ? templateUrlLinks : null);
+      // LMS URL 링크가 없거나 빈 배열이면 RCS URL 링크를 기본값으로 사용
+      const lmsUrlLinksValue = (templateLmsUrlLinks?.list && templateLmsUrlLinks.list.length > 0)
+        ? templateLmsUrlLinks
+        : (existingTemplate.messageType === "RCS" && templateUrlLinks?.list && templateUrlLinks.list.length > 0)
+          ? templateUrlLinks
+          : null;
       
       form.reset({
         name: existingTemplate.name,
@@ -382,11 +388,11 @@ export default function TemplatesNew() {
         setUrlLinks(templateUrlLinks.list);
         setUrlRewardIndex(templateUrlLinks.reward);
       }
-      // LMS URL 링크 (없으면 RCS URL 링크를 기본값으로 사용)
-      if (templateLmsUrlLinks?.list) {
+      // LMS URL 링크 (없거나 빈 배열이면 RCS URL 링크를 기본값으로 사용)
+      if (templateLmsUrlLinks?.list && templateLmsUrlLinks.list.length > 0) {
         setLmsUrlLinks(templateLmsUrlLinks.list);
         setLmsUrlRewardIndex(templateLmsUrlLinks.reward);
-      } else if (existingTemplate.messageType === "RCS" && templateUrlLinks?.list) {
+      } else if (existingTemplate.messageType === "RCS" && templateUrlLinks?.list && templateUrlLinks.list.length > 0) {
         // RCS 템플릿에서 LMS URL 링크가 없으면 RCS URL 링크를 기본값으로 복사
         setLmsUrlLinks(templateUrlLinks.list);
         setLmsUrlRewardIndex(templateUrlLinks.reward);
