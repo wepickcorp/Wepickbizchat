@@ -250,11 +250,16 @@ export default function TemplatesNew() {
   // 추천 템플릿 불러오기 함수
   const loadRecommendedTemplate = (template: TemplateWithSystem) => {
     const templateUrlLinks = template.urlLinks as UrlLinkConfig | null;
+    const templateLmsUrlLinks = (template as any).lmsUrlLinks as UrlLinkConfig | null;
     const templateButtons = template.buttons as RcsButtonsConfig | null;
     
     // RCS 유형일 때 lmsContent가 없으면 content를 기본값으로 사용
     const lmsContentValue = (template as any).lmsContent || 
       (template.messageType === "RCS" ? template.content : "");
+    
+    // LMS URL 링크가 없으면 RCS URL 링크를 기본값으로 사용
+    const lmsUrlLinksValue = templateLmsUrlLinks || 
+      (template.messageType === "RCS" ? templateUrlLinks : null);
     
     form.reset({
       name: `${template.name} (복사본)`,
@@ -266,6 +271,7 @@ export default function TemplatesNew() {
       imageUrl: template.imageUrl || "",
       imageFileId: template.imageFileId || "",
       urlLinks: templateUrlLinks || { list: [], reward: undefined },
+      lmsUrlLinks: lmsUrlLinksValue || { list: [], reward: undefined },
       buttons: templateButtons || { list: [] },
     });
     
@@ -275,9 +281,15 @@ export default function TemplatesNew() {
     if (template.imageFileId) {
       setImageFileId(template.imageFileId);
     }
+    // RCS URL 링크
     if (templateUrlLinks?.list) {
       setUrlLinks(templateUrlLinks.list);
       setUrlRewardIndex(templateUrlLinks.reward);
+    }
+    // LMS URL 링크 (없으면 RCS URL 링크 사용)
+    if (lmsUrlLinksValue?.list) {
+      setLmsUrlLinks(lmsUrlLinksValue.list);
+      setLmsUrlRewardIndex(lmsUrlLinksValue.reward);
     }
     if (templateButtons?.list) {
       setButtons(templateButtons.list);
@@ -332,6 +344,10 @@ export default function TemplatesNew() {
       const lmsContentValue = (existingTemplate as any).lmsContent || 
         (existingTemplate.messageType === "RCS" ? existingTemplate.content : "");
       
+      // LMS URL 링크가 없으면 RCS URL 링크를 기본값으로 사용
+      const lmsUrlLinksValue = templateLmsUrlLinks || 
+        (existingTemplate.messageType === "RCS" ? templateUrlLinks : null);
+      
       form.reset({
         name: existingTemplate.name,
         messageType: existingTemplate.messageType as "LMS" | "MMS" | "RCS",
@@ -344,7 +360,7 @@ export default function TemplatesNew() {
         lmsImageUrl: (existingTemplate as any).lmsImageUrl || "",
         lmsImageFileId: (existingTemplate as any).lmsImageFileId || "",
         urlLinks: templateUrlLinks || { list: [], reward: undefined },
-        lmsUrlLinks: templateLmsUrlLinks || { list: [], reward: undefined },
+        lmsUrlLinks: lmsUrlLinksValue || { list: [], reward: undefined },
         buttons: templateButtons || { list: [] },
       });
       // RCS 이미지
@@ -366,10 +382,14 @@ export default function TemplatesNew() {
         setUrlLinks(templateUrlLinks.list);
         setUrlRewardIndex(templateUrlLinks.reward);
       }
-      // LMS URL 링크
+      // LMS URL 링크 (없으면 RCS URL 링크를 기본값으로 사용)
       if (templateLmsUrlLinks?.list) {
         setLmsUrlLinks(templateLmsUrlLinks.list);
         setLmsUrlRewardIndex(templateLmsUrlLinks.reward);
+      } else if (existingTemplate.messageType === "RCS" && templateUrlLinks?.list) {
+        // RCS 템플릿에서 LMS URL 링크가 없으면 RCS URL 링크를 기본값으로 복사
+        setLmsUrlLinks(templateUrlLinks.list);
+        setLmsUrlRewardIndex(templateUrlLinks.reward);
       }
       if (templateButtons?.list) {
         setButtons(templateButtons.list);
