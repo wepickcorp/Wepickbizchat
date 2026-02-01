@@ -313,8 +313,14 @@ const messages = pgTable('messages', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  imageFileId: text('image_file_id'),
   urlLinks: jsonb('url_links'), // { list: string[], reward?: number }
   buttons: jsonb('buttons'), // { list: [{ type, name, val1, val2? }] }
+  // LMS fallback 전용 필드 (RCS 메시지 타입에서만 사용)
+  lmsContent: text('lms_content'),
+  lmsImageUrl: text('lms_image_url'),
+  lmsImageFileId: text('lms_image_file_id'),
+  lmsUrlLinks: jsonb('lms_url_links'), // { list: string[], reward?: number }
 });
 
 const templates = pgTable('templates', {
@@ -325,9 +331,15 @@ const templates = pgTable('templates', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  imageFileId: text('image_file_id'),
   urlLinks: jsonb('url_links'), // { list: string[], reward?: number }
   buttons: jsonb('buttons'), // { list: [{ type, name, val1, val2? }] }
   status: text('status').default('draft'),
+  // LMS fallback 전용 필드 (RCS 메시지 타입에서만 사용)
+  lmsContent: text('lms_content'),
+  lmsImageUrl: text('lms_image_url'),
+  lmsImageFileId: text('lms_image_file_id'),
+  lmsUrlLinks: jsonb('lms_url_links'), // { list: string[], reward?: number }
 });
 
 const targeting = pgTable('targeting', {
@@ -1025,8 +1037,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           title: template.title || '',
           content: template.content,
           imageUrl: template.imageUrl || null,
+          imageFileId: template.imageFileId || null,
           urlLinks: template.urlLinks || null,
           buttons: template.buttons || null,
+          // LMS fallback 전용 필드 (RCS 메시지 타입에서 사용)
+          lmsContent: template.lmsContent || null,
+          lmsImageUrl: template.lmsImageUrl || null,
+          lmsImageFileId: template.lmsImageFileId || null,
+          lmsUrlLinks: template.lmsUrlLinks || null,
         };
       }
     }

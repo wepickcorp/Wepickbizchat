@@ -1218,39 +1218,112 @@ export default function CampaignsNew() {
                     <CardTitle className="text-h3">선택한 템플릿 미리보기</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="bg-background rounded-xl p-4 shadow-sm max-w-[320px] space-y-3">
-                      <div className="flex items-center gap-2 text-small text-muted-foreground">
-                        {(() => {
-                          const Icon = getMessageTypeIcon(selectedTemplate.messageType);
-                          return <Icon className="h-4 w-4" />;
-                        })()}
-                        <span>{getMessageTypeLabel(selectedTemplate.messageType)}</span>
-                      </div>
-                      
-                      {selectedTemplate.title && (
-                        <div className="font-semibold text-body">
-                          {selectedTemplate.title}
+                    {/* RCS 템플릿인 경우 일반/RCS 두 가지 모두 표시 */}
+                    {selectedTemplate.messageType === 'RCS' ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* 일반 메시지 (LMS Fallback) */}
+                        <div>
+                          <div className="text-small font-medium text-muted-foreground mb-2">일반 메시지 (LMS)</div>
+                          <div className="bg-background rounded-xl p-4 shadow-sm max-w-[320px] space-y-3">
+                            <div className="flex items-center gap-2 text-small text-muted-foreground">
+                              <MessageSquare className="h-4 w-4" />
+                              <span>LMS (Fallback)</span>
+                            </div>
+                            
+                            {((selectedTemplate as any).lmsImageUrl || selectedTemplate.imageUrl) && (
+                              <div className="rounded-lg overflow-hidden bg-muted aspect-video">
+                                <img 
+                                  src={(selectedTemplate as any).lmsImageUrl || selectedTemplate.imageUrl} 
+                                  alt="LMS 이미지" 
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            )}
+                            
+                            <div className="text-small whitespace-pre-wrap">
+                              {(selectedTemplate as any).lmsContent || selectedTemplate.content}
+                            </div>
+                            
+                            <div className="text-tiny text-muted-foreground pt-2 border-t">
+                              SK코어타겟 비즈챗
+                            </div>
+                          </div>
                         </div>
-                      )}
-                      
-                      {selectedTemplate.imageUrl && (
-                        <div className="rounded-lg overflow-hidden bg-muted aspect-video">
-                          <img 
-                            src={selectedTemplate.imageUrl} 
-                            alt="템플릿 이미지" 
-                            className="w-full h-full object-cover"
-                          />
+                        
+                        {/* RCS 메시지 */}
+                        <div>
+                          <div className="text-small font-medium text-muted-foreground mb-2">RCS 메시지</div>
+                          <div className="bg-background rounded-xl p-4 shadow-sm max-w-[320px] space-y-3">
+                            <div className="flex items-center gap-2 text-small text-muted-foreground">
+                              {(() => {
+                                const Icon = getMessageTypeIcon(selectedTemplate.messageType);
+                                return <Icon className="h-4 w-4" />;
+                              })()}
+                              <span>RCS</span>
+                            </div>
+                            
+                            {selectedTemplate.title && (
+                              <div className="font-semibold text-body">
+                                {selectedTemplate.title}
+                              </div>
+                            )}
+                            
+                            {selectedTemplate.imageUrl && (
+                              <div className="rounded-lg overflow-hidden bg-muted aspect-video">
+                                <img 
+                                  src={selectedTemplate.imageUrl} 
+                                  alt="RCS 이미지" 
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            )}
+                            
+                            <div className="text-small whitespace-pre-wrap">
+                              {selectedTemplate.content}
+                            </div>
+                            
+                            <div className="text-tiny text-muted-foreground pt-2 border-t">
+                              SK코어타겟 비즈챗
+                            </div>
+                          </div>
                         </div>
-                      )}
-                      
-                      <div className="text-small whitespace-pre-wrap">
-                        {selectedTemplate.content}
                       </div>
-                      
-                      <div className="text-tiny text-muted-foreground pt-2 border-t">
-                        SK코어타겟 비즈챗
+                    ) : (
+                      /* 일반 LMS/MMS 템플릿 */
+                      <div className="bg-background rounded-xl p-4 shadow-sm max-w-[320px] space-y-3">
+                        <div className="flex items-center gap-2 text-small text-muted-foreground">
+                          {(() => {
+                            const Icon = getMessageTypeIcon(selectedTemplate.messageType);
+                            return <Icon className="h-4 w-4" />;
+                          })()}
+                          <span>{getMessageTypeLabel(selectedTemplate.messageType)}</span>
+                        </div>
+                        
+                        {selectedTemplate.title && (
+                          <div className="font-semibold text-body">
+                            {selectedTemplate.title}
+                          </div>
+                        )}
+                        
+                        {selectedTemplate.imageUrl && (
+                          <div className="rounded-lg overflow-hidden bg-muted aspect-video">
+                            <img 
+                              src={selectedTemplate.imageUrl} 
+                              alt="템플릿 이미지" 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                        
+                        <div className="text-small whitespace-pre-wrap">
+                          {selectedTemplate.content}
+                        </div>
+                        
+                        <div className="text-tiny text-muted-foreground pt-2 border-t">
+                          SK코어타겟 비즈챗
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
