@@ -354,7 +354,9 @@ export const messages = pgTable("messages", {
   content: text("content").notNull(), // RCS 메시지 내용
   lmsContent: text("lms_content"), // LMS fallback 메시지 내용
   imageUrl: text("image_url"), // RCS용 이미지 URL
+  imageFileId: varchar("image_file_id", { length: 100 }), // RCS용 BizChat 파일 업로드 ID
   lmsImageUrl: text("lms_image_url"), // LMS용 이미지 URL
+  lmsImageFileId: varchar("lms_image_file_id", { length: 100 }), // LMS용 BizChat 파일 업로드 ID
   
   // RCS URL 링크 및 버튼 (템플릿에서 복사)
   urlLinks: jsonb("url_links"), // RCS용 { list: string[], reward?: number }
