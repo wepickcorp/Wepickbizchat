@@ -28,9 +28,6 @@ async function buildAll() {
   console.log("building client...");
   await viteBuild();
 
-  console.log("copying assets...");
-  await copyDir("attached_assets", "dist/public/attached_assets");
-
   console.log("build complete!");
 }
 
