@@ -260,14 +260,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTemplate(templateData: InsertTemplate): Promise<Template> {
-    const [template] = await db.insert(templates).values(templateData).returning();
+    const [template] = await db.insert(templates).values(templateData as typeof templates.$inferInsert).returning();
     return template;
   }
 
   async updateTemplate(id: string, templateData: Partial<InsertTemplate>): Promise<Template | undefined> {
     const [template] = await db
       .update(templates)
-      .set({ ...templateData, updatedAt: new Date() })
+      .set({ ...templateData, updatedAt: new Date() } as Partial<typeof templates.$inferInsert>)
       .where(eq(templates.id, id))
       .returning();
     return template || undefined;

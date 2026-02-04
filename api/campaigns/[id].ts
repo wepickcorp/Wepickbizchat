@@ -359,9 +359,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             title: currentMessage?.title || updatedCampaign.name || campaign.name || '',
             msg: currentMessage?.content || '',
             // 조건부 필드 포함 - 빈 객체/배열 생략
-            ...(newFileInfo && Object.keys(newFileInfo as object).length > 0 && { fileInfo: newFileInfo }),
-            ...(existingUrlFile && { urlFile: existingUrlFile }),
-            ...(existingUrlLink?.list && existingUrlLink.list.length > 0 && { urlLink: existingUrlLink }),
+            ...(newFileInfo && Object.keys(newFileInfo as object).length > 0 ? { fileInfo: newFileInfo } : {}),
+            ...(existingUrlFile ? { urlFile: existingUrlFile } : {}),
+            ...(existingUrlLink?.list && existingUrlLink.list.length > 0 ? { urlLink: existingUrlLink } : {}),
           };
 
           // 기존 RCS/CB 데이터 검증
@@ -401,24 +401,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             // 최대값 검증 (자동 제한 없이 에러 반환 - 프론트엔드에서 타겟팅 조건 수정 필요)
             if (sndMosu > maxSndMosu) {
+              const { sndGoalCnt: _, ...restCampaign } = updatedCampaign;
               return res.status(400).json({
+                ...restCampaign,
                 error: `발송 모수(${sndMosu.toLocaleString()})가 최대값(${maxSndMosu.toLocaleString()})을 초과합니다. 타겟팅 조건을 좁혀주세요.`,
                 currentSndMosu: sndMosu,
                 maxSndMosu,
                 sndGoalCnt,
                 hint: '연령대 범위 축소, 지역 제한 등으로 타겟팅을 좁히면 모수가 줄어듭니다.',
-                ...updatedCampaign,
               });
             }
             
             // 최소값 검증 (150% 이상)
             if (sndMosu < minSndMosu) {
+              const { sndGoalCnt: _, ...restCampaign2 } = updatedCampaign;
               return res.status(400).json({
+                ...restCampaign2,
                 error: `발송 모수(${sndMosu.toLocaleString()})가 최소값(${minSndMosu.toLocaleString()})보다 작습니다. 발송 목표(${sndGoalCnt.toLocaleString()})의 150% 이상이어야 합니다.`,
                 currentSndMosu: sndMosu,
                 minSndMosu,
                 sndGoalCnt,
-                ...updatedCampaign,
               });
             }
             

@@ -472,7 +472,10 @@ async function createBizChatGeofence(
   }
 }
 
-function toUnixTimestamp(date: Date | string | null): number | undefined {
+function toUnixTimestamp(date: Date): number;
+function toUnixTimestamp(date: string): number;
+function toUnixTimestamp(date: Date | string | null | undefined): number | undefined;
+function toUnixTimestamp(date: Date | string | null | undefined): number | undefined {
   if (!date) return undefined;
   const d = typeof date === 'string' ? new Date(date) : date;
   return Math.floor(d.getTime() / 1000);
@@ -1744,7 +1747,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       
-      const bizchatCampaignId = createResult.data.data?.id as string;
+      const bizchatCampaignId = (createResult.data.data as { id?: string })?.id as string;
       
       if (!bizchatCampaignId) {
         return res.status(400).json({

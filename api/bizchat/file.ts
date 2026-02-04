@@ -132,7 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Authorization': apiKey,
         ...formHeaders, // multipart boundary 포함
       },
-      body: formBuffer,
+      body: new Uint8Array(formBuffer), // Buffer를 Uint8Array로 변환 (fetch body 호환)
     });
 
     const responseText = await response.text();
