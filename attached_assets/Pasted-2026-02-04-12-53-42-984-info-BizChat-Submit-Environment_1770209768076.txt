@@ -1,0 +1,133 @@
+2026-02-04 12:53:42.984 [info] [BizChat Submit] Environment: PRODUCTION (VERCEL_ENV=production)
+2026-02-04 12:53:48.015 [info] [Submit Create] Using sndMosu: 285,001 (from campaign)
+2026-02-04 12:53:48.015 [info] [Submit] effectiveRcsType: 1, including slideNum: 1
+2026-02-04 12:53:48.186 [info] [Submit] Querying targeting table for campaign: 6948a835-061e-41f3-9b9d-eab65a20761e
+2026-02-04 12:53:48.186 [info] [Submit] Found targeting data: yes
+2026-02-04 12:53:48.186 [info] [Submit] Building ATS filter from targeting table...
+2026-02-04 12:53:48.186 [info] [Submit] Built ATS filter from targeting: {
+  "$and": [
+    {
+      "data": {
+        "gt": 20,
+        "lt": 40
+      },
+      "dataType": "number",
+      "metaType": "svc",
+      "code": "cust_age_cd",
+      "desc": "연령: 20세 ~ 40세",
+      "not": false
+    }
+  ]
+}
+2026-02-04 12:53:48.186 [info] [Submit] Calling ATS mosu API to get SQL query...
+2026-02-04 12:53:48.186 [info] [Submit] Filter payload: {
+  "$and": [
+    {
+      "data": {
+        "gt": 20,
+        "lt": 40
+      },
+      "dataType": "number",
+      "metaType": "svc",
+      "code": "cust_age_cd",
+      "desc": "연령: 20세 ~ 40세",
+      "not": false
+    }
+  ]
+}
+2026-02-04 12:53:48.186 [info] [ATS Mosu] POST https://gw.bizchat1.co.kr/api/v1/ats/mosu?tid=1770209628186
+2026-02-04 12:53:48.187 [info] [ATS Mosu] Payload: {
+  "$and": [
+    {
+      "data": {
+        "gt": 20,
+        "lt": 40
+      },
+      "dataType": "number",
+      "metaType": "svc",
+      "code": "cust_age_cd",
+      "desc": "연령: 20세 ~ 40세",
+      "not": false
+    }
+  ]
+}
+2026-02-04 12:53:49.550 [info] [ATS Mosu] Response: 200 - {"tid":"1770209628186","code":"S000001","msg":"Success","data":{"cnt":2433374,"filterStr":"<table><tr><td id='oper0' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td id='oper1' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-연령: 20세 ~ 40세</td></tr></tr></table>","query":"( ( (cust_age_cd >= 20 and cust_age_cd <= 40) ) ) and indv_info_use_agree_yn = 'Y'"}}
+2026-02-04 12:53:49.550 [info] [ATS Mosu] Success - query: ( ( (cust_age_cd >= 20 and cust_age_cd <= 40) ) ) and indv_info_use_agree_yn = 'Y'...
+2026-02-04 12:53:49.550 [info] [Submit] sndMosuQuery (SQL from ATS): ( ( (cust_age_cd >= 20 and cust_age_cd <= 40) ) ) and indv_info_use_agree_yn = 'Y'...
+2026-02-04 12:53:49.550 [info] [Submit] ATS count: 2433374
+2026-02-04 12:53:49.550 [info] [Submit] sndMosuDesc: <table><tr><td id='oper0' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-...
+2026-02-04 12:53:49.550 [info] [Submit] atsSndStartDate (adjusted): 1770253200 2026-02-05T01:00:00.000Z
+2026-02-04 12:53:49.550 [info] [Submit] Using campaign rcsType: 1
+2026-02-04 12:53:49.550 [info] [Submit] RCS type set to: 1 (campaign.rcsType: 1, billingType: 3, slides: 1)
+2026-02-04 12:53:49.550 [info] [Submit] Creating campaign in BizChat...
+2026-02-04 12:53:49.550 [info] [Submit] Full createPayload: {
+  "tgtCompanyName": "위픽",
+  "name": "떡의작품 템플릿",
+  "sndNum": "001001",
+  "rcvType": 0,
+  "sndGoalCnt": 1000,
+  "billingType": 3,
+  "isTmp": 0,
+  "settleCnt": 1000,
+  "sndMosu": 285001,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-m2ccyf1am-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "",
+    "msg": "떡의작품 메뉴 안내\n \n고객님, 안녕하세요.\n떡의작품에서 메뉴 안내드립니다.\n매일 뽑은 가래떡으로 만든 떡볶이를 만나보세요.\n \n■ 떡의작품 특장점\n- 냉동·건떡이 아닌 매일 뽑은 가래떡 사용\n- 국물에 오래 있어도 퍼짐 적고 쫀득함 오래 유지\n- 찰짐과 밀도감이 확실한 식감\n \n▶ 가까운 매장 확인하기: https://tteokjak2.imweb.me/\n \n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다\n \n무료 수신거부 1504"
+  },
+  "rcs": [
+    {
+      "slideNum": 1,
+      "title": "",
+      "msg": "떡의작품 메뉴 안내\n \n고객님, 안녕하세요.\n떡의작품에서 메뉴 안내드립니다.\n매일 뽑은 가래떡으로 만든 떡볶이를 만나보세요.\n \n■ 떡의작품 특장점\n- 냉동·건떡이 아닌 매일 뽑은 가래떡 사용\n- 국물에 오래 있어도 퍼짐 적고 쫀득함 오래 유지\n- 찰짐과 밀도감이 확실한 식감\n \n▶ 가까운 매장 확인하기: https://tteokjak2.imweb.me/\n \n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다\n \n무료 수신거부 1504",
+      "opts": {}
+    }
+  ],
+  "sndMosuQuery": "( ( (cust_age_cd >= 20 and cust_age_cd <= 40) ) ) and indv_info_use_agree_yn = 'Y'",
+  "sndMosuDesc": "<table><tr><td id='oper0' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td id='oper1' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-연령: 20세 ~ 40세</td></tr></tr></table>",
+  "atsSndStartDate": 1770253200,
+  "rcsType": 1
+}
+2026-02-04 12:53:49.550 [info] [BizChat Submit] Environment: PRODUCTION
+2026-02-04 12:53:49.550 [info] [BizChat Submit] Looking for env var: BIZCHAT_PROD_API_KEY
+2026-02-04 12:53:49.550 [info] [BizChat Submit] API key exists: true, length: 64
+2026-02-04 12:53:49.550 [info] [BizChat Submit] VERCEL_ENV: production, NODE_ENV: production
+2026-02-04 12:53:49.550 [info] [BizChat] POST https://gw.bizchat1.co.kr/api/v1/cmpn/create?tid=1770209629550
+2026-02-04 12:53:49.551 [info] [BizChat] Request body: {
+  "tgtCompanyName": "위픽",
+  "name": "떡의작품 템플릿",
+  "sndNum": "001001",
+  "rcvType": 0,
+  "sndGoalCnt": 1000,
+  "billingType": 3,
+  "isTmp": 0,
+  "settleCnt": 1000,
+  "sndMosu": 285001,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-m2ccyf1am-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "",
+    "msg": "떡의작품 메뉴 안내\n \n고객님, 안녕하세요.\n떡의작품에서 메뉴 안내드립니다.\n매일 뽑은 가래떡으로 만든 떡볶이를 만나보세요.\n \n■ 떡의작품 특장점\n- 냉동·건떡이 아닌 매일 뽑은 가래떡 사용\n- 국물에 오래 있어도 퍼짐 적고 쫀득함 오래 유지\n- 찰짐과 밀도감이 확실한 식감\n \n▶ 가까운 매장 확인하기: https://tteokjak2.imweb.me/\n \n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다\n \n무료 수신거부 1504"
+  },
+  "rcs": [
+    {
+      "slideNum": 1,
+      "title": "",
+      "msg": "떡의작품 메뉴 안내\n \n고객님, 안녕하세요.\n떡의작품에서 메뉴 안내드립니다.\n매일 뽑은 가래떡으로 만든 떡볶이를 만나보세요.\n \n■ 떡의작품 특장점\n- 냉동·건떡이 아닌 매일 뽑은 가래떡 사용\n- 국물에 오래 있어도 퍼짐 적고 쫀득함 오래 유지\n- 찰짐과 밀도감이 확실한 식감\n \n▶ 가까운 매장 확인하기: https://tteokjak2.imweb.me/\n \n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다\n \n무료 수신거부 1504",
+      "opts": {}
+    }
+  ],
+  "sndMosuQuery": "( ( (cust_age_cd >= 20 and cust_age_cd <= 40) ) ) and indv_info_use_agree_yn = 'Y'",
+  "sndMosuDesc": "<table><tr><td id='oper0' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td id='oper1' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-연령: 20세 ~ 40세</td></tr></tr></table>",
+  "atsSndStartDate": 1770253200,
+  "rcsType": 1
+}
+2026-02-04 12:53:49.596 [info] [BizChat] Response: 400 - {"tid":"1770209629550","code":"E000002","msg":"Invalid request"}
+2026-02-04 12:53:49.596 [error] [Submit] BizChat API error: { tid: '1770209629550', code: 'E000002', msg: 'Invalid request' }

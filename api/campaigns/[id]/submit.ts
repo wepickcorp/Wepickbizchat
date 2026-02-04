@@ -1272,9 +1272,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? campaign.rcsType
         : (billingType === 1 ? 4 : 1);
       console.log(`[Submit] effectiveRcsType: ${effectiveRcsType}, including slideNum: 1`);
-      const rcsSlide: Record<string, unknown> | null = isRcs ? {
+      
+      // BizChat API 규격: rcsType=1(LMS 텍스트)일 때는 rcs 배열 없이 mms만 사용
+      // rcsType=1은 텍스트 전용 RCS이므로 rcs 슬라이드 형식이 아닌 mms 형식 사용
+      const shouldIncludeRcsArray = isRcs && effectiveRcsType !== 1;
+      console.log(`[Submit] shouldIncludeRcsArray: ${shouldIncludeRcsArray}, effectiveRcsType: ${effectiveRcsType}, isRcs: ${isRcs}`);
+      
+      const rcsSlide: Record<string, unknown> | null = shouldIncludeRcsArray ? {
         slideNum: 1, // BizChat API 필수 필드 - 모든 RCS 타입에서 필요
-        title: message?.title || '',
+        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
         msg: message?.content || '',
         ...(needsFile && imageFileId && { imgOrigId: imageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
@@ -1869,15 +1875,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
       
       // RCS 슬라이드 구성 - RCS 타입일 때만 생성
-      // BizChat API 규격: slideNum은 슬라이드형(rcsType=2)에서만 사용
+      // BizChat API 규격: rcsType=1(LMS 텍스트)일 때는 rcs 배열 없이 mms만 사용
       // updateEffectiveRcsType: campaign.rcsType이 유효하면 사용, 아니면 billingType에 따라 결정
       const updateEffectiveRcsType = (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5)
         ? campaign.rcsType
         : (billingType === 1 ? 4 : 1);
       console.log(`[Submit Update] effectiveRcsType for slideNum check: ${updateEffectiveRcsType}`);
-      const updateRcsSlide: Record<string, unknown> | null = isRcs ? {
-        ...(updateEffectiveRcsType === 2 && { slideNum: 1 }),
-        title: message?.title || '',
+      
+      // rcsType=1(LMS 텍스트)일 때는 rcs 배열 제외
+      const shouldIncludeUpdateRcsArray = isRcs && updateEffectiveRcsType !== 1;
+      console.log(`[Submit Update] shouldIncludeRcsArray: ${shouldIncludeUpdateRcsArray}, effectiveRcsType: ${updateEffectiveRcsType}`);
+      
+      const updateRcsSlide: Record<string, unknown> | null = shouldIncludeUpdateRcsArray ? {
+        slideNum: 1, // BizChat API 필수 필드
+        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
         msg: message?.content || '',
         ...(needsFile && updateImageFileId && { imgOrigId: updateImageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
