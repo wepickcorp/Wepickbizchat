@@ -15,7 +15,7 @@ import {
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/authUtils";
-import logoImage from "@assets/위픽xSKT 로고_1764247660608.png";
+import logoImage from "@assets/logo_optimized.png";
 import {
   Sidebar,
   SidebarContent,

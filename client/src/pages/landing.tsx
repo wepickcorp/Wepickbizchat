@@ -25,7 +25,7 @@ import {
   PiggyBank,
   LineChart
 } from "lucide-react";
-import logoImage from "@assets/위픽xSKT 로고_1764247660608.png";
+import logoImage from "@assets/logo_optimized.png";
 
 const painPoints = [
   {

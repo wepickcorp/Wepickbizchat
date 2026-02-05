@@ -1,0 +1,128 @@
+22:50:43.311 Running build in Portland, USA (West) – pdx1 (Secure Compute)
+22:50:43.311 Build machine configuration: 4 cores, 8 GB
+22:50:43.319 Cloning github.com/shinsehoon1998/Wepickbizchat (Branch: main, Commit: 098eebb)
+22:50:43.320 Skipping build cache, deployment was triggered without cache.
+22:50:49.892 Cloning completed: 6.573s
+22:50:50.249 Running "vercel build"
+22:50:51.147 Vercel CLI 50.9.6
+22:50:51.840 Running "install" command: `npm install`...
+22:51:02.095 npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+22:51:02.096 npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+22:51:06.538 
+22:51:06.539 added 623 packages, and audited 624 packages in 14s
+22:51:06.539 
+22:51:06.539 76 packages are looking for funding
+22:51:06.539   run `npm fund` for details
+22:51:06.578 
+22:51:06.578 19 vulnerabilities (4 low, 7 moderate, 7 high, 1 critical)
+22:51:06.578 
+22:51:06.578 To address issues that do not require attention, run:
+22:51:06.578   npm audit fix
+22:51:06.578 
+22:51:06.578 To address all issues (including breaking changes), run:
+22:51:06.578   npm audit fix --force
+22:51:06.578 
+22:51:06.578 Run `npm audit` for details.
+22:51:06.830 
+22:51:06.830 > rest-express@1.0.0 build
+22:51:06.830 > tsx script/build.ts
+22:51:06.830 
+22:51:07.747 building client...
+22:51:07.803 [36mvite v5.4.20 [32mbuilding for production...[36m[39m
+22:51:08.014 transforming...
+22:51:09.232 
+22:51:09.232 A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+22:51:15.293 [32m✓[39m 3076 modules transformed.
+22:51:16.062 rendering chunks...
+22:51:16.092 computing gzip size...
+22:51:16.133 [2m../dist/public/[22m[32mindex.html                                   [39m[1m[2m    1.02 kB[22m[1m[22m[2m │ gzip:   0.64 kB[22m
+22:51:16.134 [2m../dist/public/[22m[2massets/[22m[32m위픽xSKT 로고_1764247660608-Dx9prAwv.png  [39m[1m[2m3,876.82 kB[22m[1m[22m
+22:51:16.134 [2m../dist/public/[22m[2massets/[22m[35mindex-BlNt_uxU.css                    [39m[1m[2m   90.02 kB[22m[1m[22m[2m │ gzip:  14.56 kB[22m
+22:51:16.134 [2m../dist/public/[22m[2massets/[22m[36mindex-kZPDTAXU.js                     [39m[1m[33m1,569.11 kB[39m[22m[2m │ gzip: 429.45 kB[22m
+22:51:16.134 [33m
+22:51:16.135 (!) Some chunks are larger than 500 kB after minification. Consider:
+22:51:16.135 - Using dynamic import() to code-split the application
+22:51:16.135 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+22:51:16.135 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+22:51:16.135 [32m✓ built in 8.15s[39m
+22:51:16.135 build complete!
+22:51:16.247 Installing dependencies...
+22:51:17.614 
+22:51:17.614 up to date in 1s
+22:51:17.615 
+22:51:17.615 76 packages are looking for funding
+22:51:17.615   run `npm fund` for details
+22:51:17.847 Using TypeScript 5.6.3 (local user-provided)
+22:51:22.793 Using TypeScript 5.6.3 (local user-provided)
+22:51:23.405 Using TypeScript 5.6.3 (local user-provided)
+22:51:23.995 Using TypeScript 5.6.3 (local user-provided)
+22:51:24.543 Using TypeScript 5.6.3 (local user-provided)
+22:51:25.269 Using TypeScript 5.6.3 (local user-provided)
+22:51:26.067 Using TypeScript 5.6.3 (local user-provided)
+22:51:26.621 Using TypeScript 5.6.3 (local user-provided)
+22:51:27.190 Using TypeScript 5.6.3 (local user-provided)
+22:51:27.745 Using TypeScript 5.6.3 (local user-provided)
+22:51:28.293 Using TypeScript 5.6.3 (local user-provided)
+22:51:28.819 Using TypeScript 5.6.3 (local user-provided)
+22:51:29.319 Using TypeScript 5.6.3 (local user-provided)
+22:51:29.849 Using TypeScript 5.6.3 (local user-provided)
+22:51:30.518 Using TypeScript 5.6.3 (local user-provided)
+22:51:31.176 Using TypeScript 5.6.3 (local user-provided)
+22:51:31.828 Using TypeScript 5.6.3 (local user-provided)
+22:51:32.507 Using TypeScript 5.6.3 (local user-provided)
+22:51:33.239 Using TypeScript 5.6.3 (local user-provided)
+22:51:34.392 Using TypeScript 5.6.3 (local user-provided)
+22:51:36.543 Using TypeScript 5.6.3 (local user-provided)
+22:51:37.196 Using TypeScript 5.6.3 (local user-provided)
+22:51:37.845 Using TypeScript 5.6.3 (local user-provided)
+22:51:38.510 Using TypeScript 5.6.3 (local user-provided)
+22:51:39.047 Using TypeScript 5.6.3 (local user-provided)
+22:51:39.104 Using TypeScript 5.6.3 (local user-provided)
+22:51:39.655 Using TypeScript 5.6.3 (local user-provided)
+22:51:40.182 Using TypeScript 5.6.3 (local user-provided)
+22:51:40.713 Using TypeScript 5.6.3 (local user-provided)
+22:51:41.352 Using TypeScript 5.6.3 (local user-provided)
+22:51:41.902 Using TypeScript 5.6.3 (local user-provided)
+22:51:42.470 Using TypeScript 5.6.3 (local user-provided)
+22:51:43.029 Using TypeScript 5.6.3 (local user-provided)
+22:51:43.519 Using TypeScript 5.6.3 (local user-provided)
+22:51:44.256 Using TypeScript 5.6.3 (local user-provided)
+22:51:44.842 Using TypeScript 5.6.3 (local user-provided)
+22:51:45.378 Using TypeScript 5.6.3 (local user-provided)
+22:51:46.151 Using TypeScript 5.6.3 (local user-provided)
+22:51:46.423 Using TypeScript 5.6.3 (local user-provided)
+22:51:46.730 Using TypeScript 5.6.3 (local user-provided)
+22:51:47.663 Using TypeScript 5.6.3 (local user-provided)
+22:51:47.985 Using TypeScript 5.6.3 (local user-provided)
+22:51:48.240 Using TypeScript 5.6.3 (local user-provided)
+22:51:48.485 Using TypeScript 5.6.3 (local user-provided)
+22:51:48.740 Using TypeScript 5.6.3 (local user-provided)
+22:51:49.479 Using TypeScript 5.6.3 (local user-provided)
+22:51:49.735 Using TypeScript 5.6.3 (local user-provided)
+22:51:49.782 Using TypeScript 5.6.3 (local user-provided)
+22:51:50.937 Using TypeScript 5.6.3 (local user-provided)
+22:51:51.735 Using TypeScript 5.6.3 (local user-provided)
+22:51:52.512 Using TypeScript 5.6.3 (local user-provided)
+22:51:52.757 Using TypeScript 5.6.3 (local user-provided)
+22:51:53.316 Using TypeScript 5.6.3 (local user-provided)
+22:51:54.210 Using TypeScript 5.6.3 (local user-provided)
+22:51:54.448 Using TypeScript 5.6.3 (local user-provided)
+22:51:55.232 Using TypeScript 5.6.3 (local user-provided)
+22:51:55.481 Using TypeScript 5.6.3 (local user-provided)
+22:51:55.503 Using TypeScript 5.6.3 (local user-provided)
+22:51:56.349 Using TypeScript 5.6.3 (local user-provided)
+22:51:57.145 Using TypeScript 5.6.3 (local user-provided)
+22:51:58.163 Using TypeScript 5.6.3 (local user-provided)
+22:51:58.227 Using TypeScript 5.6.3 (local user-provided)
+22:51:59.046 Using TypeScript 5.6.3 (local user-provided)
+22:51:59.323 Using TypeScript 5.6.3 (local user-provided)
+22:52:00.053 Using TypeScript 5.6.3 (local user-provided)
+22:52:00.764 Using TypeScript 5.6.3 (local user-provided)
+22:52:01.695 Using TypeScript 5.6.3 (local user-provided)
+22:52:02.403 Using TypeScript 5.6.3 (local user-provided)
+22:52:03.106 Using TypeScript 5.6.3 (local user-provided)
+22:52:04.007 Using TypeScript 5.6.3 (local user-provided)
+22:52:04.538 Using TypeScript 5.6.3 (local user-provided)
+22:52:05.447 Build Completed in /vercel/output [1m]
+22:52:06.516 Deploying outputs...
+22:52:24.941 An unexpected error occurred when running this build. This may be a transient issue, please try rebuilding your project.

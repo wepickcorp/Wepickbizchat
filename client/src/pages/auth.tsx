@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, FileText, Building2 } from "lucide-react";
-import logoUrl from "@assets/위픽xSKT 로고_1764247660608.png";
+import logoUrl from "@assets/logo_optimized.png";
 
 interface AgencyOption {
   id: string;
