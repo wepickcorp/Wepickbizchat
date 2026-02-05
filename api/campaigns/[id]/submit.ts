@@ -1276,11 +1276,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : (billingType === 1 ? 4 : 1);
       console.log(`[Submit] effectiveRcsType: ${effectiveRcsType}, including slideNum: 1`);
       
-      // BizChat API 규격: rcsType=1(LMS 텍스트)일 때는 rcs 배열 없이 mms만 사용
-      // rcsType=1은 텍스트 전용 RCS이므로 rcs 슬라이드 형식이 아닌 mms 형식 사용
-      // E000002 오류 방지: rcsType=1일 때 rcs[] 배열 포함하면 안됨
-      const shouldIncludeRcsArray = isRcs && effectiveRcsType !== 1;
-      console.log(`[Submit] CRITICAL CHECK - shouldIncludeRcsArray: ${shouldIncludeRcsArray}, effectiveRcsType: ${effectiveRcsType}, isRcs: ${isRcs}, condition (effectiveRcsType !== 1): ${effectiveRcsType !== 1}`);
+      // BizChat API 규격: 모든 RCS 타입(0~5)에서 rcs 배열이 필요함
+      // E100018 오류 방지: rcsType에 맞는 슬라이드 개수가 필요 (rcsType=1도 1개 필요)
+      const shouldIncludeRcsArray = isRcs;
+      console.log(`[Submit] shouldIncludeRcsArray: ${shouldIncludeRcsArray}, effectiveRcsType: ${effectiveRcsType}, isRcs: ${isRcs}`);
       
       const rcsSlide: Record<string, unknown> | null = shouldIncludeRcsArray ? {
         slideNum: 1, // BizChat API 필수 필드 - 모든 RCS 타입에서 필요
@@ -1326,12 +1325,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...(rcsSlide && { rcs: [rcsSlide] }),
       };
 
-      // ★ 안전장치: rcsType=1(LMS 텍스트)일 때 rcs 배열이 있으면 강제로 제거 (E000002 방지)
-      // 이 체크는 위의 shouldIncludeRcsArray 로직이 실패했을 경우를 대비함
-      if (effectiveRcsType === 1 && 'rcs' in createPayload) {
-        console.log('[Submit] WARNING: rcsType=1 but rcs array exists - removing to prevent E000002');
-        delete createPayload.rcs;
-      }
       console.log(`[Submit] Final payload check - has rcs array: ${'rcs' in createPayload}, effectiveRcsType: ${effectiveRcsType}`);
 
       // 지오펜스(Maptics) 캠페인 필드 추가 (rcvType=1: 실시간, rcvType=2: 모아서 보내기)
@@ -1894,8 +1887,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : (billingType === 1 ? 4 : 1);
       console.log(`[Submit Update] effectiveRcsType for slideNum check: ${updateEffectiveRcsType}`);
       
-      // rcsType=1(LMS 텍스트)일 때는 rcs 배열 제외
-      const shouldIncludeUpdateRcsArray = isRcs && updateEffectiveRcsType !== 1;
+      // BizChat API 규격: 모든 RCS 타입(0~5)에서 rcs 배열이 필요함
+      // E100018 오류 방지: rcsType에 맞는 슬라이드 개수가 필요 (rcsType=1도 1개 필요)
+      const shouldIncludeUpdateRcsArray = isRcs;
       console.log(`[Submit Update] shouldIncludeRcsArray: ${shouldIncludeUpdateRcsArray}, effectiveRcsType: ${updateEffectiveRcsType}`);
       
       const updateRcsSlide: Record<string, unknown> | null = shouldIncludeUpdateRcsArray ? {
@@ -1939,11 +1933,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...(updateRcsSlide && { rcs: [updateRcsSlide] }),
       };
 
-      // ★ 안전장치: rcsType=1(LMS 텍스트)일 때 rcs 배열이 있으면 강제로 제거 (E000002 방지)
-      if (updateEffectiveRcsType === 1 && 'rcs' in updatePayload) {
-        console.log('[Submit Update] WARNING: rcsType=1 but rcs array exists - removing to prevent E000002');
-        delete updatePayload.rcs;
-      }
       console.log(`[Submit Update] Final payload check - has rcs array: ${'rcs' in updatePayload}, effectiveRcsType: ${updateEffectiveRcsType}`);
 
       // 지오펜스(Maptics) 캠페인 필드 추가 (rcvType=1: 실시간, rcvType=2: 모아서 보내기)

@@ -1,0 +1,165 @@
+2026-02-05 07:13:03.869 [info] [Submit Create] Using sndMosu: 345,116 (from campaign)
+2026-02-05 07:13:03.869 [info] [Submit] effectiveRcsType: 1, including slideNum: 1
+2026-02-05 07:13:03.869 [info] [Submit] CRITICAL CHECK - shouldIncludeRcsArray: false, effectiveRcsType: 1, isRcs: true, condition (effectiveRcsType !== 1): false
+2026-02-05 07:13:03.869 [info] [Submit] Final payload check - has rcs array: false, effectiveRcsType: 1
+2026-02-05 07:13:04.046 [info] [Submit] Querying targeting table for campaign: 18c68cda-5eca-46c1-afdf-1fd4a6245cf3
+2026-02-05 07:13:04.046 [info] [Submit] Found targeting data: yes
+2026-02-05 07:13:04.046 [info] [Submit] Building ATS filter from targeting table...
+2026-02-05 07:13:04.046 [info] [Submit] Built ATS filter from targeting: {
+  "$and": [
+    {
+      "data": {
+        "gt": 20,
+        "lt": 40
+      },
+      "dataType": "number",
+      "metaType": "svc",
+      "code": "cust_age_cd",
+      "desc": "연령: 20세 ~ 40세",
+      "not": false
+    },
+    {
+      "data": [
+        "41"
+      ],
+      "dataType": "code",
+      "metaType": "loc",
+      "code": "home_location",
+      "desc": "추정 집주소: 경기",
+      "not": false
+    }
+  ]
+}
+2026-02-05 07:13:04.046 [info] [Submit] Calling ATS mosu API to get SQL query...
+2026-02-05 07:13:04.046 [info] [Submit] Filter payload: {
+  "$and": [
+    {
+      "data": {
+        "gt": 20,
+        "lt": 40
+      },
+      "dataType": "number",
+      "metaType": "svc",
+      "code": "cust_age_cd",
+      "desc": "연령: 20세 ~ 40세",
+      "not": false
+    },
+    {
+      "data": [
+        "41"
+      ],
+      "dataType": "code",
+      "metaType": "loc",
+      "code": "home_location",
+      "desc": "추정 집주소: 경기",
+      "not": false
+    }
+  ]
+}
+2026-02-05 07:13:04.046 [info] [ATS Mosu] POST https://gw.bizchat1.co.kr/api/v1/ats/mosu?tid=1770275584042
+2026-02-05 07:13:04.046 [info] [ATS Mosu] Payload: {
+  "$and": [
+    {
+      "data": {
+        "gt": 20,
+        "lt": 40
+      },
+      "dataType": "number",
+      "metaType": "svc",
+      "code": "cust_age_cd",
+      "desc": "연령: 20세 ~ 40세",
+      "not": false
+    },
+    {
+      "data": [
+        "41"
+      ],
+      "dataType": "code",
+      "metaType": "loc",
+      "code": "home_location",
+      "desc": "추정 집주소: 경기",
+      "not": false
+    }
+  ]
+}
+2026-02-05 07:13:05.212 [info] [ATS Mosu] Response: 200 - {"tid":"1770275584042","code":"S000001","msg":"Success","data":{"cnt":615890,"filterStr":"<table><tr><td id='oper0' rowspan='2' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td id='oper1' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-연령: 20세 ~ 40세</td></tr></tr><tr><td id='oper2' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' st
+2026-02-05 07:13:05.212 [info] [ATS Mosu] Success - query: ( ( (cust_age_cd >= 20 and cust_age_cd <= 40) ) AND ( (home_location like '41%' or home_location like '%,41%') ) ) and indv_info_use_agree_yn = 'Y'...
+2026-02-05 07:13:05.213 [info] [Submit] sndMosuQuery (SQL from ATS): ( ( (cust_age_cd >= 20 and cust_age_cd <= 40) ) AND ( (home_location like '41%' or home_location like '%,41%') ) ) and indv_info_use_agree_yn = 'Y'...
+2026-02-05 07:13:05.213 [info] [Submit] ATS count: 615890
+2026-02-05 07:13:05.213 [info] [Submit] sndMosuDesc: <table><tr><td id='oper0' rowspan='2' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-...
+2026-02-05 07:13:05.213 [info] [Submit] atsSndStartDate (adjusted): 1770340200 2026-02-06T01:10:00.000Z
+2026-02-05 07:13:05.213 [info] [Submit] Using campaign rcsType: 1
+2026-02-05 07:13:05.213 [info] [Submit] RCS type set to: 1 (campaign.rcsType: 1, billingType: 3, slides: 0)
+2026-02-05 07:13:05.213 [info] [Submit] Creating campaign in BizChat...
+2026-02-05 07:13:05.213 [info] [Submit] Full createPayload: {
+  "tgtCompanyName": "위픽",
+  "name": "떡의작품 템플릿",
+  "sndNum": "001005",
+  "rcvType": 0,
+  "sndGoalCnt": 1000,
+  "billingType": 3,
+  "isTmp": 0,
+  "settleCnt": 1000,
+  "sndMosu": 345116,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-cbw1ulpd0-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "[SKT] 블랑쉬 치과 미백 혜택 안내",
+    "msg": "고객님, 안녕하세요.\n블랑쉬 치과에서 2026년 새해를 맞아 진행하는 블랑쉬 미백 ‘화이트닝 콤비네이션’ 특별 혜택을 안내드립니다.\n \n■ 혜택 안내\n \n-기간: 2026년 1월 28일(수)~2월 28일(토)\n-대상: 이 문자를 받으신 고객님\n-혜택\n① 블랑쉬+미백 특별 혜택 제공\n \n▶ 위치 자세히 보기: https://naver.me/xBwHxjJO\n \n■ 참여 방법\n-아래 URL을 눌러 신청 및 예약하기\n \n▶ 예약 방문하기: [URL분석1]\n \n■ 문의: 블랑쉬 고객센터(1877-2882)\n \n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.",
+    "urlLink": {
+      "list": [
+        "https://blanche.kr/blanche4.php/"
+      ]
+    }
+  },
+  "sndMosuQuery": "( ( (cust_age_cd >= 20 and cust_age_cd <= 40) ) AND ( (home_location like '41%' or home_location like '%,41%') ) ) and indv_info_use_agree_yn = 'Y'",
+  "sndMosuDesc": "<table><tr><td id='oper0' rowspan='2' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td id='oper1' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-연령: 20세 ~ 40세</td></tr></tr><tr><td id='oper2' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>위치/이동특성-추정 집주소: 경기</td></tr></tr></table>",
+  "atsSndStartDate": 1770340200,
+  "rcsType": 1
+}
+2026-02-05 07:13:05.213 [info] [BizChat Submit] Environment: PRODUCTION
+2026-02-05 07:13:05.213 [info] [BizChat Submit] Looking for env var: BIZCHAT_PROD_API_KEY
+2026-02-05 07:13:05.213 [info] [BizChat Submit] API key exists: true, length: 64
+2026-02-05 07:13:05.214 [info] [BizChat Submit] VERCEL_ENV: production, NODE_ENV: production
+2026-02-05 07:13:05.214 [info] [BizChat] POST https://gw.bizchat1.co.kr/api/v1/cmpn/create?tid=1770275585213
+2026-02-05 07:13:05.214 [info] [BizChat] Request body: {
+  "tgtCompanyName": "위픽",
+  "name": "떡의작품 템플릿",
+  "sndNum": "001005",
+  "rcvType": 0,
+  "sndGoalCnt": 1000,
+  "billingType": 3,
+  "isTmp": 0,
+  "settleCnt": 1000,
+  "sndMosu": 345116,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-cbw1ulpd0-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "[SKT] 블랑쉬 치과 미백 혜택 안내",
+    "msg": "고객님, 안녕하세요.\n블랑쉬 치과에서 2026년 새해를 맞아 진행하는 블랑쉬 미백 ‘화이트닝 콤비네이션’ 특별 혜택을 안내드립니다.\n \n■ 혜택 안내\n \n-기간: 2026년 1월 28일(수)~2월 28일(토)\n-대상: 이 문자를 받으신 고객님\n-혜택\n① 블랑쉬+미백 특별 혜택 제공\n \n▶ 위치 자세히 보기: https://naver.me/xBwHxjJO\n \n■ 참여 방법\n-아래 URL을 눌러 신청 및 예약하기\n \n▶ 예약 방문하기: [URL분석1]\n \n■ 문의: 블랑쉬 고객센터(1877-2882)\n \n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.\n \n감사합니다.",
+    "urlLink": {
+      "list": [
+        "https://blanche.kr/blanche4.php/"
+      ]
+    }
+  },
+  "sndMosuQuery": "( ( (cust_age_cd >= 20 and cust_age_cd <= 40) ) AND ( (home_location like '41%' or home_location like '%,41%') ) ) and indv_info_use_agree_yn = 'Y'",
+  "sndMosuDesc": "<table><tr><td id='oper0' rowspan='2' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td id='oper1' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-연령: 20세 ~ 40세</td></tr></tr><tr><td id='oper2' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>위치/이동특성-추정 집주소: 경기</td></tr></tr></table>",
+  "atsSndStartDate": 1770340200,
+  "rcsType": 1
+}
+2026-02-05 07:13:05.290 [info] [BizChat] Response: 400 - {"tid":"1770275585213","code":"E100018","msg":"Invalid rcs cnt for rcs campaign. rcs type [1], expected [1], actual [0]"}
+2026-02-05 07:13:05.291 [error] [Submit] BizChat API error: {
+  tid: '1770275585213',
+  code: 'E100018',
+  msg: 'Invalid rcs cnt for rcs campaign. rcs type [1], expected [1], actual [0]'
+}
+2026-02-05 07:13:00.649 [info] The `fetchConnectionCache` option is deprecated (now always `true`)
+2026-02-05 07:13:00.683 [info] [BizChat Submit] Environment: PRODUCTION (VERCEL_ENV=production)
+2026-02-05 07:13:00.766 [error] (node:4) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
