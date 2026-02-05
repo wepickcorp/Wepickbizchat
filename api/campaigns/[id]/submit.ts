@@ -1260,8 +1260,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rcsButtons = buttonsData?.list || (message as any)?.rcsButtons || [];
       
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
+      // BizChat API 규격: mms.title이 빈 문자열이면 E000002 오류 발생 - 값이 없으면 필드 자체 제외
       const mmsObject: Record<string, unknown> = {
-        title: message?.title || '',
+        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
         msg: message?.content || '',
         ...(needsFile && imageFileId && { fileInfo: { list: [{ origId: imageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
@@ -1871,8 +1872,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const updateRcsButtons = updateParsedButtons?.list || (message as any)?.rcsButtons || [];
       
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
+      // BizChat API 규격: mms.title이 빈 문자열이면 E000002 오류 발생 - 값이 없으면 필드 자체 제외
       const updateMmsObject: Record<string, unknown> = {
-        title: message?.title || '',
+        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
         msg: message?.content || '',
         ...(needsFile && updateImageFileId && { fileInfo: { list: [{ origId: updateImageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
