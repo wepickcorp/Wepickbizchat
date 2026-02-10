@@ -2,7 +2,7 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
-  "framework": null,
+  "framework": "vite",
   "installCommand": "npm install",
   "crons": [
     {
