@@ -1,77 +1,76 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // 정적 import - Vercel 번들러가 추적 가능
-import adminAgencies from './handlers/admin/agencies/index';
-import adminAnnouncementsId from './handlers/admin/announcements/[id]';
-import adminAnnouncements from './handlers/admin/announcements/index';
-import adminCampaigns from './handlers/admin/campaigns';
-import adminLogin from './handlers/admin/login';
-import adminLogs from './handlers/admin/logs';
-import adminMe from './handlers/admin/me';
-import adminRefundsIdProcess from './handlers/admin/refunds/[id]/process';
-import adminRefunds from './handlers/admin/refunds/index';
-import adminReportsAnalytics from './handlers/admin/reports/analytics';
-import adminReportsSettlements from './handlers/admin/reports/settlements';
-import adminStats from './handlers/admin/stats';
-import adminTaxInvoices from './handlers/admin/tax-invoices';
-import adminTransactions from './handlers/admin/transactions';
-import adminUsersUserIdAgency from './handlers/admin/users/[userId]/agency';
-import adminUsersUserIdBalance from './handlers/admin/users/[userId]/balance';
-import adminUsersUserIdImpersonate from './handlers/admin/users/[userId]/impersonate';
-import adminUsersUserIdMaster from './handlers/admin/users/[userId]/master';
-import adminUsersUserIdResetPassword from './handlers/admin/users/[userId]/reset-password';
-import adminUsers from './handlers/admin/users/index';
-import agenciesList from './handlers/agencies/list';
-import agencyLogin from './handlers/agency/login';
-import agencyStats from './handlers/agency/stats';
-import announcements from './handlers/announcements/index';
-import atsMetaType from './handlers/ats/meta/[metaType]';
-import authUser from './handlers/auth/user';
-import bizchatAi from './handlers/bizchat/ai';
-import bizchatAts from './handlers/bizchat/ats';
-import bizchatCallbackState from './handlers/bizchat/callback/state';
-import bizchatCampaigns from './handlers/bizchat/campaigns';
-import bizchatFile from './handlers/bizchat/file';
-import bizchatMaptics from './handlers/bizchat/maptics';
-import bizchatMdnUpload from './handlers/bizchat/mdn-upload';
-import bizchatReportsArea from './handlers/bizchat/reports/area';
-import bizchatReportsGenderAge from './handlers/bizchat/reports/gender-age';
-import bizchatReportsPeriod from './handlers/bizchat/reports/period';
-import bizchatSender from './handlers/bizchat/sender';
-import bizchatStats from './handlers/bizchat/stats';
-import bizchatTemplate from './handlers/bizchat/template';
-import bizchatTest from './handlers/bizchat/test';
-import campaignsTestCreate from './handlers/campaigns/test-create';
-import campaignsIdCancel from './handlers/campaigns/[id]/cancel';
-import campaignsIdStop from './handlers/campaigns/[id]/stop';
-import campaignsIdSubmit from './handlers/campaigns/[id]/submit';
-import campaignsId from './handlers/campaigns/[id]';
-import campaigns from './handlers/campaigns/index';
-import dashboardStats from './handlers/dashboard/stats';
-import internalMasterResetBalance from './handlers/internal/master/reset-balance';
-import kispgAuth from './handlers/kispg/auth';
-import kispgCallback from './handlers/kispg/callback';
-import mapticsGeofences from './handlers/maptics/geofences';
-import mapticsPoi from './handlers/maptics/poi';
-import profilePassword from './handlers/profile/password';
-import profile from './handlers/profile/index';
-import recommendedTemplatesFilters from './handlers/recommended-templates/filters';
-import recommendedTemplatesId from './handlers/recommended-templates/[id]';
-import recommendedTemplates from './handlers/recommended-templates/index';
-import refunds from './handlers/refunds/index';
-import stripeCheckout from './handlers/stripe/checkout';
-import stripeConfig from './handlers/stripe/config';
-import stripeWebhook from './handlers/stripe/webhook';
-import targetingEstimate from './handlers/targeting/estimate';
-import taxInvoices from './handlers/tax-invoices/index';
-import templatesApproved from './handlers/templates/approved';
-import templatesIdApprove from './handlers/templates/[id]/approve';
-import templatesIdReject from './handlers/templates/[id]/reject';
-import templatesIdSubmit from './handlers/templates/[id]/submit';
-import templatesId from './handlers/templates/[id]';
-import templates from './handlers/templates/index';
-import transactionsCharge from './handlers/transactions/charge';
-import transactions from './handlers/transactions/index';
+import * as adminAgencies from './handlers/admin/agencies/index';
+import * as adminAnnouncementsId from './handlers/admin/announcements/[id]';
+import * as adminAnnouncements from './handlers/admin/announcements/index';
+import * as adminCampaigns from './handlers/admin/campaigns';
+import * as adminLogin from './handlers/admin/login';
+import * as adminLogs from './handlers/admin/logs';
+import * as adminMe from './handlers/admin/me';
+import * as adminRefundsIdProcess from './handlers/admin/refunds/[id]/process';
+import * as adminRefunds from './handlers/admin/refunds/index';
+import * as adminReportsAnalytics from './handlers/admin/reports/analytics';
+import * as adminReportsSettlements from './handlers/admin/reports/settlements';
+import * as adminStats from './handlers/admin/stats';
+import * as adminTaxInvoices from './handlers/admin/tax-invoices';
+import * as adminTransactions from './handlers/admin/transactions';
+import * as adminUsersUserIdAgency from './handlers/admin/users/[userId]/agency';
+import * as adminUsersUserIdBalance from './handlers/admin/users/[userId]/balance';
+import * as adminUsersUserIdImpersonate from './handlers/admin/users/[userId]/impersonate';
+import * as adminUsersUserIdMaster from './handlers/admin/users/[userId]/master';
+import * as adminUsersUserIdResetPassword from './handlers/admin/users/[userId]/reset-password';
+import * as adminUsers from './handlers/admin/users/index';
+import * as agenciesList from './handlers/agencies/list';
+import * as agencyLogin from './handlers/agency/login';
+import * as agencyStats from './handlers/agency/stats';
+import * as announcements from './handlers/announcements/index';
+import * as atsMetaType from './handlers/ats/meta/[metaType]';
+import * as authUser from './handlers/auth/user';
+import * as bizchatAi from './handlers/bizchat/ai';
+import * as bizchatAts from './handlers/bizchat/ats';
+import * as bizchatCallbackState from './handlers/bizchat/callback/state';
+import * as bizchatCampaigns from './handlers/bizchat/campaigns';
+import * as bizchatFile from './handlers/bizchat/file';
+import * as bizchatMdnUpload from './handlers/bizchat/mdn-upload';
+import * as bizchatReportsArea from './handlers/bizchat/reports/area';
+import * as bizchatReportsGenderAge from './handlers/bizchat/reports/gender-age';
+import * as bizchatReportsPeriod from './handlers/bizchat/reports/period';
+import * as bizchatSender from './handlers/bizchat/sender';
+import * as bizchatStats from './handlers/bizchat/stats';
+import * as bizchatTemplate from './handlers/bizchat/template';
+import * as bizchatTest from './handlers/bizchat/test';
+import * as campaignsTestCreate from './handlers/campaigns/test-create';
+import * as campaignsIdCancel from './handlers/campaigns/[id]/cancel';
+import * as campaignsIdStop from './handlers/campaigns/[id]/stop';
+import * as campaignsIdSubmit from './handlers/campaigns/[id]/submit';
+import * as campaignsId from './handlers/campaigns/[id]';
+import * as campaigns from './handlers/campaigns/index';
+import * as dashboardStats from './handlers/dashboard/stats';
+import * as internalMasterResetBalance from './handlers/internal/master/reset-balance';
+import * as kispgAuth from './handlers/kispg/auth';
+import * as kispgCallback from './handlers/kispg/callback';
+import * as mapticsGeofences from './handlers/maptics/geofences';
+import * as mapticsPoi from './handlers/maptics/poi';
+import * as profilePassword from './handlers/profile/password';
+import * as profile from './handlers/profile/index';
+import * as recommendedTemplatesFilters from './handlers/recommended-templates/filters';
+import * as recommendedTemplatesId from './handlers/recommended-templates/[id]';
+import * as recommendedTemplates from './handlers/recommended-templates/index';
+import * as refunds from './handlers/refunds/index';
+import * as stripeCheckout from './handlers/stripe/checkout';
+import * as stripeConfig from './handlers/stripe/config';
+import * as stripeWebhook from './handlers/stripe/webhook';
+import * as targetingEstimate from './handlers/targeting/estimate';
+import * as taxInvoices from './handlers/tax-invoices/index';
+import * as templatesApproved from './handlers/templates/approved';
+import * as templatesIdApprove from './handlers/templates/[id]/approve';
+import * as templatesIdReject from './handlers/templates/[id]/reject';
+import * as templatesIdSubmit from './handlers/templates/[id]/submit';
+import * as templatesId from './handlers/templates/[id]';
+import * as templates from './handlers/templates/index';
+import * as transactionsCharge from './handlers/transactions/charge';
+import * as transactions from './handlers/transactions/index';
 
 type RouteEntry = {
   segments: string[];
@@ -110,7 +109,6 @@ const routes: RouteEntry[] = [
   { segments: ['bizchat', 'callback', 'state'], handler: bizchatCallbackState },
   { segments: ['bizchat', 'campaigns'], handler: bizchatCampaigns },
   { segments: ['bizchat', 'file'], handler: bizchatFile },
-  { segments: ['bizchat', 'maptics'], handler: bizchatMaptics },
   { segments: ['bizchat', 'mdn-upload'], handler: bizchatMdnUpload },
   { segments: ['bizchat', 'reports', 'area'], handler: bizchatReportsArea },
   { segments: ['bizchat', 'reports', 'gender-age'], handler: bizchatReportsGenderAge },
@@ -200,7 +198,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const fn = typeof match.route.handler === 'function' 
+    const fn = match.route.handler?.default || match.route.handler; 
       ? match.route.handler 
       : match.route.handler?.default || match.route.handler;
     if (typeof fn !== 'function') {
