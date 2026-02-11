@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npm run build && node scripts/build-api.js",
+  "buildCommand": "npm run build && node scripts/build-api.cjs",
   "outputDirectory": "dist/public",
   "framework": "vite",
   "installCommand": "npm install",
