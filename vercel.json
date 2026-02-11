@@ -4,6 +4,11 @@
   "outputDirectory": "dist/public",
   "framework": "vite",
   "installCommand": "npm install",
+  "functions": {
+    "api/[[...path]].ts": {
+      "maxDuration": 30
+    }
+  },
   "crons": [
     {
       "path": "/api/internal/master/reset-balance",
@@ -11,7 +16,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
