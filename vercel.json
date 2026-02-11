@@ -1,14 +1,9 @@
 {
   "version": 2,
-  "buildCommand": "npm run build && npx esbuild src/api-router.ts --bundle --outfile=api/router.js --platform=node --format=esm --packages=external --log-level=info",
+  "buildCommand": "npm run build && npx esbuild src/api-router.ts --bundle --outfile=api/router.js --platform=node --format=cjs --packages=external --log-level=info",
   "outputDirectory": "dist/public",
   "framework": "vite",
   "installCommand": "npm install",
-  "functions": {
-    "api/router.js": {
-      "maxDuration": 30
-    }
-  },
   "crons": [
     {
       "path": "/api/internal/master/reset-balance",
