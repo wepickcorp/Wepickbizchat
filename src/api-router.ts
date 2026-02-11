@@ -198,15 +198,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const fn = match.route.handler?.default || match.route.handler; 
-      ? match.route.handler 
-      : match.route.handler?.default || match.route.handler;
+    const mod = match.route.handler;
+    const fn = mod.default || mod.handler || mod;
     if (typeof fn !== 'function') {
-      return res.status(500).json({ error: 'Handler not found' });
+      return res.status(500).json({ error: 'Handler not found for path: ' + pathSegments.join('/') });
     }
     return fn(req, res);
   } catch (error) {
-    console.error(`[Router] Error:`, error);
+    console.error('[Router] Error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
