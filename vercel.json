@@ -1,11 +1,11 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && npx esbuild src/api-router.ts --bundle --outfile=api/router.mjs --platform=node --format=esm --packages=external --log-level=info",
   "outputDirectory": "dist/public",
   "framework": "vite",
   "installCommand": "npm install",
   "functions": {
-    "api/[...path].ts": {
+    "api/router.mjs": {
       "maxDuration": 30
     }
   },
@@ -16,7 +16,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/:path(.*)", "destination": "/api/[...path]" },
+    { "source": "/api/(.*)", "destination": "/api/router" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
