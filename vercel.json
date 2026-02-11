@@ -6,8 +6,7 @@
   "installCommand": "npm install",
   "functions": {
     "api/[...path].ts": {
-      "maxDuration": 30,
-      "includeFiles": "_api/**"
+      "maxDuration": 30
     }
   },
   "crons": [
