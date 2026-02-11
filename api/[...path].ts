@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-type Handler = (req: VercelRequest, res: VercelResponse) => Promise<any>;
 type RouteEntry = {
   segments: string[];
   load: () => Promise<any>;
@@ -99,13 +98,37 @@ function matchRoute(pathSegments: string[]): { route: RouteEntry; params: Record
   return null;
 }
 
+function extractPathSegments(req: VercelRequest): string[] {
+  // 1. query.path에서 추출
+  const rawPath = req.query.path;
+  if (rawPath) {
+    if (Array.isArray(rawPath)) {
+      return rawPath.filter(Boolean);
+    }
+    // "admin/login" 같은 단일 문자열 → split
+    return String(rawPath).split('/').filter(Boolean);
+  }
+
+  // 2. URL에서 직접 추출
+  const url = req.url || '';
+  const apiPrefix = '/api/';
+  const idx = url.indexOf(apiPrefix);
+  if (idx !== -1) {
+    const rest = url.substring(idx + apiPrefix.length).split('?')[0];
+    return rest.split('/').filter(Boolean);
+  }
+
+  return [];
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { path } = req.query;
-  const pathSegments = Array.isArray(path) ? path : path ? [path] : [];
+  const pathSegments = extractPathSegments(req);
+
+  console.log(`[Router] URL: ${req.url}, Method: ${req.method}, Segments:`, pathSegments);
 
   const match = matchRoute(pathSegments);
   if (!match) {
-    return res.status(404).json({ error: 'API route not found', path: pathSegments.join('/') });
+    return res.status(404).json({ error: 'API route not found', path: pathSegments.join('/'), segments: pathSegments });
   }
 
   for (const [key, value] of Object.entries(match.params)) {
@@ -116,7 +139,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const module = await match.route.load();
     const fn = module.default || module.handler || module;
     if (typeof fn !== 'function') {
-      console.error(`[Router] No handler found for ${pathSegments.join('/')}`);
       return res.status(500).json({ error: 'Handler not found' });
     }
     return fn(req, res);
