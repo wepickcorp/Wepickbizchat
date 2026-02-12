@@ -777,12 +777,12 @@ async function createCampaignInBizChat(
       state: `${CALLBACK_BASE_URL}/api/bizchat/callback/state`,
     },
     // MMS 메시지 객체 (BizChat API 규격 v0.29.0)
-    // - mms.title: 메시지 제목 (최대 30자)
+    // - mms.title: 메시지 제목 (필수, 최대 30자) - 빈 문자열 불가, 실제 값 필요
     // - mms.msg: 메시지 본문 (최대 1000자)
     // - mms.fileInfo: 이미지 파일 정보 (파일이 없으면 empty object {})
     // - mms.urlLink: 마케팅 URL 정보 (링크가 없으면 empty object {})
     mms: {
-      title: messageData.title || '',
+      title: messageData.title?.trim() || (messageData.content || '').split('\n')[0].trim().substring(0, 30) || '광고',
       msg: messageData.content || '',
       fileInfo: {}, // 파일이 포함되지 않으면 empty object
       urlLink: {}, // 링크가 없으면 empty object (규격 준수)
@@ -812,9 +812,10 @@ async function createCampaignInBizChat(
   if (campaignData.messageType === 'RCS' && campaignData.rcsType !== undefined) {
     payload.rcsType = campaignData.rcsType;
     // RCS 메시지 배열 - RCS 캠페인일 때만 포함
+    const rcsMmsTitle = messageData.title?.trim() || (messageData.content || '').split('\n')[0].trim().substring(0, 30) || '광고';
     payload.rcs = [{
       slideNum: 1,
-      title: messageData.title || '',
+      title: rcsMmsTitle,
       msg: messageData.content || '',
       urlFile: '',
       urlLink: {},

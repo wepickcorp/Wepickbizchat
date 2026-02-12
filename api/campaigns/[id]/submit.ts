@@ -1260,9 +1260,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rcsButtons = buttonsData?.list || (message as any)?.rcsButtons || [];
       
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
-      // BizChat API 규격: mms.title이 빈 문자열이면 E000002 오류 발생 - 값이 없으면 필드 자체 제외
+      // BizChat API 규격: mms.title은 필수 필드 - 빈 문자열 불가, 실제 값 필요
+      // title이 없거나 빈 문자열이면 메시지 본문 첫 줄을 자동으로 사용
+      const mmsTitle = message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고';
       const mmsObject: Record<string, unknown> = {
-        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
+        title: mmsTitle,
         msg: message?.content || '',
         ...(needsFile && imageFileId && { fileInfo: { list: [{ origId: imageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
@@ -1284,7 +1286,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const rcsSlide: Record<string, unknown> | null = shouldIncludeRcsArray ? {
         slideNum: 1, // BizChat API 필수 필드 - 모든 RCS 타입에서 필요
-        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
+        title: mmsTitle, // MMS와 동일한 title 사용 (필수 필드)
         msg: message?.content || '',
         ...(needsFile && imageFileId && { imgOrigId: imageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
@@ -1872,9 +1874,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const updateRcsButtons = updateParsedButtons?.list || (message as any)?.rcsButtons || [];
       
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
-      // BizChat API 규격: mms.title이 빈 문자열이면 E000002 오류 발생 - 값이 없으면 필드 자체 제외
+      // BizChat API 규격: mms.title은 필수 필드 - 빈 문자열 불가, 실제 값 필요
+      const updateMmsTitle = message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고';
       const updateMmsObject: Record<string, unknown> = {
-        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
+        title: updateMmsTitle,
         msg: message?.content || '',
         ...(needsFile && updateImageFileId && { fileInfo: { list: [{ origId: updateImageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
@@ -1896,7 +1899,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const updateRcsSlide: Record<string, unknown> | null = shouldIncludeUpdateRcsArray ? {
         slideNum: 1, // BizChat API 필수 필드
-        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
+        title: updateMmsTitle, // MMS와 동일한 title 사용 (필수 필드)
         msg: message?.content || '',
         ...(needsFile && updateImageFileId && { imgOrigId: updateImageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
