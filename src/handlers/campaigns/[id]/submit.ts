@@ -1186,27 +1186,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // ========== 이미지 파일 업로드 처리 ==========
       // BizChat API는 base64 대신 업로드된 파일 ID(origId)를 필요로 함
+      // RCS 캠페인의 경우 RCS용 이미지와 LMS fallback용 이미지를 분리하여 업로드
       let imageFileId: string | null = null;
-      if (needsFile && message?.imageUrl) {
-        const imageUrl = message.imageUrl;
-        // base64 데이터 URL인 경우 파일 업로드 API 호출
-        if (imageUrl.startsWith('data:')) {
-          console.log('[Submit] Image is base64, uploading to BizChat file API...');
+      let lmsImageFileIdResolved: string | null = null;
+      
+      const uploadImageHelper = async (imgUrl: string, rcsFlag: number, label: string): Promise<string | null> => {
+        if (imgUrl.startsWith('data:')) {
+          console.log(`[Submit] ${label} image is base64, uploading to BizChat file API (rcs=${rcsFlag})...`);
           try {
             const host = req.headers.host || process.env.VERCEL_URL || 'localhost:5000';
             const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
             const protocol = req.headers['x-forwarded-proto'] || (isLocalhost ? 'http' : 'https');
             const baseUrlForUpload = `${protocol}://${host}`;
             
-            // 이미지 타입 및 파일명 추출
-            const mimeMatch = imageUrl.match(/^data:([^;]+);/);
+            const mimeMatch = imgUrl.match(/^data:([^;]+);/);
             const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
             const extMatch = mimeType.match(/image\/(\w+)/);
             const ext = extMatch ? extMatch[1] : 'jpg';
-            const fileName = `campaign_${id}_${Date.now()}.${ext}`;
-            
-            // RCS용 파일인 경우 rcs=1 플래그 설정
-            const rcsFlag = isRcs ? 1 : 0;
+            const fileName = `campaign_${id}_${label}_${Date.now()}.${ext}`;
             
             const uploadResponse = await fetch(`${baseUrlForUpload}/api/bizchat/file`, {
               method: 'POST',
@@ -1217,56 +1214,105 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 ...(req.headers['x-impersonate-user-id'] ? { 'X-Impersonate-User-Id': req.headers['x-impersonate-user-id'] as string } : {}),
               },
               body: JSON.stringify({
-                fileData: imageUrl,
+                fileData: imgUrl,
                 fileName: fileName,
                 fileType: mimeType,
-                type: 2, // 이미지
+                type: 2,
                 rcs: rcsFlag,
               }),
             });
             
             const uploadResult = await uploadResponse.json();
             if (uploadResult.success && uploadResult.fileId) {
-              imageFileId = uploadResult.fileId;
-              console.log(`[Submit] Image uploaded successfully, fileId: ${imageFileId}`);
+              console.log(`[Submit] ${label} image uploaded successfully, fileId: ${uploadResult.fileId}`);
+              return uploadResult.fileId;
             } else {
-              console.error('[Submit] Image upload failed:', uploadResult);
-              return res.status(400).json({
-                error: '이미지 업로드에 실패했습니다.',
-                details: uploadResult.error || uploadResult.rawResponse,
-              });
+              console.error(`[Submit] ${label} image upload failed:`, uploadResult);
+              return null;
             }
           } catch (uploadError) {
-            console.error('[Submit] Image upload error:', uploadError);
-            return res.status(500).json({
-              error: '이미지 업로드 중 오류가 발생했습니다.',
-            });
+            console.error(`[Submit] ${label} image upload error:`, uploadError);
+            return null;
           }
         } else {
-          // 이미 업로드된 파일 ID 또는 URL인 경우 그대로 사용
-          imageFileId = imageUrl;
-          console.log(`[Submit] Using existing image reference: ${imageFileId.substring(0, 50)}...`);
+          console.log(`[Submit] ${label} using existing image reference: ${imgUrl.substring(0, 50)}...`);
+          return imgUrl;
+        }
+      };
+      
+      if (needsFile && message?.imageUrl) {
+        // RCS 캠페인: RCS용 이미지 업로드 (rcs: 1)
+        const rcsFlag = isRcs ? 1 : 0;
+        const result = await uploadImageHelper(message.imageUrl, rcsFlag, isRcs ? 'RCS' : 'MMS');
+        if (result) {
+          imageFileId = result;
+        } else {
+          return res.status(400).json({
+            error: '이미지 업로드에 실패했습니다.',
+          });
+        }
+      }
+      
+      // RCS 캠페인: LMS fallback용 이미지 별도 업로드 (rcs: 0)
+      if (isRcs && needsFile) {
+        const lmsImgUrl = (message as any)?.lmsImageUrl;
+        const lmsImgFileId = (message as any)?.lmsImageFileId;
+        if (lmsImgFileId) {
+          lmsImageFileIdResolved = lmsImgFileId;
+          console.log(`[Submit] Using existing LMS fallback imageFileId: ${lmsImageFileIdResolved}`);
+        } else if (lmsImgUrl) {
+          const result = await uploadImageHelper(lmsImgUrl, 0, 'LMS_fallback');
+          if (result) {
+            lmsImageFileIdResolved = result;
+          } else {
+            console.warn('[Submit] LMS fallback image upload failed, MMS will have no image');
+          }
+        } else {
+          console.log('[Submit] No LMS fallback image provided, MMS fallback will have no image');
         }
       }
       
       // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
-      // URL 리스트 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함)
-      const urlLinksData = (message as any)?.urlLinks as { list?: string[]; reward?: number } | null;
-      const mmsUrlList: string[] = urlLinksData?.list || (message as any)?.urls || [];
-      const urlReward = urlLinksData?.reward;
+      // RCS URL 리스트 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함)
+      const rcsUrlLinksData = (message as any)?.urlLinks as { list?: string[]; reward?: number } | null;
+      const rcsUrlList: string[] = rcsUrlLinksData?.list || (message as any)?.urls || [];
+      const rcsUrlReward = rcsUrlLinksData?.reward;
       
-      // buttons 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함)
+      // LMS fallback URL 리스트 (RCS 캠페인용)
+      const lmsUrlLinksData = (message as any)?.lmsUrlLinks as { list?: string[]; reward?: number } | null;
+      const lmsUrlList: string[] = lmsUrlLinksData?.list || [];
+      const lmsUrlReward = lmsUrlLinksData?.reward;
+      
+      // MMS에 사용할 URL 리스트 결정: RCS 캠페인이면 lms* 필드 사용, 아니면 기존 필드 사용
+      const mmsUrlList: string[] = isRcs ? lmsUrlList : rcsUrlList;
+      const mmsUrlReward = isRcs ? lmsUrlReward : rcsUrlReward;
+      
+      // buttons 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함) - RCS 전용
       const buttonsData = (message as any)?.buttons as { list?: Array<{ type: string; name: string; val1: string; val2?: string }> } | null;
       const rcsButtons = buttonsData?.list || (message as any)?.rcsButtons || [];
       
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
-      // BizChat API 규격: mms.title이 빈 문자열이면 E000002 오류 발생 - 값이 없으면 필드 자체 제외
+      // BizChat API 규격: mms.title은 필수 필드 - 빈 문자열 불가, 실제 값 필요
+      // RCS 캠페인: MMS는 fallback 메시지 → lms* 필드 사용
+      // 비-RCS 캠페인: MMS는 메인 메시지 → 기존 필드 사용
+      const fallbackContent = isRcs ? ((message as any)?.lmsContent || message?.content || '') : (message?.content || '');
+      const mmsTitle = isRcs
+        ? ((message as any)?.lmsTitle?.trim() || message?.title?.trim() || fallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
+        : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
+      
+      // MMS에 사용할 이미지: RCS 캠페인이면 lmsImageFileIdResolved, 아니면 imageFileId
+      const mmsImageFileId = isRcs ? lmsImageFileIdResolved : imageFileId;
+      
+      if (isRcs) {
+        console.log(`[Submit] Using separate LMS fallback for MMS: lmsContent length=${((message as any)?.lmsContent || '').length}, fallbackContent length=${fallbackContent.length}, lmsImageFileId=${lmsImageFileIdResolved}, lmsUrlLinks=${lmsUrlList.length} urls`);
+      }
+      
       const mmsObject: Record<string, unknown> = {
-        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
-        msg: message?.content || '',
-        ...(needsFile && imageFileId && { fileInfo: { list: [{ origId: imageFileId }] } }),
+        title: mmsTitle,
+        msg: fallbackContent,
+        ...(needsFile && mmsImageFileId && { fileInfo: { list: [{ origId: mmsImageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
-        ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(urlReward !== undefined && { reward: urlReward }) } }),
+        ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(mmsUrlReward !== undefined && { reward: mmsUrlReward }) } }),
       };
       
       // RCS 배열 구성 - RCS 타입일 때만 포함, 아니면 완전히 생략
@@ -1282,21 +1328,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const shouldIncludeRcsArray = isRcs;
       console.log(`[Submit] shouldIncludeRcsArray: ${shouldIncludeRcsArray}, effectiveRcsType: ${effectiveRcsType}, isRcs: ${isRcs}`);
       
+      // RCS 슬라이드: RCS 전용 필드 사용 (content, imageUrl, urlLinks, buttons)
+      const rcsTitle = message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고';
       const rcsSlide: Record<string, unknown> | null = shouldIncludeRcsArray ? {
-        slideNum: 1, // BizChat API 필수 필드 - 모든 RCS 타입에서 필요
-        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
+        slideNum: 1,
+        title: rcsTitle,
         msg: message?.content || '',
         ...(needsFile && imageFileId && { imgOrigId: imageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
-        ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(urlReward !== undefined && { reward: urlReward }) } }),
+        ...(rcsUrlList.length > 0 && { urlLink: { list: rcsUrlList.slice(0, 3), ...(rcsUrlReward !== undefined && { reward: rcsUrlReward }) } }),
         ...(rcsButtons.length > 0 && { 
           buttons: { list: rcsButtons.map((btn: any) => ({ 
             ...btn, 
             type: String(btn.type),
-            val2: btn.val2 ?? '' // BizChat API 규격: val2 필드 필수 (지도 아니면 빈 문자열)
+            val2: btn.val2 ?? ''
           })) }
         }),
-        // BizChat API 규격: opts 필드는 빈 객체라도 필수로 포함해야 함 (E100038 오류 방지)
         opts: (message as any)?.rcsOpts || {},
       } : null;
 
@@ -1793,23 +1840,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const needsFile = billingType === 1 || billingType === 2;
       
       // ========== 이미지 파일 업로드 처리 (재제출 시) ==========
+      // RCS 캠페인의 경우 RCS용 이미지와 LMS fallback용 이미지를 분리하여 업로드
       let updateImageFileId: string | null = null;
-      if (needsFile && message?.imageUrl) {
-        const imageUrl = message.imageUrl;
-        if (imageUrl.startsWith('data:')) {
-          console.log('[Submit Update] Image is base64, uploading to BizChat file API...');
+      let updateLmsImageFileIdResolved: string | null = null;
+      
+      const updateUploadImageHelper = async (imgUrl: string, rcsFlag: number, label: string): Promise<string | null> => {
+        if (imgUrl.startsWith('data:')) {
+          console.log(`[Submit Update] ${label} image is base64, uploading to BizChat file API (rcs=${rcsFlag})...`);
           try {
             const host = req.headers.host || process.env.VERCEL_URL || 'localhost:5000';
             const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
             const protocol = req.headers['x-forwarded-proto'] || (isLocalhost ? 'http' : 'https');
             const baseUrlForUpload = `${protocol}://${host}`;
             
-            const mimeMatch = imageUrl.match(/^data:([^;]+);/);
+            const mimeMatch = imgUrl.match(/^data:([^;]+);/);
             const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
             const extMatch = mimeType.match(/image\/(\w+)/);
             const ext = extMatch ? extMatch[1] : 'jpg';
-            const fileName = `campaign_${id}_${Date.now()}.${ext}`;
-            const rcsFlag = isRcs ? 1 : 0;
+            const fileName = `campaign_${id}_${label}_${Date.now()}.${ext}`;
             
             const uploadResponse = await fetch(`${baseUrlForUpload}/api/bizchat/file`, {
               method: 'POST',
@@ -1820,7 +1868,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 ...(req.headers['x-impersonate-user-id'] ? { 'X-Impersonate-User-Id': req.headers['x-impersonate-user-id'] as string } : {}),
               },
               body: JSON.stringify({
-                fileData: imageUrl,
+                fileData: imgUrl,
                 fileName: fileName,
                 fileType: mimeType,
                 type: 2,
@@ -1830,85 +1878,132 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             const uploadResult = await uploadResponse.json();
             if (uploadResult.success && uploadResult.fileId) {
-              updateImageFileId = uploadResult.fileId;
-              console.log(`[Submit Update] Image uploaded successfully, fileId: ${updateImageFileId}`);
+              console.log(`[Submit Update] ${label} image uploaded successfully, fileId: ${uploadResult.fileId}`);
+              return uploadResult.fileId;
             } else {
-              console.error('[Submit Update] Image upload failed:', uploadResult);
-              return res.status(400).json({
-                error: '이미지 업로드에 실패했습니다.',
-                details: uploadResult.error || uploadResult.rawResponse,
-              });
+              console.error(`[Submit Update] ${label} image upload failed:`, uploadResult);
+              return null;
             }
           } catch (uploadError) {
-            console.error('[Submit Update] Image upload error:', uploadError);
-            return res.status(500).json({
-              error: '이미지 업로드 중 오류가 발생했습니다.',
-            });
+            console.error(`[Submit Update] ${label} image upload error:`, uploadError);
+            return null;
           }
         } else {
-          updateImageFileId = imageUrl;
-          console.log(`[Submit Update] Using existing image reference: ${updateImageFileId.substring(0, 50)}...`);
+          console.log(`[Submit Update] ${label} using existing image reference: ${imgUrl.substring(0, 50)}...`);
+          return imgUrl;
+        }
+      };
+      
+      if (needsFile && message?.imageUrl) {
+        const rcsFlag = isRcs ? 1 : 0;
+        const result = await updateUploadImageHelper(message.imageUrl, rcsFlag, isRcs ? 'RCS' : 'MMS');
+        if (result) {
+          updateImageFileId = result;
+        } else {
+          return res.status(400).json({
+            error: '이미지 업로드에 실패했습니다.',
+          });
+        }
+      }
+      
+      // RCS 캠페인: LMS fallback용 이미지 별도 업로드 (rcs: 0)
+      if (isRcs && needsFile) {
+        const lmsImgUrl = (message as any)?.lmsImageUrl;
+        const lmsImgFileId = (message as any)?.lmsImageFileId;
+        if (lmsImgFileId) {
+          updateLmsImageFileIdResolved = lmsImgFileId;
+          console.log(`[Submit Update] Using existing LMS fallback imageFileId: ${updateLmsImageFileIdResolved}`);
+        } else if (lmsImgUrl) {
+          const result = await updateUploadImageHelper(lmsImgUrl, 0, 'LMS_fallback');
+          if (result) {
+            updateLmsImageFileIdResolved = result;
+          } else {
+            console.warn('[Submit Update] LMS fallback image upload failed, MMS will have no image');
+          }
+        } else {
+          console.log('[Submit Update] No LMS fallback image provided, MMS fallback will have no image');
         }
       }
       
       // 타겟팅/발송 수량 재계산
       const sndGoalCnt = campaign.sndGoalCnt || campaign.targetCount || 1000;
-      // sndMosu: 캠페인에 저장된 값 사용 (타겟팅 설정 시 ATS mosu API로 계산됨)
       const sndMosu = campaign.sndMosu || Math.ceil(sndGoalCnt * 1.5);
       console.log(`[Submit Update] Using sndMosu: ${sndMosu.toLocaleString()} (from ${campaign.sndMosu ? 'campaign' : 'calculated'})`);
       
       // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
-      // URL 리스트 추출 (urlLinks는 JSONB로 저장됨: { list: string[], reward?: number })
+      // RCS URL 리스트 추출 (urlLinks는 JSONB로 저장됨: { list: string[], reward?: number })
       const updateParsedUrlLinks = typeof (message as any)?.urlLinks === 'string' 
         ? JSON.parse((message as any).urlLinks) 
         : (message as any)?.urlLinks;
-      const updateMmsUrlList: string[] = updateParsedUrlLinks?.list || (message as any)?.urls || [];
-      const updateUrlReward = updateParsedUrlLinks?.reward;
+      const updateRcsUrlList: string[] = updateParsedUrlLinks?.list || (message as any)?.urls || [];
+      const updateRcsUrlReward = updateParsedUrlLinks?.reward;
       
-      // buttons는 JSONB로 저장됨: { list: [{ type, name, val1, val2? }] }
+      // LMS fallback URL 리스트 (RCS 캠페인용)
+      const updateLmsUrlLinksData = typeof (message as any)?.lmsUrlLinks === 'string'
+        ? JSON.parse((message as any).lmsUrlLinks)
+        : (message as any)?.lmsUrlLinks;
+      const updateLmsUrlList: string[] = updateLmsUrlLinksData?.list || [];
+      const updateLmsUrlReward = updateLmsUrlLinksData?.reward;
+      
+      // MMS에 사용할 URL 리스트 결정: RCS 캠페인이면 lms* 필드 사용, 아니면 기존 필드 사용
+      const updateMmsUrlList: string[] = isRcs ? updateLmsUrlList : updateRcsUrlList;
+      const updateMmsUrlReward = isRcs ? updateLmsUrlReward : updateRcsUrlReward;
+      
+      // buttons는 JSONB로 저장됨: { list: [{ type, name, val1, val2? }] } - RCS 전용
       const updateParsedButtons = typeof (message as any)?.buttons === 'string'
         ? JSON.parse((message as any).buttons)
         : (message as any)?.buttons;
       const updateRcsButtons = updateParsedButtons?.list || (message as any)?.rcsButtons || [];
       
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
-      // BizChat API 규격: mms.title이 빈 문자열이면 E000002 오류 발생 - 값이 없으면 필드 자체 제외
+      // BizChat API 규격: mms.title은 필수 필드 - 빈 문자열 불가, 실제 값 필요
+      // RCS 캠페인: MMS는 fallback 메시지 → lms* 필드 사용
+      // 비-RCS 캠페인: MMS는 메인 메시지 → 기존 필드 사용
+      const updateFallbackContent = isRcs ? ((message as any)?.lmsContent || message?.content || '') : (message?.content || '');
+      const updateMmsTitle = isRcs
+        ? ((message as any)?.lmsTitle?.trim() || message?.title?.trim() || updateFallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
+        : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
+      
+      // MMS에 사용할 이미지: RCS 캠페인이면 lmsImageFileIdResolved, 아니면 updateImageFileId
+      const updateMmsImageFileId = isRcs ? updateLmsImageFileIdResolved : updateImageFileId;
+      
+      if (isRcs) {
+        console.log(`[Submit Update] Using separate LMS fallback for MMS: lmsContent length=${((message as any)?.lmsContent || '').length}, fallbackContent length=${updateFallbackContent.length}, lmsImageFileId=${updateLmsImageFileIdResolved}, lmsUrlLinks=${updateLmsUrlList.length} urls`);
+      }
+      
       const updateMmsObject: Record<string, unknown> = {
-        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
-        msg: message?.content || '',
-        ...(needsFile && updateImageFileId && { fileInfo: { list: [{ origId: updateImageFileId }] } }),
+        title: updateMmsTitle,
+        msg: updateFallbackContent,
+        ...(needsFile && updateMmsImageFileId && { fileInfo: { list: [{ origId: updateMmsImageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
-        ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateUrlReward !== undefined && { reward: updateUrlReward }) } }),
+        ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateMmsUrlReward !== undefined && { reward: updateMmsUrlReward }) } }),
       };
       
       // RCS 슬라이드 구성 - RCS 타입일 때만 생성
-      // BizChat API 규격: rcsType=1(LMS 텍스트)일 때는 rcs 배열 없이 mms만 사용
-      // updateEffectiveRcsType: campaign.rcsType이 유효하면 사용, 아니면 billingType에 따라 결정
+      // RCS 슬라이드: RCS 전용 필드 사용 (content, imageUrl, urlLinks, buttons)
       const updateEffectiveRcsType = (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5)
         ? campaign.rcsType
         : (billingType === 1 ? 4 : 1);
       console.log(`[Submit Update] effectiveRcsType for slideNum check: ${updateEffectiveRcsType}`);
       
-      // BizChat API 규격: 모든 RCS 타입(0~5)에서 rcs 배열이 필요함
-      // E100018 오류 방지: rcsType에 맞는 슬라이드 개수가 필요 (rcsType=1도 1개 필요)
       const shouldIncludeUpdateRcsArray = isRcs;
       console.log(`[Submit Update] shouldIncludeRcsArray: ${shouldIncludeUpdateRcsArray}, effectiveRcsType: ${updateEffectiveRcsType}`);
       
+      const updateRcsTitle = message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고';
       const updateRcsSlide: Record<string, unknown> | null = shouldIncludeUpdateRcsArray ? {
-        slideNum: 1, // BizChat API 필수 필드
-        ...(message?.title && { title: message.title }), // 빈 문자열이면 제외
+        slideNum: 1,
+        title: updateRcsTitle,
         msg: message?.content || '',
         ...(needsFile && updateImageFileId && { imgOrigId: updateImageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
-        ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateUrlReward !== undefined && { reward: updateUrlReward }) } }),
+        ...(updateRcsUrlList.length > 0 && { urlLink: { list: updateRcsUrlList.slice(0, 3), ...(updateRcsUrlReward !== undefined && { reward: updateRcsUrlReward }) } }),
         ...(updateRcsButtons.length > 0 && { 
           buttons: { list: updateRcsButtons.map((btn: any) => ({ 
             ...btn, 
             type: String(btn.type),
-            val2: btn.val2 ?? '' // BizChat API 규격: val2 필드 필수 (지도 아니면 빈 문자열)
+            val2: btn.val2 ?? ''
           })) }
         }),
-        // BizChat API 규격: opts 필드는 빈 객체라도 필수로 포함해야 함 (E100038 오류 방지)
         opts: (message as any)?.rcsOpts || {},
       } : null;
       
