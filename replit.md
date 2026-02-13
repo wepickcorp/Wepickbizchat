@@ -36,6 +36,7 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
 - **BizChat MMS/RCS API 규격**:
   - **E000002 오류 방지 (mms.title)**: `mms.title`은 필수 필드입니다. 빈 문자열(`""`)이나 필드 누락 모두 E000002 "Invalid request" 오류를 발생시킵니다. 반드시 실제 값을 넣어야 합니다. title이 없으면 메시지 본문 첫 줄(최대 30자)을 자동으로 사용하고, 그마저 없으면 '광고'를 기본값으로 사용합니다.
   - **MMS/RCS 메시지 분리**: RCS 캠페인(billingType=1,3)에서 `mms` 객체는 **폴백 메시지**(RCS 미지원 단말용)이고, `rcs[]` 배열은 **RCS 전용 메시지**입니다. 각각 별도의 내용을 담아야 합니다. DB의 `lmsContent`/`lmsImageUrl`/`lmsImageFileId`/`lmsUrlLinks` 필드가 MMS 폴백용이고, `content`/`imageUrl`/`imageFileId`/`urlLinks`/`buttons`가 RCS용입니다. `lmsContent`가 없으면 `content`로 폴백합니다.
+  - **E100037 오류 방지 (URL분석 일괄 폴백)**: `lmsContent`가 비어있어서 `content`로 폴백할 때, `lmsUrlLinks`와 `lmsImageUrl`도 함께 RCS 필드(`urlLinks`, `imageUrl`)로 폴백해야 합니다. 메시지 본문에 `[URL분석N]` 플레이스홀더가 있으면 대응하는 `urlLink`가 반드시 필요합니다. `hasLmsContent` 플래그로 SEPARATE(lms 필드) vs UNIFIED(RCS 필드 일괄 사용) 모드를 결정합니다.
 - **BizChat RCS API 규격**: RCS 메시지 전송 시 `rcs[]` 배열 내 각 슬라이드 객체에 다음 필드가 필수입니다:
   - `slideNum`: 슬라이드 번호 (1부터 시작). 모든 RCS 타입(0~5)에서 필수 - 누락 시 E000001 오류 발생
   - `opts`: 옵션 필드. 옵션이 없더라도 빈 객체 `opts: {}`를 포함해야 E100038 오류가 발생하지 않습니다

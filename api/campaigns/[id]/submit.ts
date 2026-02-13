@@ -1283,10 +1283,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const lmsUrlList: string[] = lmsUrlLinksData?.list || [];
       const lmsUrlReward = lmsUrlLinksData?.reward;
       
-      // MMS에 사용할 URL 리스트 결정: RCS 캠페인이면 lms* 필드 사용, 아니면 기존 필드 사용
-      const mmsUrlList: string[] = isRcs ? lmsUrlList : rcsUrlList;
-      const mmsUrlReward = isRcs ? lmsUrlReward : rcsUrlReward;
-      
       // buttons 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함) - RCS 전용
       const buttonsData = (message as any)?.buttons as { list?: Array<{ type: string; name: string; val1: string; val2?: string }> } | null;
       const rcsButtons = buttonsData?.list || (message as any)?.rcsButtons || [];
@@ -1295,16 +1291,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // BizChat API 규격: mms.title은 필수 필드 - 빈 문자열 불가, 실제 값 필요
       // RCS 캠페인: MMS는 fallback 메시지 → lms* 필드 사용
       // 비-RCS 캠페인: MMS는 메인 메시지 → 기존 필드 사용
+      // 
+      // ★ E100037 오류 방지: lmsContent가 비어있어서 content로 폴백할 때,
+      //   msg에 [URL분석N] 플레이스홀더가 있으면 urlLink도 함께 폴백해야 함.
+      //   lms* 필드가 모두 비어있으면 RCS 필드 전체를 MMS에도 사용 (일괄 폴백)
+      const hasLmsContent = !!((message as any)?.lmsContent?.trim());
+      const useLmsFallback = isRcs && hasLmsContent;
+      
       const fallbackContent = isRcs ? ((message as any)?.lmsContent || message?.content || '') : (message?.content || '');
       const mmsTitle = isRcs
         ? ((message as any)?.lmsTitle?.trim() || message?.title?.trim() || fallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
         : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
       
-      // MMS에 사용할 이미지: RCS 캠페인이면 lmsImageFileIdResolved, 아니면 imageFileId
-      const mmsImageFileId = isRcs ? lmsImageFileIdResolved : imageFileId;
+      // MMS에 사용할 URL 리스트 결정:
+      // - 비-RCS 캠페인: 기존 필드 사용
+      // - RCS + lmsContent 있음: lmsUrlLinks 사용 (별도 폴백 메시지)
+      // - RCS + lmsContent 없음: rcsUrlList로 폴백 (content와 urlLinks가 쌍으로 이동)
+      const mmsUrlList: string[] = isRcs ? (useLmsFallback ? lmsUrlList : rcsUrlList) : rcsUrlList;
+      const mmsUrlReward = isRcs ? (useLmsFallback ? lmsUrlReward : rcsUrlReward) : rcsUrlReward;
+      
+      // MMS에 사용할 이미지:
+      // - 비-RCS 캠페인: imageFileId
+      // - RCS + lmsContent 있음: lmsImageFileIdResolved (별도 폴백 이미지)
+      // - RCS + lmsContent 없음: imageFileId로 폴백 (RCS 이미지를 MMS에도 사용)
+      const mmsImageFileId = isRcs ? (useLmsFallback ? lmsImageFileIdResolved : imageFileId) : imageFileId;
       
       if (isRcs) {
-        console.log(`[Submit] Using separate LMS fallback for MMS: lmsContent length=${((message as any)?.lmsContent || '').length}, fallbackContent length=${fallbackContent.length}, lmsImageFileId=${lmsImageFileIdResolved}, lmsUrlLinks=${lmsUrlList.length} urls`);
+        console.log(`[Submit] RCS campaign MMS fallback mode: ${useLmsFallback ? 'SEPARATE (lms* fields)' : 'UNIFIED (using RCS fields as fallback)'}`);
+        console.log(`[Submit] MMS fallback details: lmsContent=${hasLmsContent}, fallbackContent length=${fallbackContent.length}, mmsImageFileId=${mmsImageFileId}, mmsUrlLinks=${mmsUrlList.length} urls`);
       }
       
       const mmsObject: Record<string, unknown> = {
@@ -1945,10 +1959,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const updateLmsUrlList: string[] = updateLmsUrlLinksData?.list || [];
       const updateLmsUrlReward = updateLmsUrlLinksData?.reward;
       
-      // MMS에 사용할 URL 리스트 결정: RCS 캠페인이면 lms* 필드 사용, 아니면 기존 필드 사용
-      const updateMmsUrlList: string[] = isRcs ? updateLmsUrlList : updateRcsUrlList;
-      const updateMmsUrlReward = isRcs ? updateLmsUrlReward : updateRcsUrlReward;
-      
       // buttons는 JSONB로 저장됨: { list: [{ type, name, val1, val2? }] } - RCS 전용
       const updateParsedButtons = typeof (message as any)?.buttons === 'string'
         ? JSON.parse((message as any).buttons)
@@ -1959,16 +1969,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // BizChat API 규격: mms.title은 필수 필드 - 빈 문자열 불가, 실제 값 필요
       // RCS 캠페인: MMS는 fallback 메시지 → lms* 필드 사용
       // 비-RCS 캠페인: MMS는 메인 메시지 → 기존 필드 사용
+      //
+      // ★ E100037 오류 방지: lmsContent가 비어있어서 content로 폴백할 때,
+      //   msg에 [URL분석N] 플레이스홀더가 있으면 urlLink도 함께 폴백해야 함.
+      //   lms* 필드가 모두 비어있으면 RCS 필드 전체를 MMS에도 사용 (일괄 폴백)
+      const updateHasLmsContent = !!((message as any)?.lmsContent?.trim());
+      const updateUseLmsFallback = isRcs && updateHasLmsContent;
+      
       const updateFallbackContent = isRcs ? ((message as any)?.lmsContent || message?.content || '') : (message?.content || '');
       const updateMmsTitle = isRcs
         ? ((message as any)?.lmsTitle?.trim() || message?.title?.trim() || updateFallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
         : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
       
-      // MMS에 사용할 이미지: RCS 캠페인이면 lmsImageFileIdResolved, 아니면 updateImageFileId
-      const updateMmsImageFileId = isRcs ? updateLmsImageFileIdResolved : updateImageFileId;
+      // MMS에 사용할 URL 리스트 결정:
+      // - 비-RCS 캠페인: 기존 필드 사용
+      // - RCS + lmsContent 있음: lmsUrlLinks 사용 (별도 폴백 메시지)
+      // - RCS + lmsContent 없음: rcsUrlList로 폴백 (content와 urlLinks가 쌍으로 이동)
+      const updateMmsUrlList: string[] = isRcs ? (updateUseLmsFallback ? updateLmsUrlList : updateRcsUrlList) : updateRcsUrlList;
+      const updateMmsUrlReward = isRcs ? (updateUseLmsFallback ? updateLmsUrlReward : updateRcsUrlReward) : updateRcsUrlReward;
+      
+      // MMS에 사용할 이미지:
+      // - 비-RCS 캠페인: updateImageFileId
+      // - RCS + lmsContent 있음: updateLmsImageFileIdResolved (별도 폴백 이미지)
+      // - RCS + lmsContent 없음: updateImageFileId로 폴백 (RCS 이미지를 MMS에도 사용)
+      const updateMmsImageFileId = isRcs ? (updateUseLmsFallback ? updateLmsImageFileIdResolved : updateImageFileId) : updateImageFileId;
       
       if (isRcs) {
-        console.log(`[Submit Update] Using separate LMS fallback for MMS: lmsContent length=${((message as any)?.lmsContent || '').length}, fallbackContent length=${updateFallbackContent.length}, lmsImageFileId=${updateLmsImageFileIdResolved}, lmsUrlLinks=${updateLmsUrlList.length} urls`);
+        console.log(`[Submit Update] RCS campaign MMS fallback mode: ${updateUseLmsFallback ? 'SEPARATE (lms* fields)' : 'UNIFIED (using RCS fields as fallback)'}`);
+        console.log(`[Submit Update] MMS fallback details: lmsContent=${updateHasLmsContent}, fallbackContent length=${updateFallbackContent.length}, mmsImageFileId=${updateMmsImageFileId}, mmsUrlLinks=${updateMmsUrlList.length} urls`);
       }
       
       const updateMmsObject: Record<string, unknown> = {
