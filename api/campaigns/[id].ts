@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
-import { pgTable, text, integer, timestamp, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, numeric, jsonb } from 'drizzle-orm/pg-core';
 import { createHmac } from 'crypto';
 
 neonConfig.fetchConnectionCache = true;
@@ -56,6 +56,13 @@ const messages = pgTable('messages', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  imageFileId: text('image_file_id'),
+  urlLinks: jsonb('url_links'),
+  buttons: jsonb('buttons'),
+  lmsContent: text('lms_content'),
+  lmsImageUrl: text('lms_image_url'),
+  lmsImageFileId: text('lms_image_file_id'),
+  lmsUrlLinks: jsonb('lms_url_links'),
 });
 
 const targeting = pgTable('targeting', {
@@ -244,6 +251,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (messageUpdate.title !== undefined) messageUpdateData.title = messageUpdate.title;
             if (messageUpdate.content !== undefined) messageUpdateData.content = messageUpdate.content;
             if (messageUpdate.imageUrl !== undefined) messageUpdateData.imageUrl = messageUpdate.imageUrl;
+            if (messageUpdate.imageFileId !== undefined) messageUpdateData.imageFileId = messageUpdate.imageFileId;
+            if (messageUpdate.urlLinks !== undefined) messageUpdateData.urlLinks = messageUpdate.urlLinks;
+            if (messageUpdate.buttons !== undefined) messageUpdateData.buttons = messageUpdate.buttons;
+            if (messageUpdate.lmsContent !== undefined) messageUpdateData.lmsContent = messageUpdate.lmsContent;
+            if (messageUpdate.lmsImageUrl !== undefined) messageUpdateData.lmsImageUrl = messageUpdate.lmsImageUrl;
+            if (messageUpdate.lmsImageFileId !== undefined) messageUpdateData.lmsImageFileId = messageUpdate.lmsImageFileId;
+            if (messageUpdate.lmsUrlLinks !== undefined) messageUpdateData.lmsUrlLinks = messageUpdate.lmsUrlLinks;
             
             if (Object.keys(messageUpdateData).length > 0 && message) {
               await db.update(messages).set(messageUpdateData).where(eq(messages.campaignId, id));

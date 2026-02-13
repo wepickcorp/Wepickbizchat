@@ -136,8 +136,13 @@ const messages = pgTable('messages', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  imageFileId: text('image_file_id'),
   urlLinks: jsonb('url_links'), // { list: string[], reward?: number }
   buttons: jsonb('buttons'), // { list: [{ type, name, val1, val2? }] }
+  lmsContent: text('lms_content'),
+  lmsImageUrl: text('lms_image_url'),
+  lmsImageFileId: text('lms_image_file_id'),
+  lmsUrlLinks: jsonb('lms_url_links'), // { list: string[], reward?: number }
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -171,9 +176,14 @@ const templates = pgTable('templates', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  imageFileId: text('image_file_id'),
   urlLinks: jsonb('url_links'), // { list: string[], reward?: number }
   buttons: jsonb('buttons'), // { list: [{ type, name, val1, val2? }] }
   status: text('status').default('draft'),
+  lmsContent: text('lms_content'),
+  lmsImageUrl: text('lms_image_url'),
+  lmsImageFileId: text('lms_image_file_id'),
+  lmsUrlLinks: jsonb('lms_url_links'), // { list: string[], reward?: number }
 });
 
 function getDb() {
@@ -1227,8 +1237,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         title: template.title,
         content: template.content,
         imageUrl: template.imageUrl,
+        imageFileId: template.imageFileId || null,
         urlLinks: template.urlLinks || null,
         buttons: template.buttons || null,
+        lmsContent: template.lmsContent || null,
+        lmsImageUrl: template.lmsImageUrl || null,
+        lmsImageFileId: template.lmsImageFileId || null,
+        lmsUrlLinks: template.lmsUrlLinks || null,
       });
 
       // 타겟팅 데이터 저장

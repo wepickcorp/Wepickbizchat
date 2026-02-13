@@ -4,7 +4,7 @@ import { neon, neonConfig } from '@neondatabase/serverless';
 import { createHmac } from 'crypto';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
-import { pgTable, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
 neonConfig.fetchConnectionCache = true;
 
@@ -48,6 +48,13 @@ const messages = pgTable('messages', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  imageFileId: text('image_file_id'),
+  urlLinks: jsonb('url_links'),
+  buttons: jsonb('buttons'),
+  lmsContent: text('lms_content'),
+  lmsImageUrl: text('lms_image_url'),
+  lmsImageFileId: text('lms_image_file_id'),
+  lmsUrlLinks: jsonb('lms_url_links'),
 });
 
 function getDb() {
