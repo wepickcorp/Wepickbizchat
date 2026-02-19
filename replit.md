@@ -28,8 +28,24 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
 - **Font**: Pretendard Variable.
 - **Border Radius**: 8px (rounded-lg).
 
+**API 구조 (Vercel 배포용):**
+- 70개+ API 핸들러를 **1개의 catch-all 라우터**(`api/router.js`)로 통합
+- `src/api-router.ts`: 라우터 소스 파일 (빌드 시 `api/router.js`로 번들됨)
+- `src/handlers/`: 기존 `api/` 핸들러들이 이동된 위치 (admin/, bizchat/, campaigns/ 등)
+- `api/router.js`: 유일한 Serverless Function (esbuild 번들 결과물, git에 ESM placeholder로 커밋)
+- `script/build.ts`: Vite 클라이언트 빌드 + esbuild API 라우터 번들링 (format: "esm", packages: "external")
+- **절대 금지 사항:**
+  - `api/` 폴더에 직접 `.ts` 핸들러 파일 생성 금지 (개별 함수로 인식되어 배포 실패)
+  - `api/router.ts` 파일 생성 금지 (`.ts`가 `.js`보다 우선 컴파일되어 번들 무시됨)
+  - `vercel.json`에 `functions` 설정 추가 금지 (빌드 전 패턴 체크로 실패 가능)
+  - esbuild format을 `cjs`로 변경 금지 (`"type": "module"` 프로젝트라 ESM 필수)
+- **새 API 엔드포인트 추가 방법:**
+  1. `src/handlers/` 아래에 핸들러 파일 생성 (`export default function handler` 필수)
+  2. `src/api-router.ts`에 import 추가 및 routes 배열에 등록
+  3. 커밋 & 푸시 → 빌드 시 자동으로 번들에 포함
+
 **System Design Choices:**
-- Vercel Serverless Functions for scalable backend logic.
+- Vercel Serverless Functions for scalable backend logic (단일 catch-all 라우터 방식).
 - Supabase for robust authentication and user management.
 - Drizzle ORM for type-safe database interactions.
 - BizChat API integration for core advertising functionality, including campaign creation, approval, and real-time statistics, with strict adherence to BizChat API v0.29.0 specifications.
