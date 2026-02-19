@@ -568,73 +568,147 @@ export default function CampaignDetail() {
           </div>
         </TabsContent>
 
-        <TabsContent value="message">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-primary" />
-                메시지 상세
-              </CardTitle>
-              <CardDescription>
-                {MESSAGE_TYPE_LABELS[campaign.messageType]} 형식의 메시지입니다
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {message ? (
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-4">
-                    {message.title && (
+        <TabsContent value="message" className="space-y-4">
+          {message ? (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5 text-primary" />
+                    {campaign.messageType === 'RCS' ? 'RCS 메시지' : '메시지 상세'}
+                  </CardTitle>
+                  <CardDescription>
+                    {campaign.messageType === 'RCS'
+                      ? 'RCS 지원 단말에 발송되는 메시지입니다'
+                      : `${MESSAGE_TYPE_LABELS[campaign.messageType]} 형식의 메시지입니다`}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-4">
+                      {message.title && (
+                        <div>
+                          <p className="text-small text-muted-foreground mb-1">제목</p>
+                          <p className="font-medium text-h3">{message.title}</p>
+                        </div>
+                      )}
                       <div>
-                        <p className="text-small text-muted-foreground mb-1">제목</p>
-                        <p className="font-medium text-h3">{message.title}</p>
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-small text-muted-foreground mb-1">본문</p>
-                      <div className="p-4 bg-muted rounded-lg">
-                        <p className="whitespace-pre-wrap" data-testid="text-message-content">
-                          {message.content}
+                        <p className="text-small text-muted-foreground mb-1">본문</p>
+                        <div className="p-4 bg-muted rounded-lg">
+                          <p className="whitespace-pre-wrap" data-testid="text-message-content">
+                            {message.content}
+                          </p>
+                        </div>
+                        <p className="text-tiny text-muted-foreground mt-2">
+                          {message.content?.length || 0} / 2000자
                         </p>
                       </div>
-                      <p className="text-tiny text-muted-foreground mt-2">
-                        {message.content?.length || 0} / 2000자
-                      </p>
                     </div>
-                  </div>
-                  <div className="flex justify-center">
-                    <div className="w-64 h-[480px] bg-gray-900 rounded-[2rem] p-3 shadow-xl">
-                      <div className="w-full h-full bg-white dark:bg-gray-100 rounded-[1.5rem] overflow-hidden flex flex-col">
-                        <div className="bg-gray-200 dark:bg-gray-300 p-3 text-center text-tiny text-gray-600">
-                          메시지 미리보기
-                        </div>
-                        <div className="flex-1 p-4 overflow-auto">
-                          <div className="bg-gray-100 dark:bg-gray-200 rounded-lg p-3 text-small text-gray-800">
-                            {message.title && (
-                              <p className="font-bold mb-2">{message.title}</p>
-                            )}
-                            <p className="whitespace-pre-wrap">{message.content}</p>
-                            {message.imageUrl && (
-                              <img 
-                                src={message.imageUrl} 
-                                alt="첨부 이미지" 
-                                className="mt-3 rounded-lg max-w-full"
-                              />
-                            )}
+                    <div className="flex justify-center">
+                      <div className="w-64 h-[480px] bg-gray-900 rounded-[2rem] p-3 shadow-xl">
+                        <div className="w-full h-full bg-white dark:bg-gray-100 rounded-[1.5rem] overflow-hidden flex flex-col">
+                          <div className="bg-gray-200 dark:bg-gray-300 p-3 text-center text-tiny text-gray-600">
+                            {campaign.messageType === 'RCS' ? 'RCS 미리보기' : '메시지 미리보기'}
+                          </div>
+                          <div className="flex-1 p-4 overflow-auto">
+                            <div className="bg-gray-100 dark:bg-gray-200 rounded-lg p-3 text-small text-gray-800">
+                              {message.title && (
+                                <p className="font-bold mb-2">{message.title}</p>
+                              )}
+                              <p className="whitespace-pre-wrap">{message.content}</p>
+                              {message.imageUrl && (
+                                <img 
+                                  src={message.imageUrl} 
+                                  alt="첨부 이미지" 
+                                  className="mt-3 rounded-lg max-w-full"
+                                />
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ) : (
+                </CardContent>
+              </Card>
+
+              {campaign.messageType === 'RCS' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                      LMS 폴백 메시지
+                    </CardTitle>
+                    <CardDescription>
+                      RCS를 지원하지 않는 단말에 대체 발송되는 문자 메시지입니다
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {(message as any).lmsContent ? (
+                      <div className="grid gap-6 md:grid-cols-2">
+                        <div className="space-y-4">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-small text-muted-foreground">본문</p>
+                              <Badge variant="outline" className="text-tiny">별도 설정됨</Badge>
+                            </div>
+                            <div className="p-4 bg-muted rounded-lg">
+                              <p className="whitespace-pre-wrap" data-testid="text-lms-content">
+                                {(message as any).lmsContent}
+                              </p>
+                            </div>
+                            <p className="text-tiny text-muted-foreground mt-2">
+                              {((message as any).lmsContent as string)?.length || 0} / 2000자
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex justify-center">
+                          <div className="w-64 h-[480px] bg-gray-900 rounded-[2rem] p-3 shadow-xl">
+                            <div className="w-full h-full bg-white dark:bg-gray-100 rounded-[1.5rem] overflow-hidden flex flex-col">
+                              <div className="bg-gray-200 dark:bg-gray-300 p-3 text-center text-tiny text-gray-600">
+                                LMS 폴백 미리보기
+                              </div>
+                              <div className="flex-1 p-4 overflow-auto">
+                                <div className="bg-gray-100 dark:bg-gray-200 rounded-lg p-3 text-small text-gray-800">
+                                  {message.title && (
+                                    <p className="font-bold mb-2">{message.title}</p>
+                                  )}
+                                  <p className="whitespace-pre-wrap">{(message as any).lmsContent}</p>
+                                  {(message as any).lmsImageUrl && (
+                                    <img 
+                                      src={(message as any).lmsImageUrl} 
+                                      alt="LMS 첨부 이미지" 
+                                      className="mt-3 rounded-lg max-w-full"
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-muted/50 rounded-lg border border-dashed">
+                        <p className="text-small text-muted-foreground" data-testid="text-lms-fallback-info">
+                          별도 LMS 폴백 메시지가 설정되지 않았어요. RCS 메시지 내용이 그대로 LMS로 대체 발송됩니다.
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <Card>
+              <CardContent className="p-6">
                 <EmptyState
                   icon={MessageSquare}
                   title="메시지가 없어요"
                   description="캠페인에 메시지가 설정되지 않았어요"
                 />
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="targeting">
