@@ -1,5 +1,6 @@
 import { build as viteBuild } from "vite";
-import { rm, mkdir, copyFile, readdir, stat } from "fs/promises";
+import { build as esbuild } from "esbuild";
+import { rm, mkdir, copyFile, readdir } from "fs/promises";
 import path from "path";
 
 async function copyDir(src: string, dest: string) {
@@ -29,6 +30,22 @@ async function buildAll() {
   await viteBuild();
 
   console.log("build complete!");
+
+  const result = await esbuild({
+    entryPoints: ["api/router.ts"],
+    bundle: true,
+    platform: "node",
+    target: "node18",
+    format: "cjs",
+    outfile: "api/router.js",
+    external: [],
+    minify: false,
+    metafile: true,
+  });
+
+  const outputSize = Object.values(result.metafile!.outputs)
+    .reduce((sum, o) => sum + o.bytes, 0);
+  console.log(`API router bundled: ${Math.round(outputSize / 1024)} KB`);
 }
 
 buildAll().catch((err) => {
