@@ -1,7 +1,7 @@
 {
   "version": 2,
   "functions": {
-    "api/router.js": {
+    "api/router.ts": {
       "maxDuration": 60
     }
   },
