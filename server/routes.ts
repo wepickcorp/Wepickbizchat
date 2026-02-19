@@ -531,8 +531,14 @@ export async function registerRoutes(
         campaignId: campaign.id,
         title: template.title || null,
         content: template.content,
-        lmsContent: (template as any).lmsContent || null,
         imageUrl: template.imageUrl,
+        imageFileId: template.imageFileId || null,
+        urlLinks: template.urlLinks || null,
+        buttons: template.buttons || null,
+        lmsContent: template.lmsContent || null,
+        lmsImageUrl: template.lmsImageUrl || null,
+        lmsImageFileId: template.lmsImageFileId || null,
+        lmsUrlLinks: template.lmsUrlLinks || null,
       });
       
       await storage.createTargeting({
