@@ -104,7 +104,11 @@ export function useAuth() {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.warn('[Auth] Session restore failed, signing out:', error.message);
+        supabase.auth.signOut();
+      }
       setSession(session);
       setIsAuthLoading(false);
     });

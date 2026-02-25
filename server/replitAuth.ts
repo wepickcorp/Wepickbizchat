@@ -200,6 +200,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     const auth = await verifySupabaseToken(token);
     if (auth) {
       (req as any).userId = auth.userId;
+      (req as any).userEmail = auth.email;
       return next();
     }
   }

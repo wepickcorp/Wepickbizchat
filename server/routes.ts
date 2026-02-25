@@ -123,9 +123,11 @@ export async function registerRoutes(
   app.get("/api/auth/user", isAuthenticated, async (req, res) => {
     try {
       const userId = (req as any).userId;
-      const user = await storage.getUser(userId);
+      let user = await storage.getUser(userId);
       if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        const email = (req as any).userEmail || '';
+        console.log('User not found in local DB, creating:', userId, email);
+        user = await storage.upsertUser({ id: userId, email });
       }
       res.json(user);
     } catch (error) {
