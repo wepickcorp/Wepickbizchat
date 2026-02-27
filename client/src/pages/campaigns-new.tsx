@@ -590,9 +590,9 @@ export default function CampaignsNew() {
       description: `"${src.name}"의 설정을 복제했습니다. 캠페인 이름과 발송일을 확인해주세요.`,
     });
 
-    // 셀프 모드로 설정하고 마지막 단계(Step 3: 예산/발송)로 바로 이동
+    // 셀프 모드로 설정하고 Step 1(캠페인 이름 + 템플릿 선택)로 이동
     setCreationMode('self');
-    setCurrentStep(3);
+    setCurrentStep(1);
     setLoadFromCampaignId(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadSourceCampaign]);
