@@ -16,6 +16,7 @@ import {
   TestTube,
   Ban,
   StopCircle,
+  FolderOpen,
 } from "lucide-react";
 import { useState } from "react";
 import { formatCurrency, formatNumber, formatDateTime, getMessageTypeLabel, CAMPAIGN_STATUS, CANCELLABLE_STATUS_CODES, STOPPABLE_STATUS_CODES, DELETABLE_STATUS_CODES } from "@/lib/authUtils";
@@ -368,6 +369,13 @@ export default function Campaigns() {
                           <Link href={`/campaigns/${campaign.id}`} className="flex items-center gap-2">
                             <Eye className="h-4 w-4" />
                             <span>상세 보기</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild data-testid={`menu-copy-${campaign.id}`}>
+                          <Link href={`/campaigns/new?from=${campaign.id}`} className="flex items-center gap-2">
+                            <FolderOpen className="h-4 w-4" />
+                            <span>이 설정으로 새 캠페인 만들기</span>
                           </Link>
                         </DropdownMenuItem>
                         {CANCELLABLE_STATUS_CODES.includes(campaign.statusCode || 0) && (

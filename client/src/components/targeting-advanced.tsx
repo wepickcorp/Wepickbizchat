@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ShoppingBag,
@@ -169,6 +169,7 @@ function HierarchicalCategorySection({
   const [isOpen, setIsOpen] = useState(selectedCategories.length > 0);
   const [selectedCat1, setSelectedCat1] = useState<string | null>(null);
   const [selectedCat2, setSelectedCat2] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // 카테고리 1 조회
   const { data: cat1Data, isLoading: cat1Loading } = useQuery<BizChatCategoryResponse>({
@@ -234,6 +235,14 @@ function HierarchicalCategorySection({
     onCategoriesChange(selectedCategories.filter((_, i) => i !== index));
   };
 
+  const filteredCat1 = useMemo(() => {
+    if (!searchQuery.trim()) return cat1List;
+    const q = searchQuery.toLowerCase();
+    return cat1List.filter(cat => cat.name.toLowerCase().includes(q));
+  }, [searchQuery, cat1List]);
+
+  const isSearchMode = searchQuery.trim().length > 0;
+
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <Card className={cn(selectedCategories.length > 0 && "border-primary/50")}>
@@ -286,7 +295,73 @@ function HierarchicalCategorySection({
               </div>
             )}
 
-            {/* 계층적 선택 UI */}
+            {/* 카테고리 검색창 */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={`${title} 검색 (예: 패션, 여행)`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+                disabled={cat1Loading}
+                data-testid={`${testIdPrefix}-search`}
+              />
+              {searchQuery && (
+                <button
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSearchQuery('')}
+                  type="button"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* 검색 모드: 플랫 리스트 */}
+            {isSearchMode ? (
+              <ScrollArea className="h-[220px] border rounded-lg p-2">
+                {cat1Loading ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                ) : filteredCat1.length === 0 ? (
+                  <div className="text-center py-6 text-small text-muted-foreground">
+                    검색 결과가 없습니다
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {filteredCat1.map((cat) => {
+                      const isAlreadySelected = selectedCategories.some(s => s.cat1 === cat.cateid && !s.cat2);
+                      return (
+                        <div
+                          key={cat.cateid}
+                          className={cn(
+                            "flex items-center justify-between p-2 rounded cursor-pointer text-small",
+                            isAlreadySelected
+                              ? "bg-primary/10 text-primary"
+                              : "hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            if (!isAlreadySelected) {
+                              addCategory(cat.cateid);
+                            }
+                          }}
+                          data-testid={`${testIdPrefix}-search-result-${cat.cateid}`}
+                        >
+                          <span>{cat.name}</span>
+                          {isAlreadySelected ? (
+                            <Badge variant="secondary" className="text-tiny">선택됨</Badge>
+                          ) : (
+                            <Plus className="h-4 w-4 text-primary" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
+            ) : (
+            /* 계층적 선택 UI */
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* 카테고리 1 */}
               <div className="space-y-2">
@@ -411,6 +486,7 @@ function HierarchicalCategorySection({
                 </ScrollArea>
               </div>
             </div>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Card>
@@ -1021,6 +1097,7 @@ function ProfilingSection({
   onProfilingChange: (profiling: AdvancedTargetingState['profiling']) => void;
 }) {
   const [isOpen, setIsOpen] = useState(selectedProfiling.length > 0);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // 프로파일링 필터 메타 조회
   const { data: proFilterData, isLoading } = useQuery<BizChatFilterResponse>({
@@ -1032,6 +1109,15 @@ function ProfilingSection({
   });
 
   const proFilters = proFilterData?.list || [];
+
+  const filteredProFilters = useMemo(() => {
+    if (!searchQuery.trim()) return proFilters;
+    const q = searchQuery.toLowerCase();
+    return proFilters.filter(f =>
+      f.name.toLowerCase().includes(q) ||
+      (f.desc && f.desc.toLowerCase().includes(q))
+    );
+  }, [searchQuery, proFilters]);
 
   const toggleFilter = (filter: BizChatFilterMeta) => {
     const existingIndex = selectedProfiling.findIndex(p => p.code === filter.code);
@@ -1092,18 +1178,39 @@ function ProfilingSection({
           </CardHeader>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <CardContent className="pt-0">
+          <CardContent className="pt-0 space-y-3">
+            {/* 프로파일링 검색창 */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="예측 모델 검색 (예: 이사, 자영업)"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+                disabled={isLoading}
+                data-testid="profiling-search"
+              />
+              {searchQuery && (
+                <button
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSearchQuery('')}
+                  type="button"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
             {isLoading ? (
               <div className="flex justify-center py-6">
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
-            ) : proFilters.length === 0 ? (
+            ) : filteredProFilters.length === 0 ? (
               <div className="text-center py-6 text-small text-muted-foreground">
-                프로파일링 필터를 사용할 수 없습니다
+                {searchQuery ? '검색 결과가 없습니다' : '프로파일링 필터를 사용할 수 없습니다'}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {proFilters.map((filter) => {
+                {filteredProFilters.map((filter) => {
                   const isSelected = selectedProfiling.some(p => p.code === filter.code);
                   return (
                     <Label

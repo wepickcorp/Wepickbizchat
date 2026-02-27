@@ -24,6 +24,7 @@ import {
   Target,
   Zap,
   MapPin,
+  FolderOpen,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency, formatNumber, getMessageTypeLabel } from "@/lib/authUtils";
@@ -64,6 +65,7 @@ import TargetingAdvanced, { type AdvancedTargetingState } from "@/components/tar
 import CreationModeSelector, { type CreationMode } from "@/components/campaign-creation-mode-selector";
 import RecommendedTemplateSelector from "@/components/recommended-template-selector";
 import TemplateVariableEditor from "@/components/template-variable-editor";
+import LoadCampaignModal, { type LoadCampaignOptions } from "@/components/load-campaign-modal";
 import type { Template } from "@shared/schema";
 
 interface RecommendedTargetingConfig {
@@ -185,6 +187,11 @@ export default function CampaignsNew() {
   const [, editParams] = useRoute("/campaigns/:id/edit");
   const campaignId = editParams?.id || null;
   const isEditMode = !!campaignId;
+
+  // URL ?from=campaignId 파라미터 처리 (캠페인 목록에서 "이 설정으로 새 캠페인 만들기" 클릭 시)
+  const fromCampaignIdParam = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('from')
+    : null;
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -240,6 +247,16 @@ export default function CampaignsNew() {
   
   // 추천 템플릿 타겟팅 사용 여부 (true = 템플릿 타겟팅 사용, false = 사용자가 직접 수정)
   const [useTemplateTargeting, setUseTemplateTargeting] = useState(true);
+
+  // 이전 캠페인 설정 불러오기
+  const [loadCampaignModalOpen, setLoadCampaignModalOpen] = useState(false);
+  const [loadFromCampaignId, setLoadFromCampaignId] = useState<string | null>(fromCampaignIdParam);
+  const [loadOptions, setLoadOptions] = useState<LoadCampaignOptions>({ copyTargeting: true, copyBudget: true, copyMessage: true });
+
+  const { data: loadSourceCampaign } = useQuery<CampaignWithDetails>({
+    queryKey: ["/api/campaigns", loadFromCampaignId],
+    enabled: !!loadFromCampaignId,
+  });
 
   // 10분 단위 올림, 현재+1시간 이후의 유효한 발송 시간 계산
   const getMinScheduledTime = () => {
@@ -513,6 +530,69 @@ export default function CampaignsNew() {
     }
   }, [advancedTargeting.sndMosu, advancedTargeting.sndMosuQuery, advancedTargeting.sndMosuDesc]);
 
+  // 불러온 캠페인 데이터를 폼에 적용
+  useEffect(() => {
+    if (!loadSourceCampaign || !loadFromCampaignId) return;
+
+    const src = loadSourceCampaign;
+    const targeting = src.targeting;
+
+    if (loadOptions.copyMessage && src.templateId) {
+      form.setValue('templateId', src.templateId);
+    }
+    if (loadOptions.copyTargeting && targeting) {
+      form.setValue('gender', (targeting.gender as 'all' | 'male' | 'female') || 'all');
+      form.setValue('ageMin', targeting.ageMin || 20);
+      form.setValue('ageMax', targeting.ageMax || 60);
+      form.setValue('regions', targeting.regions || []);
+
+      // rcvType으로 targetingMode 및 mapticsSendType 파생
+      const rcvType = src.rcvType ?? 0;
+      const derivedTargetingMode: 'ats' | 'maptics' = (rcvType === 1 || rcvType === 2) ? 'maptics' : 'ats';
+      const derivedMapticsSendType: 'realtime' | 'batch' | undefined =
+        rcvType === 1 ? 'realtime' : rcvType === 2 ? 'batch' : undefined;
+
+      const newAdvanced: AdvancedTargetingState = {
+        targetingMode: derivedTargetingMode,
+        shopping11stCategories: (targeting.shopping11stCategories as any[]) || [],
+        webappCategories: (targeting.webappCategories as any[]) || [],
+        callCategories: [],
+        locations: [],
+        profiling: [],
+        geofences: [],
+        // sndMosu, rtStartHhmm, rtEndHhmm은 campaigns 테이블에 저장됨
+        sndMosu: src.sndMosu || undefined,
+        sndMosuQuery: src.sndMosuQuery || undefined,
+        sndMosuDesc: src.sndMosuDesc || undefined,
+        mapticsSendType: derivedMapticsSendType,
+        rtStartHhmm: src.rtStartHhmm || undefined,
+        rtEndHhmm: src.rtEndHhmm || undefined,
+      };
+      setAdvancedTargeting(newAdvanced);
+      if (
+        newAdvanced.shopping11stCategories.length > 0 ||
+        newAdvanced.webappCategories.length > 0 ||
+        newAdvanced.callCategories.length > 0 ||
+        newAdvanced.locations.length > 0 ||
+        newAdvanced.profiling.length > 0 ||
+        newAdvanced.geofences.length > 0
+      ) {
+        setShowAdvancedTargeting(true);
+      }
+    }
+    if (loadOptions.copyBudget) {
+      if (src.budget) form.setValue('budget', parseFloat(src.budget as string) || 100000);
+      if (src.sndNum) form.setValue('sndNum', src.sndNum);
+    }
+
+    toast({
+      title: '캠페인 설정 불러오기 완료',
+      description: `"${src.name}"의 설정을 불러왔습니다. 캠페인 이름과 발송일은 직접 입력해주세요.`,
+    });
+    setLoadFromCampaignId(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadSourceCampaign]);
+
   // 메시지 유형별 단가
   const MESSAGE_PRICES = { LMS: 100, MMS: 120, RCS: 130 };
   const messageType = selectedTemplate?.messageType || 'LMS';
@@ -714,6 +794,21 @@ export default function CampaignsNew() {
                   }
                 }}
               />
+              {/* 이전 캠페인 불러오기 */}
+              {!isEditMode && (
+                <div className="flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setLoadCampaignModalOpen(true)}
+                    className="gap-2"
+                    data-testid="button-load-previous-campaign"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                    이전 캠페인 설정 불러오기
+                  </Button>
+                </div>
+              )}
             </div>
           )}
           
@@ -2147,6 +2242,16 @@ export default function CampaignsNew() {
           </Button>
         )}
       </div>
+
+      {/* 이전 캠페인 설정 불러오기 모달 */}
+      <LoadCampaignModal
+        open={loadCampaignModalOpen}
+        onClose={() => setLoadCampaignModalOpen(false)}
+        onLoad={(campaignId, opts) => {
+          setLoadOptions(opts);
+          setLoadFromCampaignId(campaignId);
+        }}
+      />
     </div>
   );
 }
