@@ -607,7 +607,7 @@ export default function CampaignsNew() {
   const saveCampaignMutation = useMutation({
     mutationFn: async (data: CampaignFormData) => {
       const template = templates?.find(t => t.id === data.templateId);
-      if (!template) throw new Error("템플릿을 찾을 수 없습니다");
+      const resolvedMessageType = template?.messageType || selectedTemplate?.messageType || messageType || 'LMS';
 
       // 지오펜스(maptics) 캠페인인지 확인
       const hasGeofence = (advancedTargeting.geofences?.length ?? 0) > 0;
@@ -616,7 +616,7 @@ export default function CampaignsNew() {
       const campaignData = {
         name: data.name,
         templateId: data.templateId,
-        messageType: template.messageType,
+        messageType: resolvedMessageType,
         sndNum: data.sndNum,
         gender: data.gender,
         ageMin: data.ageMin,
