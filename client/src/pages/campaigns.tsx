@@ -375,7 +375,7 @@ export default function Campaigns() {
                         <DropdownMenuItem asChild data-testid={`menu-copy-${campaign.id}`}>
                           <Link href={`/campaigns/new?from=${campaign.id}`} className="flex items-center gap-2">
                             <FolderOpen className="h-4 w-4" />
-                            <span>이 설정으로 새 캠페인 만들기</span>
+                            <span>이 캠페인 복제하기</span>
                           </Link>
                         </DropdownMenuItem>
                         {CANCELLABLE_STATUS_CODES.includes(campaign.statusCode || 0) && (

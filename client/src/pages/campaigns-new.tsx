@@ -65,7 +65,7 @@ import TargetingAdvanced, { type AdvancedTargetingState } from "@/components/tar
 import CreationModeSelector, { type CreationMode } from "@/components/campaign-creation-mode-selector";
 import RecommendedTemplateSelector from "@/components/recommended-template-selector";
 import TemplateVariableEditor from "@/components/template-variable-editor";
-import LoadCampaignModal, { type LoadCampaignOptions } from "@/components/load-campaign-modal";
+import LoadCampaignModal from "@/components/load-campaign-modal";
 import type { Template } from "@shared/schema";
 
 interface RecommendedTargetingConfig {
@@ -248,10 +248,9 @@ export default function CampaignsNew() {
   // 추천 템플릿 타겟팅 사용 여부 (true = 템플릿 타겟팅 사용, false = 사용자가 직접 수정)
   const [useTemplateTargeting, setUseTemplateTargeting] = useState(true);
 
-  // 이전 캠페인 설정 불러오기
+  // 이전 캠페인 설정 불러오기 (전체 복제)
   const [loadCampaignModalOpen, setLoadCampaignModalOpen] = useState(false);
   const [loadFromCampaignId, setLoadFromCampaignId] = useState<string | null>(fromCampaignIdParam);
-  const [loadOptions, setLoadOptions] = useState<LoadCampaignOptions>({ copyTargeting: true, copyBudget: true, copyMessage: true });
 
   const { data: loadSourceCampaign } = useQuery<CampaignWithDetails>({
     queryKey: ["/api/campaigns", loadFromCampaignId],
@@ -530,23 +529,25 @@ export default function CampaignsNew() {
     }
   }, [advancedTargeting.sndMosu, advancedTargeting.sndMosuQuery, advancedTargeting.sndMosuDesc]);
 
-  // 불러온 캠페인 데이터를 폼에 적용
+  // 불러온 캠페인 전체 복제 → 마지막 단계(Step 3)로 이동
   useEffect(() => {
     if (!loadSourceCampaign || !loadFromCampaignId) return;
 
     const src = loadSourceCampaign;
     const targeting = src.targeting;
 
-    if (loadOptions.copyMessage && src.templateId) {
+    // 메시지 (템플릿) 복제
+    if (src.templateId) {
       form.setValue('templateId', src.templateId);
     }
-    if (loadOptions.copyTargeting && targeting) {
+
+    // 타겟팅 복제
+    if (targeting) {
       form.setValue('gender', (targeting.gender as 'all' | 'male' | 'female') || 'all');
       form.setValue('ageMin', targeting.ageMin || 20);
       form.setValue('ageMax', targeting.ageMax || 60);
       form.setValue('regions', targeting.regions || []);
 
-      // rcvType으로 targetingMode 및 mapticsSendType 파생
       const rcvType = src.rcvType ?? 0;
       const derivedTargetingMode: 'ats' | 'maptics' = (rcvType === 1 || rcvType === 2) ? 'maptics' : 'ats';
       const derivedMapticsSendType: 'realtime' | 'batch' | undefined =
@@ -560,7 +561,6 @@ export default function CampaignsNew() {
         locations: [],
         profiling: [],
         geofences: [],
-        // sndMosu, rtStartHhmm, rtEndHhmm은 campaigns 테이블에 저장됨
         sndMosu: src.sndMosu || undefined,
         sndMosuQuery: src.sndMosuQuery || undefined,
         sndMosuDesc: src.sndMosuDesc || undefined,
@@ -571,26 +571,28 @@ export default function CampaignsNew() {
       setAdvancedTargeting(newAdvanced);
       if (
         newAdvanced.shopping11stCategories.length > 0 ||
-        newAdvanced.webappCategories.length > 0 ||
-        newAdvanced.callCategories.length > 0 ||
-        newAdvanced.locations.length > 0 ||
-        newAdvanced.profiling.length > 0 ||
-        newAdvanced.geofences.length > 0
+        newAdvanced.webappCategories.length > 0
       ) {
         setShowAdvancedTargeting(true);
       }
     }
-    if (loadOptions.copyBudget) {
-      if (src.budget) form.setValue('budget', parseFloat(src.budget as string) || 100000);
-      if (src.sndNum) form.setValue('sndNum', src.sndNum);
-    }
+
+    // 예산·발송번호·목표건수 복제
+    if (src.budget) form.setValue('budget', parseFloat(src.budget as string) || 100000);
+    if (src.sndNum) form.setValue('sndNum', src.sndNum);
+    if (src.targetCount) form.setValue('targetCount', src.targetCount);
+
+    // 캠페인 이름은 복제하되 "(복사본)" 접미사 추가
+    form.setValue('name', `${src.name} (복사본)`);
 
     toast({
-      title: '캠페인 설정 불러오기 완료',
-      description: `"${src.name}"의 설정을 불러왔습니다. 캠페인 이름과 발송일은 직접 입력해주세요.`,
+      title: '캠페인 복제 완료',
+      description: `"${src.name}"의 설정을 복제했습니다. 캠페인 이름과 발송일을 확인해주세요.`,
     });
+
+    // 셀프 모드로 설정하고 마지막 단계(Step 3: 예산/발송)로 바로 이동
     setCreationMode('self');
-    setCurrentStep(1);
+    setCurrentStep(3);
     setLoadFromCampaignId(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadSourceCampaign]);
@@ -807,7 +809,7 @@ export default function CampaignsNew() {
                     data-testid="button-load-previous-campaign"
                   >
                     <FolderOpen className="h-4 w-4" />
-                    이전 캠페인 설정 불러오기
+                    이전 캠페인 복제하기
                   </Button>
                 </div>
               )}
@@ -2249,8 +2251,7 @@ export default function CampaignsNew() {
       <LoadCampaignModal
         open={loadCampaignModalOpen}
         onClose={() => setLoadCampaignModalOpen(false)}
-        onLoad={(campaignId, opts) => {
-          setLoadOptions(opts);
+        onLoad={(campaignId) => {
           setLoadFromCampaignId(campaignId);
         }}
       />
