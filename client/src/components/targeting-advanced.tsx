@@ -202,27 +202,50 @@ function HierarchicalCategorySection({
   const cat2List = cat2Data?.list || [];
   const cat3List = cat3Data?.list || [];
 
-  // cateid로 표시명 조회 (BizChat API는 cateid 코드를 기대함)
+  const { data: allCat2Data } = useQuery<{ cateid: string; name: string; parentCateid: string; parentName: string }[]>({
+    queryKey: [`/api/ats/meta/${metaType}/all-cat2`, cat1List.length],
+    queryFn: async () => {
+      if (!cat1List.length) return [];
+      const results = await Promise.all(
+        cat1List.map(async (cat1) => {
+          const res = await fetch(`/api/ats/meta/${metaType}?cateid=${cat1.cateid}`);
+          const data = await res.json();
+          return (data.list || []).map((cat2: any) => ({
+            cateid: cat2.cateid ?? cat2.id,
+            name: cat2.name,
+            parentCateid: cat1.cateid,
+            parentName: cat1.name,
+          }));
+        })
+      );
+      return results.flat();
+    },
+    enabled: cat1List.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const getCat1Name = (cateid: string) => cat1List.find(c => c.cateid === cateid)?.name || cateid;
-  const getCat2Name = (cateid: string) => cat2List.find(c => c.cateid === cateid)?.name || cateid;
+  const getCat2Name = (cateid: string) => {
+    const fromCat2 = cat2List.find(c => c.cateid === cateid);
+    if (fromCat2) return fromCat2.name;
+    return allCat2Data?.find(c => c.cateid === cateid)?.name || cateid;
+  };
   const getCat3Name = (cateid: string) => cat3List.find(c => c.cateid === cateid)?.name || cateid;
 
   const addCategory = (cat1Cateid: string, cat2Cateid?: string, cat3Cateid?: string) => {
-    // cateid 코드와 표시명을 모두 저장 (BizChat API는 cateid 코드를 기대)
     const newCat: SelectedCategory = { 
-      cat1: cat1Cateid,  // cateid 코드 저장 (예: "01")
-      cat1Name: getCat1Name(cat1Cateid),  // 표시명 저장 (예: "가구/인테리어")
+      cat1: cat1Cateid,
+      cat1Name: getCat1Name(cat1Cateid),
     };
     if (cat2Cateid) {
-      newCat.cat2 = cat2Cateid;  // cateid 코드 (예: "0101")
+      newCat.cat2 = cat2Cateid;
       newCat.cat2Name = getCat2Name(cat2Cateid);
     }
     if (cat3Cateid) {
-      newCat.cat3 = cat3Cateid;  // cateid 코드 (예: "010101")
+      newCat.cat3 = cat3Cateid;
       newCat.cat3Name = getCat3Name(cat3Cateid);
     }
 
-    // 중복 체크 (cateid 코드로 비교)
     const isDuplicate = selectedCategories.some(
       c => c.cat1 === newCat.cat1 && c.cat2 === newCat.cat2 && c.cat3 === newCat.cat3
     );
@@ -235,11 +258,11 @@ function HierarchicalCategorySection({
     onCategoriesChange(selectedCategories.filter((_, i) => i !== index));
   };
 
-  const filteredCat1 = useMemo(() => {
-    if (!searchQuery.trim()) return cat1List;
+  const filteredSubcategories = useMemo(() => {
+    if (!searchQuery.trim() || !allCat2Data) return [];
     const q = searchQuery.toLowerCase();
-    return cat1List.filter(cat => cat.name.toLowerCase().includes(q));
-  }, [searchQuery, cat1List]);
+    return allCat2Data.filter(cat => cat.name.toLowerCase().includes(q));
+  }, [searchQuery, allCat2Data]);
 
   const isSearchMode = searchQuery.trim().length > 0;
 
@@ -317,21 +340,23 @@ function HierarchicalCategorySection({
               )}
             </div>
 
-            {/* 검색 모드: 플랫 리스트 */}
+            {/* 검색 모드: 소분류 기준 플랫 리스트 */}
             {isSearchMode ? (
               <ScrollArea className="h-[220px] border rounded-lg p-2">
-                {cat1Loading ? (
+                {cat1Loading || !allCat2Data ? (
                   <div className="flex justify-center py-4">
                     <Loader2 className="h-5 w-5 animate-spin" />
                   </div>
-                ) : filteredCat1.length === 0 ? (
+                ) : filteredSubcategories.length === 0 ? (
                   <div className="text-center py-6 text-small text-muted-foreground">
                     검색 결과가 없습니다
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    {filteredCat1.map((cat) => {
-                      const isAlreadySelected = selectedCategories.some(s => s.cat1 === cat.cateid && !s.cat2);
+                    {filteredSubcategories.map((cat) => {
+                      const isAlreadySelected = selectedCategories.some(
+                        s => s.cat1 === cat.parentCateid && s.cat2 === cat.cateid
+                      );
                       return (
                         <div
                           key={cat.cateid}
@@ -343,12 +368,15 @@ function HierarchicalCategorySection({
                           )}
                           onClick={() => {
                             if (!isAlreadySelected) {
-                              addCategory(cat.cateid);
+                              addCategory(cat.parentCateid, cat.cateid);
                             }
                           }}
                           data-testid={`${testIdPrefix}-search-result-${cat.cateid}`}
                         >
-                          <span>{cat.name}</span>
+                          <div className="flex flex-col">
+                            <span>{cat.name}</span>
+                            <span className="text-xs text-muted-foreground">{cat.parentName}</span>
+                          </div>
                           {isAlreadySelected ? (
                             <Badge variant="secondary" className="text-tiny">선택됨</Badge>
                           ) : (
