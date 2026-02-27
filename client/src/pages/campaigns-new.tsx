@@ -589,6 +589,8 @@ export default function CampaignsNew() {
       title: '캠페인 설정 불러오기 완료',
       description: `"${src.name}"의 설정을 불러왔습니다. 캠페인 이름과 발송일은 직접 입력해주세요.`,
     });
+    setCreationMode('self');
+    setCurrentStep(1);
     setLoadFromCampaignId(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadSourceCampaign]);
