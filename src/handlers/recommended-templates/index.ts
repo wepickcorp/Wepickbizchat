@@ -51,6 +51,7 @@ const recommendedTemplates = pgTable("recommended_templates", {
   buttons: jsonb("buttons").$type<RcsButtonsConfig>(),
   isActive: boolean("is_active").default(true),
   sortOrder: integer("sort_order").default(0),
+  targetingConfig: jsonb("targeting_config"),
   sourceTemplateId: varchar("source_template_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -159,6 +160,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         isActive,
         sortOrder,
         sourceTemplateId,
+        targetingConfig,
       } = req.body;
 
       if (!name || !category || !purpose || !contentTemplate) {
@@ -185,6 +187,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         isActive: isActive ?? true,
         sortOrder: sortOrder ?? 0,
         sourceTemplateId,
+        targetingConfig,
       }).returning();
 
       return res.status(201).json({

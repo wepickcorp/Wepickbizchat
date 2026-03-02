@@ -51,6 +51,7 @@ const recommendedTemplates = pgTable("recommended_templates", {
   buttons: jsonb("buttons").$type<RcsButtonsConfig>(),
   isActive: boolean("is_active").default(true),
   sortOrder: integer("sort_order").default(0),
+  targetingConfig: jsonb("targeting_config"),
   sourceTemplateId: varchar("source_template_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -153,9 +154,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'PATCH') {
       const updateData = req.body;
       
-      // Remove id and timestamps from update
       delete updateData.id;
       delete updateData.createdAt;
+      delete updateData.advancedTargetingState;
+      delete updateData.basicTargetingState;
       updateData.updatedAt = new Date();
 
       const [updated] = await db.update(recommendedTemplates)

@@ -70,7 +70,8 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
   - **관리자 계정**: admin2026@wepick.co.kr / admin1234 (super 권한)
   - **권한 체계**: super (전체 권한), cs (고객지원), finance (재무)
   - **환경변수**: `ADMIN_JWT_SECRET`, `ADMIN_SALT`
-  - **기능**: 대시보드(/admin), 유저관리(/admin/users), 캠페인모니터링(/admin/campaigns), 결제내역(/admin/transactions), 활동로그(/admin/logs)
+  - **기능**: 대시보드(/admin), 유저관리(/admin/users), 캠페인모니터링(/admin/campaigns), 결제내역(/admin/transactions), 활동로그(/admin/logs), 추천 템플릿 관리(/admin/recommended-templates)
+  - **추천 템플릿 관리**: 목록(/admin/recommended-templates), 생성(/admin/recommended-templates/new), 수정(/admin/recommended-templates/:id/edit) — Dialog 대신 별도 페이지 폼으로 분리
   - **대리 로그인(Impersonation)**: CS/super 관리자가 고객지원을 위해 특정 사용자로 로그인할 수 있는 기능
     - **토큰 구조**: Base64 인코딩된 JSON `{ data: string, signature: string }`. data는 `{ userId, adminId, type: 'impersonate', exp }` 포함
     - **서명 방식**: HMAC-SHA256(data, ADMIN_JWT_SECRET)
