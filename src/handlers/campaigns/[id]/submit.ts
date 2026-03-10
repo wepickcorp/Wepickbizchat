@@ -311,6 +311,7 @@ const messages = pgTable('messages', {
   id: text('id').primaryKey(),
   campaignId: text('campaign_id').notNull(),
   title: text('title'),
+  lmsTitle: text('lms_title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
   imageFileId: text('image_file_id'),
@@ -329,6 +330,7 @@ const templates = pgTable('templates', {
   name: text('name').notNull(),
   messageType: text('message_type'),
   title: text('title'),
+  lmsTitle: text('lms_title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
   imageFileId: text('image_file_id'),
@@ -1300,7 +1302,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const fallbackContent = isRcs ? ((message as any)?.lmsContent || message?.content || '') : (message?.content || '');
       const mmsTitle = isRcs
-        ? ((message as any)?.lmsTitle?.trim() || message?.title?.trim() || fallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
+        ? (message?.lmsTitle?.trim() || message?.title?.trim() || fallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
         : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
       
       // MMS에 사용할 URL 리스트 결정:
@@ -1978,7 +1980,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const updateFallbackContent = isRcs ? ((message as any)?.lmsContent || message?.content || '') : (message?.content || '');
       const updateMmsTitle = isRcs
-        ? ((message as any)?.lmsTitle?.trim() || message?.title?.trim() || updateFallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
+        ? (message?.lmsTitle?.trim() || message?.title?.trim() || updateFallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
         : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
       
       // MMS에 사용할 URL 리스트 결정:

@@ -204,6 +204,7 @@ export const recommendedTemplates = pgTable("recommended_templates", {
   
   // 메시지 내용 (변수 포함)
   titleTemplate: varchar("title_template", { length: 60 }),
+  lmsTitleTemplate: varchar("lms_title_template", { length: 60 }),
   contentTemplate: text("content_template").notNull(),
   lmsContentTemplate: text("lms_content_template"), // RCS 메시지의 안드로이드용 LMS 대체 텍스트 템플릿
   variableSchema: jsonb("variable_schema").$type<VariableSchemaItem[]>(),
@@ -239,6 +240,7 @@ export const templates = pgTable("templates", {
   messageType: varchar("message_type", { length: 10 }).notNull(), // LMS, MMS, RCS
   rcsType: integer("rcs_type"), // 0=스탠다드, 1=LMS, 2=슬라이드, 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
   title: varchar("title", { length: 60 }),
+  lmsTitle: varchar("lms_title", { length: 60 }),
   content: text("content").notNull(), // RCS 메시지 내용
   lmsContent: text("lms_content"), // LMS fallback 메시지 내용
   imageUrl: text("image_url"), // RCS용 미리보기 이미지 URL
@@ -351,6 +353,7 @@ export const messages = pgTable("messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   campaignId: varchar("campaign_id").references(() => campaigns.id).notNull(),
   title: varchar("title", { length: 60 }),
+  lmsTitle: varchar("lms_title", { length: 60 }),
   content: text("content").notNull(), // RCS 메시지 내용
   lmsContent: text("lms_content"), // LMS fallback 메시지 내용
   imageUrl: text("image_url"), // RCS용 이미지 URL

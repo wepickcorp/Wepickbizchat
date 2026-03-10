@@ -38,6 +38,7 @@ interface RecommendedTemplate {
   purpose: string;
   version?: string;
   titleTemplate?: string;
+  lmsTitleTemplate?: string;
   contentTemplate: string;
   variableSchema?: VariableSchemaItem[];
   defaultImageUrl?: string;

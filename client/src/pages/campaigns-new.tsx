@@ -93,6 +93,7 @@ interface RecommendedTemplate {
   category: string;
   purpose: string;
   titleTemplate?: string;
+  lmsTitleTemplate?: string;
   contentTemplate: string;
   variableSchema?: {
     key: string;

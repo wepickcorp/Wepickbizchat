@@ -77,6 +77,7 @@ const templateFormSchema = z.object({
   }),
   rcsType: z.number().optional(),
   title: z.string().max(30, "제목은 30자 이하로 입력해주세요").optional(),
+  lmsTitle: z.string().max(30, "LMS 제목은 30자 이하로 입력해주세요").optional(),
   content: z.string().max(2000),
   lmsContent: z.string().max(2000).optional(),
   imageUrl: z.string().optional().or(z.literal("")),
@@ -121,6 +122,30 @@ const templateFormSchema = z.object({
 }, {
   message: "RCS 메시지의 경우 RCS 탭의 메시지도 필수로 입력해주세요",
   path: ["content"],
+}).refine((data) => {
+  if (data.messageType === "RCS") {
+    return data.title && data.title.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "RCS 제목을 입력해주세요",
+  path: ["title"],
+}).refine((data) => {
+  if (data.messageType === "RCS") {
+    return data.lmsTitle && data.lmsTitle.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "일반(LMS) 제목을 입력해주세요",
+  path: ["lmsTitle"],
+}).refine((data) => {
+  if (data.messageType !== "RCS") {
+    return data.title && data.title.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "제목을 입력해주세요",
+  path: ["title"],
 });
 
 type TemplateFormValues = z.infer<typeof templateFormSchema>;
@@ -269,6 +294,7 @@ export default function TemplatesNew() {
       messageType: template.messageType as "LMS" | "MMS" | "RCS",
       rcsType: template.rcsType || 0,
       title: template.title || "",
+      lmsTitle: (template as any).lmsTitle || "",
       content: template.content,
       lmsContent: lmsContentValue,
       imageUrl: template.imageUrl || "",
@@ -311,6 +337,7 @@ export default function TemplatesNew() {
       messageType: "LMS",
       rcsType: 0,
       title: "",
+      lmsTitle: "",
       content: "",
       lmsContent: "",
       imageUrl: "",
@@ -359,6 +386,7 @@ export default function TemplatesNew() {
         messageType: existingTemplate.messageType as "LMS" | "MMS" | "RCS",
         rcsType: existingTemplate.rcsType || 0,
         title: existingTemplate.title || "",
+        lmsTitle: (existingTemplate as any).lmsTitle || "",
         content: existingTemplate.content,
         lmsContent: lmsContentValue,
         imageUrl: existingTemplate.imageUrl || "",
@@ -649,6 +677,7 @@ export default function TemplatesNew() {
         lmsImageUrl: data.messageType === "RCS" ? (data.lmsImageUrl || undefined) : undefined,
         lmsImageFileId: data.messageType === "RCS" ? (data.lmsImageFileId || undefined) : undefined,
         title: data.title || undefined,
+        lmsTitle: data.messageType === "RCS" ? (data.lmsTitle || undefined) : undefined,
         rcsType: data.messageType === "RCS" ? data.rcsType : undefined,
         lmsContent: data.messageType === "RCS" ? (data.lmsContent || undefined) : undefined,
         urlLinks: data.urlLinksData?.list?.length ? data.urlLinksData : undefined,
@@ -683,6 +712,7 @@ export default function TemplatesNew() {
         lmsImageUrl: data.messageType === "RCS" ? (data.lmsImageUrl || undefined) : undefined,
         lmsImageFileId: data.messageType === "RCS" ? (data.lmsImageFileId || undefined) : undefined,
         title: data.title || undefined,
+        lmsTitle: data.messageType === "RCS" ? (data.lmsTitle || undefined) : undefined,
         rcsType: data.messageType === "RCS" ? data.rcsType : undefined,
         lmsContent: data.messageType === "RCS" ? (data.lmsContent || undefined) : undefined,
         urlLinks: data.urlLinksData?.list?.length ? data.urlLinksData : undefined,
@@ -1035,30 +1065,33 @@ export default function TemplatesNew() {
                   />
                 )}
 
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>제목 (선택)</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="예: 특별 할인 안내"
-                          maxLength={30}
-                          data-testid="input-template-title"
-                          disabled={isViewMode}
-                          {...field}
-                        />
-                      </FormControl>
-                      {!isViewMode && (
-                        <FormDescription>
-                          최대 30자까지 입력 가능해요
-                        </FormDescription>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* 비RCS 메시지일 때 제목 (필수) */}
+                {watchedValues.messageType !== "RCS" && (
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>제목</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="예: 특별 할인 안내"
+                            maxLength={30}
+                            data-testid="input-template-title"
+                            disabled={isViewMode}
+                            {...field}
+                          />
+                        </FormControl>
+                        {!isViewMode && (
+                          <FormDescription>
+                            최대 30자까지 입력 가능해요
+                          </FormDescription>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 {/* RCS 메시지인 경우 일반/RCS 탭으로 분리 */}
                 {watchedValues.messageType === "RCS" ? (
@@ -1082,6 +1115,30 @@ export default function TemplatesNew() {
                         </TabsTrigger>
                       </TabsList>
                       <TabsContent value="lms" className="mt-4 space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="lmsTitle"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>일반(LMS) 제목</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="예: 특별 할인 안내"
+                                  maxLength={30}
+                                  data-testid="input-template-lms-title"
+                                  disabled={isViewMode}
+                                  {...field}
+                                />
+                              </FormControl>
+                              {!isViewMode && (
+                                <FormDescription>
+                                  최대 30자까지 입력 가능해요
+                                </FormDescription>
+                              )}
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                         <FormField
                           control={form.control}
                           name="lmsContent"
@@ -1236,7 +1293,31 @@ export default function TemplatesNew() {
                           )}
                         </div>
                       </TabsContent>
-                      <TabsContent value="rcs" className="mt-4">
+                      <TabsContent value="rcs" className="mt-4 space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="title"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>RCS 제목</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="예: 특별 할인 안내"
+                                  maxLength={30}
+                                  data-testid="input-template-rcs-title"
+                                  disabled={isViewMode}
+                                  {...field}
+                                />
+                              </FormControl>
+                              {!isViewMode && (
+                                <FormDescription>
+                                  최대 30자까지 입력 가능해요
+                                </FormDescription>
+                              )}
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                         <FormField
                           control={form.control}
                           name="content"
@@ -1735,11 +1816,19 @@ export default function TemplatesNew() {
                     )}
                   </div>
                   
-                  {/* 타이틀은 RCS 탭에서만 표시 */}
-                  {watchedValues.title && (watchedValues.messageType !== "RCS" || rcsContentTab === "rcs") && (
-                    <div className="font-semibold text-body">
-                      {watchedValues.title}
-                    </div>
+                  {/* 타이틀 표시: LMS탭에서는 lmsTitle, RCS탭/비RCS에서는 title */}
+                  {watchedValues.messageType === "RCS" && rcsContentTab === "lms" ? (
+                    watchedValues.lmsTitle && (
+                      <div className="font-semibold text-body">
+                        {watchedValues.lmsTitle}
+                      </div>
+                    )
+                  ) : (
+                    watchedValues.title && (
+                      <div className="font-semibold text-body">
+                        {watchedValues.title}
+                      </div>
+                    )
                   )}
                   
                   {/* 이미지 미리보기 - 탭에 따라 다른 이미지 표시 */}

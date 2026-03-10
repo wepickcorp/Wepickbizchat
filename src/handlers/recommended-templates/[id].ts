@@ -41,6 +41,7 @@ const recommendedTemplates = pgTable("recommended_templates", {
   purpose: varchar("purpose", { length: 50 }).notNull(),
   version: varchar("version", { length: 20 }),
   titleTemplate: varchar("title_template", { length: 60 }),
+  lmsTitleTemplate: varchar("lms_title_template", { length: 60 }),
   contentTemplate: text("content_template").notNull(),
   lmsContentTemplate: text("lms_content_template"), // RCS 메시지의 안드로이드용 LMS 대체 텍스트 템플릿
   variableSchema: jsonb("variable_schema").$type<VariableSchemaItem[]>(),
@@ -134,6 +135,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const title = template.titleTemplate 
         ? replaceVariables(template.titleTemplate, variableValues || {})
         : '';
+      const lmsTitle = template.lmsTitleTemplate
+        ? replaceVariables(template.lmsTitleTemplate, variableValues || {})
+        : '';
       const content = replaceVariables(template.contentTemplate, variableValues || {});
       const lmsContent = template.lmsContentTemplate 
         ? replaceVariables(template.lmsContentTemplate, variableValues || {})
@@ -143,6 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         success: true,
         preview: {
           title,
+          lmsTitle,
           content,
           lmsContent,
           estimatedLength: content.length,

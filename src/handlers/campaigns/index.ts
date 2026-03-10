@@ -134,6 +134,7 @@ const messages = pgTable('messages', {
   id: text('id').primaryKey(),
   campaignId: text('campaign_id').notNull(),
   title: text('title'),
+  lmsTitle: text('lms_title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
   imageFileId: text('image_file_id'),
@@ -174,6 +175,7 @@ const templates = pgTable('templates', {
   messageType: text('message_type').notNull(),
   rcsType: integer('rcs_type'), // 0=스탠다드, 1=LMS, 2=슬라이드, 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
   title: text('title'),
+  lmsTitle: text('lms_title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
   imageFileId: text('image_file_id'),
@@ -712,6 +714,7 @@ async function createCampaignInBizChat(
   },
   messageData: {
     title?: string;
+    lmsTitle?: string;
     content: string;
     imageUrl?: string | null;
   },
@@ -792,7 +795,7 @@ async function createCampaignInBizChat(
     // - mms.fileInfo: 이미지 파일 정보 (파일이 없으면 empty object {})
     // - mms.urlLink: 마케팅 URL 정보 (링크가 없으면 empty object {})
     mms: {
-      title: messageData.title?.trim() || (messageData.content || '').split('\n')[0].trim().substring(0, 30) || '광고',
+      title: (campaignData.messageType === 'RCS' ? (messageData.lmsTitle?.trim() || messageData.title?.trim()) : messageData.title?.trim()) || (messageData.content || '').split('\n')[0].trim().substring(0, 30) || '광고',
       msg: messageData.content || '',
       fileInfo: {}, // 파일이 포함되지 않으면 empty object
       urlLink: {}, // 링크가 없으면 empty object (규격 준수)
@@ -1235,6 +1238,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: randomUUID(),
         campaignId,
         title: template.title,
+        lmsTitle: template.lmsTitle || null,
         content: template.content,
         imageUrl: template.imageUrl,
         imageFileId: template.imageFileId || null,
@@ -1338,6 +1342,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
           {
             title: template.title || undefined,
+            lmsTitle: template.lmsTitle || undefined,
             content: template.content,
             imageUrl: template.imageUrl,
           },

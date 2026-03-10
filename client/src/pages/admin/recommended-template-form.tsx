@@ -24,6 +24,7 @@ interface RecommendedTemplate {
   purpose: string;
   version?: string;
   titleTemplate?: string;
+  lmsTitleTemplate?: string;
   contentTemplate: string;
   variableSchema?: VariableSchemaItem[];
   defaultImageUrl?: string;
@@ -77,6 +78,7 @@ export default function AdminRecommendedTemplateForm() {
     category: '',
     purpose: '',
     titleTemplate: '',
+    lmsTitleTemplate: '',
     contentTemplate: '',
     variableSchema: [],
     messageType: 'RCS',
@@ -136,6 +138,7 @@ export default function AdminRecommendedTemplateForm() {
       category: t.category,
       purpose: t.purpose,
       titleTemplate: t.titleTemplate || '',
+      lmsTitleTemplate: t.lmsTitleTemplate || '',
       contentTemplate: t.contentTemplate,
       defaultImageUrl: t.defaultImageUrl || '',
       messageType: t.messageType || 'RCS',
@@ -429,16 +432,42 @@ export default function AdminRecommendedTemplateForm() {
           <CardTitle className="text-base">메시지 내용</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="titleTemplate">제목 템플릿</Label>
-            <Input
-              id="titleTemplate"
-              value={formData.titleTemplate || ''}
-              onChange={(e) => setFormData({ ...formData, titleTemplate: e.target.value })}
-              placeholder="예: {업체명} 회원가입 혜택 안내"
-              data-testid="input-title-template"
-            />
-          </div>
+          {formData.messageType === 'RCS' ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="titleTemplate">RCS 제목 템플릿</Label>
+                <Input
+                  id="titleTemplate"
+                  value={formData.titleTemplate || ''}
+                  onChange={(e) => setFormData({ ...formData, titleTemplate: e.target.value })}
+                  placeholder="예: {업체명} 회원가입 혜택 안내"
+                  data-testid="input-title-template"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lmsTitleTemplate">일반(LMS) 제목 템플릿</Label>
+                <Input
+                  id="lmsTitleTemplate"
+                  value={formData.lmsTitleTemplate || ''}
+                  onChange={(e) => setFormData({ ...formData, lmsTitleTemplate: e.target.value })}
+                  placeholder="예: {업체명} 회원가입 혜택 안내"
+                  data-testid="input-lms-title-template"
+                />
+                <p className="text-xs text-muted-foreground">RCS 미지원 기기에 표시될 LMS 폴백 제목</p>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="titleTemplate">제목 템플릿</Label>
+              <Input
+                id="titleTemplate"
+                value={formData.titleTemplate || ''}
+                onChange={(e) => setFormData({ ...formData, titleTemplate: e.target.value })}
+                placeholder="예: {업체명} 회원가입 혜택 안내"
+                data-testid="input-title-template"
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="contentTemplate">본문 템플릿 *</Label>
