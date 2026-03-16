@@ -419,6 +419,41 @@ function generateTid(): string {
   return Date.now().toString();
 }
 
+const AD_DISCLAIMER = '※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에\n동의하신 고객님께 보내 드렸습니다.';
+
+const DISCLAIMER_PATTERNS = [
+  /\n*\s*※\s*이\s*메시지는\s*SK텔레콤에서[\s\S]*?보내\s*드렸습니다\.?\s*(\n*\s*감사합니다\.?\s*)?/g,
+  /\n*\s*※\s*본\s*메시지는[\s\S]*?보내\s*드렸습니다\.?\s*(\n*\s*감사합니다\.?\s*)?/g,
+];
+
+function stripDisclaimer(content: string): string {
+  let result = content;
+  for (const pattern of DISCLAIMER_PATTERNS) {
+    result = result.replace(pattern, '');
+  }
+  return result.replace(/[\s\n]+$/, '');
+}
+
+function stripAdTitlePrefix(content: string): string {
+  return content.replace(/^\(광고\)[^\n]*\n{1,2}/, '');
+}
+
+function ensureAdPrefix(title: string): string {
+  if (title.startsWith('(광고)')) return title;
+  return `(광고)${title}`;
+}
+
+function buildLmsMsg(title: string, body: string): string {
+  const cleanBody = stripDisclaimer(stripAdTitlePrefix(body)).replace(/[\s\n]+$/, '');
+  const adTitle = ensureAdPrefix(title);
+  return `${adTitle}\n\n${cleanBody}\n\n${AD_DISCLAIMER}`;
+}
+
+function appendDisclaimer(content: string): string {
+  const cleanContent = stripDisclaimer(content).replace(/[\s\n]+$/, '');
+  return `${cleanContent}\n\n${AD_DISCLAIMER}`;
+}
+
 interface GeofenceTarget {
   gender: number;
   minAge: number;
@@ -1301,9 +1336,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const useLmsFallback = isRcs && hasLmsContent;
       
       const fallbackContent = isRcs ? ((message as any)?.lmsContent || message?.content || '') : (message?.content || '');
-      const mmsTitle = isRcs
+      const rawMmsTitle = isRcs
         ? (message?.lmsTitle?.trim() || message?.title?.trim() || fallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
         : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
+      const mmsTitle = ensureAdPrefix(rawMmsTitle);
       
       // MMS에 사용할 URL 리스트 결정:
       // - 비-RCS 캠페인: 기존 필드 사용
@@ -1323,9 +1359,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[Submit] MMS fallback details: lmsContent=${hasLmsContent}, fallbackContent length=${fallbackContent.length}, mmsImageFileId=${mmsImageFileId}, mmsUrlLinks=${mmsUrlList.length} urls`);
       }
       
+      const mmsMsg = buildLmsMsg(rawMmsTitle, fallbackContent);
+      console.log(`[Submit] MMS title: ${mmsTitle}`);
+      console.log(`[Submit] MMS msg (first 200 chars): ${mmsMsg.substring(0, 200)}`);
+      console.log(`[Submit] MMS msg (last 200 chars): ${mmsMsg.substring(mmsMsg.length - 200)}`);
+      
       const mmsObject: Record<string, unknown> = {
         title: mmsTitle,
-        msg: fallbackContent,
+        msg: mmsMsg,
         ...(needsFile && mmsImageFileId && { fileInfo: { list: [{ origId: mmsImageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
         ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(mmsUrlReward !== undefined && { reward: mmsUrlReward }) } }),
@@ -1346,10 +1387,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // RCS 슬라이드: RCS 전용 필드 사용 (content, imageUrl, urlLinks, buttons)
       const rcsTitle = message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고';
+      const rcsMsg = appendDisclaimer(message?.content || '');
       const rcsSlide: Record<string, unknown> | null = shouldIncludeRcsArray ? {
         slideNum: 1,
         title: rcsTitle,
-        msg: message?.content || '',
+        msg: rcsMsg,
         ...(needsFile && imageFileId && { imgOrigId: imageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
         ...(rcsUrlList.length > 0 && { urlLink: { list: rcsUrlList.slice(0, 3), ...(rcsUrlReward !== undefined && { reward: rcsUrlReward }) } }),
