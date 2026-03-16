@@ -50,7 +50,8 @@ The project utilizes a modern web stack with React 18, TypeScript, and Vite for 
 - Drizzle ORM for type-safe database interactions.
 - BizChat API integration for core advertising functionality, including campaign creation, approval, and real-time statistics, with strict adherence to BizChat API v0.29.0 specifications.
 - **BizChat MMS/RCS API 규격**:
-  - **E000002 오류 방지 (mms.title)**: `mms.title`은 필수 필드입니다. 빈 문자열(`""`)이나 필드 누락 모두 E000002 "Invalid request" 오류를 발생시킵니다. 반드시 실제 값을 넣어야 합니다. title이 없으면 메시지 본문 첫 줄(최대 30자)을 자동으로 사용하고, 그마저 없으면 '광고'를 기본값으로 사용합니다.
+  - **E000002 오류 방지 (mms.title)**: `mms.title`은 필수 필드입니다. 빈 문자열(`""`)이나 필드 누락 모두 E000002 "Invalid request" 오류를 발생시킵니다. 반드시 실제 값을 넣어야 합니다. title이 없으면 메시지 본문 첫 줄(최대 30자)을 자동으로 사용하고, 그마저 없으면 '광고'를 기본값으로 사용합니다. `(광고)` 접두사가 없으면 자동으로 추가됩니다.
+  - **광고 수신동의 멘트 자동화**: submit.ts에서 LMS/RCS 메시지 전송 시 광고 수신동의 멘트를 자동으로 고정 포맷(줄바꿈 포함)으로 append합니다. 기존 콘텐츠에 유사 문구가 있으면 자동 제거 후 표준 포맷을 추가합니다. LMS `mms.msg`는 `(광고)제목\n\n본문\n\n수신동의멘트` 형태로 자동 구성됩니다. RCS `rcs[].msg`에도 동일한 수신동의 멘트가 append됩니다.
   - **RCS/LMS 제목 분리**: RCS 캠페인에서 `title`은 RCS 제목, `lmsTitle`(DB: `lms_title`)은 LMS 폴백 제목으로 분리 저장됩니다. 캠페인 제출 시 `mms.title`에는 `lmsTitle`을, `rcs[].title`에는 `title`을 사용합니다. 비-RCS 메시지(LMS/MMS)에서는 `title` 하나만 사용합니다. 추천 템플릿도 `titleTemplate`(RCS용)과 `lmsTitleTemplate`(LMS용, DB: `lms_title_template`)으로 분리됩니다.
   - **MMS/RCS 메시지 분리**: RCS 캠페인(billingType=1,3)에서 `mms` 객체는 **폴백 메시지**(RCS 미지원 단말용)이고, `rcs[]` 배열은 **RCS 전용 메시지**입니다. 각각 별도의 내용을 담아야 합니다. DB의 `lmsContent`/`lmsImageUrl`/`lmsImageFileId`/`lmsUrlLinks` 필드가 MMS 폴백용이고, `content`/`imageUrl`/`imageFileId`/`urlLinks`/`buttons`가 RCS용입니다. `lmsContent`가 없으면 `content`로 폴백합니다.
   - **E100037 오류 방지 (URL분석 일괄 폴백)**: `lmsContent`가 비어있어서 `content`로 폴백할 때, `lmsUrlLinks`와 `lmsImageUrl`도 함께 RCS 필드(`urlLinks`, `imageUrl`)로 폴백해야 합니다. 메시지 본문에 `[URL분석N]` 플레이스홀더가 있으면 대응하는 `urlLink`가 반드시 필요합니다. `hasLmsContent` 플래그로 SEPARATE(lms 필드) vs UNIFIED(RCS 필드 일괄 사용) 모드를 결정합니다.
