@@ -1825,13 +1825,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // 2. 유효하지 않으면 billingType에 따라 자동 결정:
         //    - billingType=1 (RCS MMS, 이미지 있음): rcsType=4 (이미지강조B) - 큰 이미지 지원, opts 불필요
         //    - billingType=3 (RCS LMS, 텍스트만): rcsType=1 (LMS)
+        // ★ E100017 오류 방지: rcsType과 billingType 호환성 검증
+        //    - billingType=3 (텍스트 전용): rcsType은 반드시 1(LMS)이어야 함
+        //    - billingType=1 (이미지 포함): rcsType은 0,2,3,4,5 중 하나 (이미지 지원 타입)
         let validRcsType: number;
         if (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5) {
-          validRcsType = campaign.rcsType;
-          console.log(`[Submit] Using campaign rcsType: ${validRcsType}`);
+          if (billingType === 3 && campaign.rcsType !== 1) {
+            validRcsType = 1;
+            console.log(`[Submit] rcsType ${campaign.rcsType} incompatible with billingType=3 (RCS LMS), overriding to 1 (LMS)`);
+          } else if (billingType === 1 && campaign.rcsType === 1) {
+            validRcsType = 4;
+            console.log(`[Submit] rcsType 1 (LMS) incompatible with billingType=1 (RCS MMS), overriding to 4 (이미지강조B)`);
+          } else {
+            validRcsType = campaign.rcsType;
+            console.log(`[Submit] Using campaign rcsType: ${validRcsType}`);
+          }
         } else {
-          // billingType에 따라 자동 결정
-          // RCS MMS(이미지 있음) → 이미지강조B(4) 사용 (상품소개세로 opts 오류 방지)
           validRcsType = billingType === 1 ? 4 : 1;
           console.log(`[Submit] Auto-determined rcsType from billingType=${billingType}: ${validRcsType} (4=이미지강조B, 1=LMS)`);
         }
@@ -2043,9 +2052,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[Submit Update] MMS fallback details: lmsContent=${updateHasLmsContent}, fallbackContent length=${updateFallbackContent.length}, mmsImageFileId=${updateMmsImageFileId}, mmsUrlLinks=${updateMmsUrlList.length} urls`);
       }
       
+      const updateRawMmsTitle = updateMmsTitle;
+      const updateMmsTitlePrefixed = ensureAdPrefix(updateRawMmsTitle);
+      const updateMmsMsg = buildLmsMsg(updateRawMmsTitle, updateFallbackContent);
+      
       const updateMmsObject: Record<string, unknown> = {
-        title: updateMmsTitle,
-        msg: updateFallbackContent,
+        title: updateMmsTitlePrefixed,
+        msg: updateMmsMsg,
         ...(needsFile && updateMmsImageFileId && { fileInfo: { list: [{ origId: updateMmsImageFileId }] } }),
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
         ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateMmsUrlReward !== undefined && { reward: updateMmsUrlReward }) } }),
@@ -2062,10 +2075,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`[Submit Update] shouldIncludeRcsArray: ${shouldIncludeUpdateRcsArray}, effectiveRcsType: ${updateEffectiveRcsType}`);
       
       const updateRcsTitle = message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고';
+      const updateRcsMsg = appendDisclaimer(message?.content || '');
       const updateRcsSlide: Record<string, unknown> | null = shouldIncludeUpdateRcsArray ? {
         slideNum: 1,
         title: updateRcsTitle,
-        msg: message?.content || '',
+        msg: updateRcsMsg,
         ...(needsFile && updateImageFileId && { imgOrigId: updateImageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
         ...(updateRcsUrlList.length > 0 && { urlLink: { list: updateRcsUrlList.slice(0, 3), ...(updateRcsUrlReward !== undefined && { reward: updateRcsUrlReward }) } }),
@@ -2364,12 +2378,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // rcsType 결정 로직:
         // 1. campaign.rcsType이 유효하면 사용 (0~5 범위)
         // 2. 유효하지 않으면 billingType에 따라 자동 결정
+        // ★ E100017 오류 방지: rcsType과 billingType 호환성 검증
         let validRcsType: number;
         if (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5) {
-          validRcsType = campaign.rcsType;
-          console.log(`[Submit Update] Using campaign rcsType: ${validRcsType}`);
+          if (billingType === 3 && campaign.rcsType !== 1) {
+            validRcsType = 1;
+            console.log(`[Submit Update] rcsType ${campaign.rcsType} incompatible with billingType=3 (RCS LMS), overriding to 1 (LMS)`);
+          } else if (billingType === 1 && campaign.rcsType === 1) {
+            validRcsType = 4;
+            console.log(`[Submit Update] rcsType 1 (LMS) incompatible with billingType=1 (RCS MMS), overriding to 4 (이미지강조B)`);
+          } else {
+            validRcsType = campaign.rcsType;
+            console.log(`[Submit Update] Using campaign rcsType: ${validRcsType}`);
+          }
         } else {
-          // RCS MMS(이미지 있음) → 이미지강조B(4), RCS LMS → LMS(1)
           validRcsType = billingType === 1 ? 4 : 1;
           console.log(`[Submit Update] Auto-determined rcsType from billingType=${billingType}: ${validRcsType} (4=이미지강조B, 1=LMS)`);
         }
