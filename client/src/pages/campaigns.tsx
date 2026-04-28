@@ -62,6 +62,8 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { BizChatErrorDialog } from "@/components/bizchat-error-dialog";
+import { parseBizChatError, type BizChatErrorInfo } from "@/lib/bizchat-errors";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Campaign } from "@shared/schema";
 
@@ -79,6 +81,8 @@ export default function Campaigns() {
   const [campaignToCancel, setCampaignToCancel] = useState<Campaign | null>(null);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [campaignToStop, setCampaignToStop] = useState<Campaign | null>(null);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [errorInfo, setErrorInfo] = useState<BizChatErrorInfo | null>(null);
   const { toast } = useToast();
 
   const { data: campaigns, isLoading } = useQuery<Campaign[]>({
@@ -128,11 +132,10 @@ export default function Campaigns() {
       setScheduleTime("");
     },
     onError: (error: Error) => {
-      toast({
-        title: "승인요청 실패",
-        description: error.message || "캠페인 승인요청에 실패했어요.",
-        variant: "destructive",
-      });
+      const { info } = parseBizChatError(error);
+      setErrorInfo(info);
+      setErrorDialogOpen(true);
+      setSendDialogOpen(false);
     },
   });
 
@@ -619,6 +622,13 @@ export default function Campaigns() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BizChatErrorDialog
+        open={errorDialogOpen}
+        onOpenChange={setErrorDialogOpen}
+        info={errorInfo}
+        contextLabel="승인요청 실패"
+      />
     </div>
   );
 }

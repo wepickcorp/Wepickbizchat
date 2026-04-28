@@ -30,6 +30,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { BizChatErrorDialog } from "@/components/bizchat-error-dialog";
+import { parseBizChatError, type BizChatErrorInfo } from "@/lib/bizchat-errors";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   AlertDialog,
@@ -109,6 +111,8 @@ export default function CampaignDetail() {
   const campaignId = params?.id || null;
   const [bizChatStats, setBizChatStats] = useState<BizChatStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [errorInfo, setErrorInfo] = useState<BizChatErrorInfo | null>(null);
 
   const { data: campaign, isLoading, error } = useQuery<CampaignDetail>({
     queryKey: ["/api/campaigns", campaignId],
@@ -128,11 +132,9 @@ export default function CampaignDetail() {
       });
     },
     onError: (error: Error) => {
-      toast({
-        title: "심사 요청 실패",
-        description: error.message,
-        variant: "destructive",
-      });
+      const { info } = parseBizChatError(error);
+      setErrorInfo(info);
+      setErrorDialogOpen(true);
     },
   });
 
@@ -525,6 +527,12 @@ export default function CampaignDetail() {
                       <p className="text-small whitespace-pre-wrap line-clamp-4" data-testid="text-message-preview">
                         {message.content}
                       </p>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-3 text-small text-muted-foreground space-y-1" data-testid="text-auto-append-notice">
+                      <p className="font-medium text-foreground">발송 시 본문 끝에 자동 추가</p>
+                      <p>· SK텔레콤 광고 수신동의 안내</p>
+                      <p>· "감사합니다."</p>
+                      <p>· LMS의 경우 "무료 수신거부 1504"</p>
                     </div>
                   </div>
                 ) : (
@@ -979,6 +987,13 @@ export default function CampaignDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <BizChatErrorDialog
+        open={errorDialogOpen}
+        onOpenChange={setErrorDialogOpen}
+        info={errorInfo}
+        contextLabel="심사 요청 실패"
+      />
     </div>
   );
 }
