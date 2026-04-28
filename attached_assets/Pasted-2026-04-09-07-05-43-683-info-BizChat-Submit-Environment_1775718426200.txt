@@ -1,0 +1,274 @@
+2026-04-09 07:05:43.683 [info] [BizChat Submit] Environment: PRODUCTION (VERCEL_ENV=production)
+2026-04-09 07:05:44.088 [info] [Submit Create] Using sndMosu: 297,944 (from campaign)
+2026-04-09 07:05:44.088 [info] [Submit] RCS campaign MMS fallback mode: SEPARATE (lms* fields)
+2026-04-09 07:05:44.088 [info] [Submit] MMS fallback details: lmsContent=true, fallbackContent length=590, mmsImageFileId=null, mmsUrlLinks=1 urls
+2026-04-09 07:05:44.088 [info] [Submit] MMS title: (광고)[SKT] 우리 아이를 위한 영어 성장 진단 세션 안내
+2026-04-09 07:05:44.088 [info] [Submit] MMS msg (first 200 chars): (광고)[SKT] 우리 아이를 위한 영어 성장 진단 세션 안내
+
+고객님, 안녕하세요.
+새 학기, 우리 아이, 영어 성적은 물론
+자유롭게 회화까지 하는 아이로 키우고 싶으신가요?
+ 
+고래영어 위브론캠퍼스의
+2026 신학기 1:1 영어 성장 진단 세션을 안내드립니다.
+ 
+▶ 무료 진단 세션 신청 (인원 제한 / 사전 신청 필수)
+지금 바로 신청하기: [URL분
+2026-04-09 07:05:44.089 [info] [Submit] MMS msg (last 200 chars): 담
+✔ 성적이 아닌 '말하는 영어'를 만드는 수업
+✔ 아이 한 명 한 명, 1:1 밀착 성장 관리
+ 
+■ 유의 사항
+ 
+- 사전 신청 후 예약 확정 순 진행
+- 정원 마감 시 신청 조기 종료
+ 
+■ 문의: 고래영어 위브론캠퍼스(031-697-0477)무료 수신거부 1504
+
+※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에
+동의하신 고객님께 보내 드렸습니다.
+2026-04-09 07:05:44.089 [info] [Submit] effectiveRcsType: 1, including slideNum: 1
+2026-04-09 07:05:44.089 [info] [Submit] shouldIncludeRcsArray: true, effectiveRcsType: 1, isRcs: true
+2026-04-09 07:05:44.089 [info] [Submit] Final payload check - has rcs array: true, effectiveRcsType: 1
+2026-04-09 07:05:44.274 [info] [Submit] Querying targeting table for campaign: 855b0f33-91aa-4925-9a1b-0f8b9e4b6a52
+2026-04-09 07:05:44.274 [info] [Submit] Found targeting data: yes
+2026-04-09 07:05:44.274 [info] [Submit] Building ATS filter from targeting table...
+2026-04-09 07:05:44.274 [info] [Submit] Built ATS filter from targeting: {
+  "$and": [
+    {
+      "data": {
+        "gt": 30,
+        "lt": 50
+      },
+      "dataType": "number",
+      "metaType": "svc",
+      "code": "cust_age_cd",
+      "desc": "연령: 30세 ~ 50세",
+      "not": false
+    },
+    {
+      "data": [
+        "2"
+      ],
+      "dataType": "code",
+      "metaType": "svc",
+      "code": "sex_cd",
+      "desc": "성별: 여자",
+      "not": false
+    },
+    {
+      "data": [
+        "11"
+      ],
+      "dataType": "code",
+      "metaType": "loc",
+      "code": "home_location",
+      "desc": "추정 집주소: 서울",
+      "not": false
+    }
+  ]
+}
+2026-04-09 07:05:44.274 [info] [Submit] Calling ATS mosu API to get SQL query...
+2026-04-09 07:05:44.274 [info] [Submit] Filter payload: {
+  "$and": [
+    {
+      "data": {
+        "gt": 30,
+        "lt": 50
+      },
+      "dataType": "number",
+      "metaType": "svc",
+      "code": "cust_age_cd",
+      "desc": "연령: 30세 ~ 50세",
+      "not": false
+    },
+    {
+      "data": [
+        "2"
+      ],
+      "dataType": "code",
+      "metaType": "svc",
+      "code": "sex_cd",
+      "desc": "성별: 여자",
+      "not": false
+    },
+    {
+      "data": [
+        "11"
+      ],
+      "dataType": "code",
+      "metaType": "loc",
+      "code": "home_location",
+      "desc": "추정 집주소: 서울",
+      "not": false
+    }
+  ]
+}
+2026-04-09 07:05:44.274 [info] [ATS Mosu] POST https://gw.bizchat1.co.kr/api/v1/ats/mosu?tid=1775718344273
+2026-04-09 07:05:44.275 [info] [ATS Mosu] Payload: {
+  "$and": [
+    {
+      "data": {
+        "gt": 30,
+        "lt": 50
+      },
+      "dataType": "number",
+      "metaType": "svc",
+      "code": "cust_age_cd",
+      "desc": "연령: 30세 ~ 50세",
+      "not": false
+    },
+    {
+      "data": [
+        "2"
+      ],
+      "dataType": "code",
+      "metaType": "svc",
+      "code": "sex_cd",
+      "desc": "성별: 여자",
+      "not": false
+    },
+    {
+      "data": [
+        "11"
+      ],
+      "dataType": "code",
+      "metaType": "loc",
+      "code": "home_location",
+      "desc": "추정 집주소: 서울",
+      "not": false
+    }
+  ]
+}
+2026-04-09 07:05:45.643 [info] [ATS Mosu] Response: 200 - {"tid":"1775718344273","code":"S000001","msg":"Success","data":{"cnt":298019,"filterStr":"<table><tr><td id='oper0' rowspan='3' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td id='oper1' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-연령: 30세 ~ 50세</td></tr></tr><tr><td id='oper2' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' st
+2026-04-09 07:05:45.643 [info] [ATS Mosu] Success - query: ( ( (cust_age_cd >= 30 and cust_age_cd <= 50) ) AND ( sex_cd in ('2') ) AND ( (home_location like '11%' or home_location like '%,11%') ) ) and indv_info_use_agree_yn = 'Y'...
+2026-04-09 07:05:45.643 [info] [Submit] sndMosuQuery (SQL from ATS): ( ( (cust_age_cd >= 30 and cust_age_cd <= 50) ) AND ( sex_cd in ('2') ) AND ( (home_location like '11%' or home_location like '%,11%') ) ) and indv_info_use_agree_yn = 'Y'...
+2026-04-09 07:05:45.643 [info] [Submit] ATS count: 298019
+2026-04-09 07:05:45.643 [info] [Submit] sndMosuDesc: <table><tr><td id='oper0' rowspan='3' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-...
+2026-04-09 07:05:45.643 [info] [Submit] atsSndStartDate (adjusted): 1775986800 2026-04-12T09:40:00.000Z
+2026-04-09 07:05:45.643 [info] [Submit] Using campaign rcsType: 1
+2026-04-09 07:05:45.643 [info] [Submit] RCS type set to: 1 (campaign.rcsType: 1, billingType: 3, slides: 1)
+2026-04-09 07:05:45.643 [info] [Submit] Creating campaign in BizChat...
+2026-04-09 07:05:45.643 [info] [Submit] Full createPayload: {
+  "tgtCompanyName": "위픽",
+  "name": "위례학원 테스트 0409",
+  "sndNum": "001005",
+  "rcvType": 0,
+  "sndGoalCnt": 10000,
+  "billingType": 3,
+  "isTmp": 0,
+  "settleCnt": 1000,
+  "sndMosu": 297944,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-nk2i3n2hx-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "(광고)[SKT] 우리 아이를 위한 영어 성장 진단 세션 안내",
+    "msg": "(광고)[SKT] 우리 아이를 위한 영어 성장 진단 세션 안내\n\n고객님, 안녕하세요.\n새 학기, 우리 아이, 영어 성적은 물론\n자유롭게 회화까지 하는 아이로 키우고 싶으신가요?\n \n고래영어 위브론캠퍼스의\n2026 신학기 1:1 영어 성장 진단 세션을 안내드립니다.\n \n▶ 무료 진단 세션 신청 (인원 제한 / 사전 신청 필수)\n지금 바로 신청하기: [URL분석1]\n \n■ 2026 신학기 1:1 영어 성장 진단 세션\n \n- 대상: 초·중등 자녀 학부모님\n- 혜택\n① 아이 맞춤 1:1 영어 수준 진단\n② 성장 방향 및 학습 상담 제공\n③ 수업 외 별도 시간 운영으로 깊이 있는 상담 가능\n \n■ 고래영어 위브론캠퍼스 특장점\n \n✔ 현장 15년 경력, JOY 원장 직접 수업·상담\n✔ 성적이 아닌 '말하는 영어'를 만드는 수업\n✔ 아이 한 명 한 명, 1:1 밀착 성장 관리\n \n■ 유의 사항\n \n- 사전 신청 후 예약 확정 순 진행\n- 정원 마감 시 신청 조기 종료\n \n■ 문의: 고래영어 위브론캠퍼스(031-697-0477)무료 수신거부 1504\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에\n동의하신 고객님께 보내 드렸습니다.",
+    "urlLink": {
+      "list": [
+        "https://wistful-transport-f86.notion.site/_-2dd461d650e2803ba3b2e0ffdec4e1b7?source=copy_link"
+      ]
+    }
+  },
+  "rcs": [
+    {
+      "slideNum": 1,
+      "title": "[SKT] 우리 아이를 위한 영어 성장 진단 세션 안내",
+      "msg": "고객님, 안녕하세요.\n새 학기, 우리 아이, 영어 성적은 물론\n자유롭게 회화까지 하는 아이로 키우고 싶으신가요?\n \n고래영어 위브론캠퍼스의\n2026 신학기 1:1 영어 성장 진단 세션을 안내드립니다.\n \n▶ 무료 진단 세션 신청 (인원 제한 / 사전 신청 필수)\n지금 바로 신청하기: [URL분석1]\n \n■ 2026 신학기 1:1 영어 성장 진단 세션\n \n- 대상: 초·중등 자녀 학부모님\n- 혜택\n① 아이 맞춤 1:1 영어 수준 진단\n② 성장 방향 및 학습 상담 제공\n③ 수업 외 별도 시간 운영으로 깊이 있는 상담 가능\n \n■ 고래영어 위브론캠퍼스 특장점\n \n✔ 현장 15년 경력, JOY 원장 직접 수업·상담\n✔ 성적이 아닌 '말하는 영어'를 만드는 수업\n✔ 아이 한 명 한 명, 1:1 밀착 성장 관리\n \n■ 유의 사항\n \n- 사전 신청 후 예약 확정 순 진행\n- 정원 마감 시 신청 조기 종료\n \n■ 문의: 고래영어 위브론캠퍼스(031-697-0477)\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에\n동의하신 고객님께 보내 드렸습니다.",
+      "urlLink": {
+        "list": [
+          "https://wistful-transport-f86.notion.site/_-2dd461d650e2803ba3b2e0ffdec4e1b7?source=copy_link"
+        ]
+      },
+      "buttons": {
+        "list": [
+          {
+            "name": "▶ 무료 진단 세션 신청",
+            "type": "0",
+            "val1": "https://wistful-transport-f86.notion.site/_-2dd461d650e2803ba3b2e0ffdec4e1b7?source=copy_link",
+            "val2": ""
+          },
+          {
+            "name": "전화 문의하기",
+            "type": "1",
+            "val1": "031-697-0477",
+            "val2": ""
+          }
+        ]
+      },
+      "opts": {}
+    }
+  ],
+  "sndMosuQuery": "( ( (cust_age_cd >= 30 and cust_age_cd <= 50) ) AND ( sex_cd in ('2') ) AND ( (home_location like '11%' or home_location like '%,11%') ) ) and indv_info_use_agree_yn = 'Y'",
+  "sndMosuDesc": "<table><tr><td id='oper0' rowspan='3' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td id='oper1' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-연령: 30세 ~ 50세</td></tr></tr><tr><td id='oper2' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-성별: 여자</td></tr></tr><tr><td id='oper3' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>위치/이동특성-추정 집주소: 서울</td></tr></tr></table>",
+  "atsSndStartDate": 1775986800,
+  "rcsType": 1
+}
+2026-04-09 07:05:45.643 [info] [BizChat Submit] Environment: PRODUCTION
+2026-04-09 07:05:45.644 [info] [BizChat Submit] Looking for env var: BIZCHAT_PROD_API_KEY
+2026-04-09 07:05:45.644 [info] [BizChat Submit] API key exists: true, length: 64
+2026-04-09 07:05:45.644 [info] [BizChat Submit] VERCEL_ENV: production, NODE_ENV: production
+2026-04-09 07:05:45.644 [info] [BizChat] POST https://gw.bizchat1.co.kr/api/v1/cmpn/create?tid=1775718345643
+2026-04-09 07:05:45.644 [info] [BizChat] Request body: {
+  "tgtCompanyName": "위픽",
+  "name": "위례학원 테스트 0409",
+  "sndNum": "001005",
+  "rcvType": 0,
+  "sndGoalCnt": 10000,
+  "billingType": 3,
+  "isTmp": 0,
+  "settleCnt": 1000,
+  "sndMosu": 297944,
+  "sndMosuFlag": 0,
+  "adverDeny": "1504",
+  "cb": {
+    "state": "https://wepickbizchat-nk2i3n2hx-wepick-s-bizchat.vercel.app/api/bizchat/callback/state"
+  },
+  "mms": {
+    "title": "(광고)[SKT] 우리 아이를 위한 영어 성장 진단 세션 안내",
+    "msg": "(광고)[SKT] 우리 아이를 위한 영어 성장 진단 세션 안내\n\n고객님, 안녕하세요.\n새 학기, 우리 아이, 영어 성적은 물론\n자유롭게 회화까지 하는 아이로 키우고 싶으신가요?\n \n고래영어 위브론캠퍼스의\n2026 신학기 1:1 영어 성장 진단 세션을 안내드립니다.\n \n▶ 무료 진단 세션 신청 (인원 제한 / 사전 신청 필수)\n지금 바로 신청하기: [URL분석1]\n \n■ 2026 신학기 1:1 영어 성장 진단 세션\n \n- 대상: 초·중등 자녀 학부모님\n- 혜택\n① 아이 맞춤 1:1 영어 수준 진단\n② 성장 방향 및 학습 상담 제공\n③ 수업 외 별도 시간 운영으로 깊이 있는 상담 가능\n \n■ 고래영어 위브론캠퍼스 특장점\n \n✔ 현장 15년 경력, JOY 원장 직접 수업·상담\n✔ 성적이 아닌 '말하는 영어'를 만드는 수업\n✔ 아이 한 명 한 명, 1:1 밀착 성장 관리\n \n■ 유의 사항\n \n- 사전 신청 후 예약 확정 순 진행\n- 정원 마감 시 신청 조기 종료\n \n■ 문의: 고래영어 위브론캠퍼스(031-697-0477)무료 수신거부 1504\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에\n동의하신 고객님께 보내 드렸습니다.",
+    "urlLink": {
+      "list": [
+        "https://wistful-transport-f86.notion.site/_-2dd461d650e2803ba3b2e0ffdec4e1b7?source=copy_link"
+      ]
+    }
+  },
+  "rcs": [
+    {
+      "slideNum": 1,
+      "title": "[SKT] 우리 아이를 위한 영어 성장 진단 세션 안내",
+      "msg": "고객님, 안녕하세요.\n새 학기, 우리 아이, 영어 성적은 물론\n자유롭게 회화까지 하는 아이로 키우고 싶으신가요?\n \n고래영어 위브론캠퍼스의\n2026 신학기 1:1 영어 성장 진단 세션을 안내드립니다.\n \n▶ 무료 진단 세션 신청 (인원 제한 / 사전 신청 필수)\n지금 바로 신청하기: [URL분석1]\n \n■ 2026 신학기 1:1 영어 성장 진단 세션\n \n- 대상: 초·중등 자녀 학부모님\n- 혜택\n① 아이 맞춤 1:1 영어 수준 진단\n② 성장 방향 및 학습 상담 제공\n③ 수업 외 별도 시간 운영으로 깊이 있는 상담 가능\n \n■ 고래영어 위브론캠퍼스 특장점\n \n✔ 현장 15년 경력, JOY 원장 직접 수업·상담\n✔ 성적이 아닌 '말하는 영어'를 만드는 수업\n✔ 아이 한 명 한 명, 1:1 밀착 성장 관리\n \n■ 유의 사항\n \n- 사전 신청 후 예약 확정 순 진행\n- 정원 마감 시 신청 조기 종료\n \n■ 문의: 고래영어 위브론캠퍼스(031-697-0477)\n\n※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에\n동의하신 고객님께 보내 드렸습니다.",
+      "urlLink": {
+        "list": [
+          "https://wistful-transport-f86.notion.site/_-2dd461d650e2803ba3b2e0ffdec4e1b7?source=copy_link"
+        ]
+      },
+      "buttons": {
+        "list": [
+          {
+            "name": "▶ 무료 진단 세션 신청",
+            "type": "0",
+            "val1": "https://wistful-transport-f86.notion.site/_-2dd461d650e2803ba3b2e0ffdec4e1b7?source=copy_link",
+            "val2": ""
+          },
+          {
+            "name": "전화 문의하기",
+            "type": "1",
+            "val1": "031-697-0477",
+            "val2": ""
+          }
+        ]
+      },
+      "opts": {}
+    }
+  ],
+  "sndMosuQuery": "( ( (cust_age_cd >= 30 and cust_age_cd <= 50) ) AND ( sex_cd in ('2') ) AND ( (home_location like '11%' or home_location like '%,11%') ) ) and indv_info_use_agree_yn = 'Y'",
+  "sndMosuDesc": "<table><tr><td id='oper0' rowspan='3' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td id='oper1' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-연령: 30세 ~ 50세</td></tr></tr><tr><td id='oper2' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>회선특성-성별: 여자</td></tr></tr><tr><td id='oper3' rowspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#eeeeee;padding:5px;'><span style='padding:2px;vertical-align:center;color:#ffffff;background-color:linear-gradient(#ffffff, #efefef);'>AND</span></td><td colspan='1' style='border:1px solid #cccccc;border-collapse:collapse;background:#ffffff;padding:5px;'>위치/이동특성-추정 집주소: 서울</td></tr></tr></table>",
+  "atsSndStartDate": 1775986800,
+  "rcsType": 1
+}
+2026-04-09 07:05:45.694 [info] [BizChat] Response: 400 - {"tid":"1775718345643","code":"E000002","msg":"Invalid request"}
+2026-04-09 07:05:45.694 [error] [Submit] BizChat API error: { tid: '1775718345643', code: 'E000002', msg: 'Invalid request' }
