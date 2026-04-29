@@ -285,6 +285,13 @@ export default function TemplatesNew() {
   const isEditMode = !!editParams?.id && editParams?.id !== "new";
   const isViewMode = !!viewParams?.id && viewParams?.id !== "new" && !editParams?.id;
 
+  // 신규 작성 세션 여부.
+  // - 새 템플릿 생성 흐름에서만 true (메시지 유형 토글 시 디폴트 멘트 동기화 허용)
+  // - 기존 템플릿 보기/수정 흐름은 시작부터 false
+  // - 추천 템플릿을 불러오는 순간 false 로 전환되어 이후 토글에서 디폴트가 적용되지 않음
+  // useRef 로 관리해 onValueChange 클로저가 항상 최신 값을 본다.
+  const isFreshFormRef = useRef<boolean>(!templateId);
+
   const { data: existingTemplate, isLoading: templateLoading } = useQuery<Template>({
     queryKey: ["/api/templates", templateId],
     enabled: !!templateId && templateId !== "new",
@@ -300,6 +307,9 @@ export default function TemplatesNew() {
 
   // 추천 템플릿 불러오기 함수
   const loadRecommendedTemplate = (template: TemplateWithSystem) => {
+    // 추천 템플릿을 불러온 시점부터는 더 이상 "신규 작성 세션"이 아님.
+    // 이후 메시지 유형 토글 시에도 디폴트 멘트가 본문을 덮어쓰지 않도록 보호.
+    isFreshFormRef.current = false;
     const templateUrlLinks = template.urlLinks as UrlLinkConfig | null;
     const templateLmsUrlLinks = (template as any).lmsUrlLinks as UrlLinkConfig | null;
     const templateButtons = template.buttons as RcsButtonsConfig | null;
@@ -997,19 +1007,23 @@ export default function TemplatesNew() {
                             form.setValue("rcsType", 0);
                           }
                           // 메시지 유형 토글 시 본문 디폴트 멘트 동기화.
-                          // 사용자가 한 번이라도 직접 수정한 본문은 그대로 유지.
-                          const currentContent = form.getValues("content");
-                          const currentLmsContent = form.getValues("lmsContent");
-                          if (value === "RCS") {
-                            if (isContentReplaceable(currentContent)) {
-                              form.setValue("content", RCS_DEFAULT_CONTENT);
-                            }
-                            if (isContentReplaceable(currentLmsContent)) {
-                              form.setValue("lmsContent", LMS_DEFAULT_CONTENT);
-                            }
-                          } else {
-                            if (isContentReplaceable(currentContent)) {
-                              form.setValue("content", LMS_DEFAULT_CONTENT);
+                          // - 신규 작성 세션(isFreshFormRef.current === true)에서만 동작
+                          // - 기존 템플릿 수정/추천 템플릿 불러오기 흐름에서는 본문이 비어 있어도 절대 덮어쓰지 않음
+                          // - 사용자가 한 번이라도 직접 수정한 본문(디폴트 외 텍스트)도 보존
+                          if (isFreshFormRef.current) {
+                            const currentContent = form.getValues("content");
+                            const currentLmsContent = form.getValues("lmsContent");
+                            if (value === "RCS") {
+                              if (isContentReplaceable(currentContent)) {
+                                form.setValue("content", RCS_DEFAULT_CONTENT);
+                              }
+                              if (isContentReplaceable(currentLmsContent)) {
+                                form.setValue("lmsContent", LMS_DEFAULT_CONTENT);
+                              }
+                            } else {
+                              if (isContentReplaceable(currentContent)) {
+                                form.setValue("content", LMS_DEFAULT_CONTENT);
+                              }
                             }
                           }
                           removeImage();
