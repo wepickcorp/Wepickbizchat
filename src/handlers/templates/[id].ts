@@ -14,6 +14,7 @@ const templates = pgTable('templates', {
   messageType: text('message_type').notNull(),
   rcsType: integer('rcs_type'),
   title: text('title'),
+  lmsTitle: text('lms_title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
   imageFileId: text('image_file_id'),
@@ -82,6 +83,7 @@ const updateTemplateSchema = z.object({
   messageType: z.enum(['LMS', 'MMS', 'RCS']).optional(),
   rcsType: z.number().optional(),
   title: z.string().max(60).optional(),
+  lmsTitle: z.string().max(60).optional().nullable(),
   content: z.string().min(1).max(2000).optional(),
   imageUrl: z.string().optional(),
   imageFileId: z.string().optional(),
@@ -147,6 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const messageType = data.messageType || template.messageType;
       const updateData: Record<string, unknown> = { ...data };
       if (messageType !== 'RCS') {
+        updateData.lmsTitle = null;
         updateData.lmsContent = null;
         updateData.lmsImageUrl = null;
         updateData.lmsImageFileId = null;

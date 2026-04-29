@@ -54,6 +54,7 @@ const messages = pgTable('messages', {
   id: text('id').primaryKey(),
   campaignId: text('campaign_id').notNull(),
   title: text('title'),
+  lmsTitle: text('lms_title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
   imageFileId: text('image_file_id'),
@@ -249,6 +250,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (messageUpdate) {
             const messageUpdateData: Record<string, unknown> = {};
             if (messageUpdate.title !== undefined) messageUpdateData.title = messageUpdate.title;
+            if (messageUpdate.lmsTitle !== undefined) messageUpdateData.lmsTitle = messageUpdate.lmsTitle;
             if (messageUpdate.content !== undefined) messageUpdateData.content = messageUpdate.content;
             if (messageUpdate.imageUrl !== undefined) messageUpdateData.imageUrl = messageUpdate.imageUrl;
             if (messageUpdate.imageFileId !== undefined) messageUpdateData.imageFileId = messageUpdate.imageFileId;
@@ -369,8 +371,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ? { list: [{ origId: currentMessage.imageUrl }] }
             : existingFileInfo;
           
+          // mms.title은 LMS 폴백 제목. RCS 캠페인(billingType=1,3)은 lmsTitle을 우선 사용
+          const isRcsCampaign = billingType === 1 || billingType === 3;
+          const rawMmsTitle = isRcsCampaign
+            ? (currentMessage?.lmsTitle?.trim() || currentMessage?.title?.trim() || updatedCampaign.name || campaign.name || '')
+            : (currentMessage?.title?.trim() || updatedCampaign.name || campaign.name || '');
+          // BizChat 규격: mms.title 최대 30자
+          const mmsTitle = rawMmsTitle.length > 30 ? rawMmsTitle.substring(0, 30) : rawMmsTitle;
+          
           const mmsPayload: Record<string, unknown> = {
-            title: currentMessage?.title || updatedCampaign.name || campaign.name || '',
+            title: mmsTitle,
             msg: currentMessage?.content || '',
             // 조건부 필드 포함 - 빈 객체/배열 생략
             ...(newFileInfo && Object.keys(newFileInfo as object).length > 0 ? { fileInfo: newFileInfo } : {}),

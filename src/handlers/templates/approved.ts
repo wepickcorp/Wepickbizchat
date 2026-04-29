@@ -13,6 +13,7 @@ const templates = pgTable('templates', {
   name: text('name').notNull(),
   messageType: text('message_type').notNull(),
   title: text('title'),
+  lmsTitle: text('lms_title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
   status: text('status').default('draft'),
