@@ -162,6 +162,32 @@ function navigate(href: string) {
 }
 
 
+// 메시지 본문 디폴트 멘트 (사용자가 화면에서 보는 본문 = 실제 발송 본문 일치)
+// 발송 단계에서는 자동 합성하지 않으며, 폼 초기값으로만 사용됨.
+const LMS_DEFAULT_CONTENT = `(광고)[SKT]
+
+
+※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.
+
+감사합니다.
+
+무료 수신거부 1504`;
+
+const RCS_DEFAULT_CONTENT = `[SKT]
+
+
+※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에 동의하신 고객님께 보내 드렸습니다.
+
+감사합니다.`;
+
+// 새 템플릿 작성 시 사용자가 본문을 비웠거나 디폴트 그대로일 때만 메시지 유형에 맞게 교체.
+function isContentReplaceable(value: string | undefined | null): boolean {
+  if (!value) return true;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return true;
+  return trimmed === LMS_DEFAULT_CONTENT.trim() || trimmed === RCS_DEFAULT_CONTENT.trim();
+}
+
 const RCS_TYPES = [
   { value: 0, label: "스탠다드", maxChars: 1100, imageSpec: "400x240 또는 500x300, 최대 0.3MB", aspectRatio: "5/3", maxButtonTextLen: 17, maxUrlCount: 3, targetWidth: 500, targetHeight: 300 },
   { value: 1, label: "LMS", maxChars: 1100, imageSpec: "이미지 없음", aspectRatio: null, maxButtonTextLen: 17, maxUrlCount: 3, targetWidth: null, targetHeight: null },
@@ -338,8 +364,10 @@ export default function TemplatesNew() {
       rcsType: 0,
       title: "",
       lmsTitle: "",
-      content: "",
-      lmsContent: "",
+      // 디폴트 메시지 유형(LMS)에 맞춰 본문에 안내 멘트가 미리 입력된 상태로 보여 줌.
+      // 기존 템플릿 수정/추천 템플릿 불러오기 시에는 이 디폴트가 사용되지 않음.
+      content: LMS_DEFAULT_CONTENT,
+      lmsContent: LMS_DEFAULT_CONTENT,
       imageUrl: "",
       imageFileId: "",
       lmsImageUrl: "",
@@ -967,6 +995,22 @@ export default function TemplatesNew() {
                             form.setValue("rcsType", undefined);
                           } else {
                             form.setValue("rcsType", 0);
+                          }
+                          // 메시지 유형 토글 시 본문 디폴트 멘트 동기화.
+                          // 사용자가 한 번이라도 직접 수정한 본문은 그대로 유지.
+                          const currentContent = form.getValues("content");
+                          const currentLmsContent = form.getValues("lmsContent");
+                          if (value === "RCS") {
+                            if (isContentReplaceable(currentContent)) {
+                              form.setValue("content", RCS_DEFAULT_CONTENT);
+                            }
+                            if (isContentReplaceable(currentLmsContent)) {
+                              form.setValue("lmsContent", LMS_DEFAULT_CONTENT);
+                            }
+                          } else {
+                            if (isContentReplaceable(currentContent)) {
+                              form.setValue("content", LMS_DEFAULT_CONTENT);
+                            }
                           }
                           removeImage();
                         }} 

@@ -419,42 +419,6 @@ function generateTid(): string {
   return Date.now().toString();
 }
 
-const AD_DISCLAIMER = '※ 이 메시지는 SK텔레콤에서 혜택/광고 수신에\n동의하신 고객님께 보내 드렸습니다.';
-const RCS_CLOSING = '감사합니다.';
-const LMS_CLOSING = '감사합니다.\n\n무료 수신거부 1504';
-
-// SK텔레콤 안내 멘트 + 뒤따르는 마무리(감사합니다 / 무료 수신거부 1504) 패턴을 함께 제거
-const DISCLAIMER_PATTERNS = [
-  /\n*\s*※\s*이\s*메시지는\s*SK텔레콤에서[\s\S]*?보내\s*드렸습니다\.?\s*(?:\n*\s*감사합니다\.?\s*)?(?:\n*\s*(?:무료\s*수신\s*거부|무료\s*수신거부)\s*1504\s*)?/g,
-  /\n*\s*※\s*본\s*메시지는[\s\S]*?보내\s*드렸습니다\.?\s*(?:\n*\s*감사합니다\.?\s*)?(?:\n*\s*(?:무료\s*수신\s*거부|무료\s*수신거부)\s*1504\s*)?/g,
-];
-
-// 본문 끝에만 단독으로 붙어 있는 마무리 인사 패턴 (안내 멘트와 별개로 떨어진 경우)
-const TRAILING_CLOSING_PATTERNS = [
-  /(?:\n+|^)\s*(?:무료\s*수신\s*거부|무료\s*수신거부)\s*1504\s*$/g,
-  /(?:\n+|^)\s*감사합니다\.?\s*$/g,
-];
-
-function stripDisclaimer(content: string): string {
-  let result = content;
-  for (const pattern of DISCLAIMER_PATTERNS) {
-    result = result.replace(pattern, '');
-  }
-  // 본문 끝에 단독으로 남은 "감사합니다" / "무료 수신거부 1504"도 정리 (반복 적용)
-  let prev: string;
-  do {
-    prev = result;
-    for (const pattern of TRAILING_CLOSING_PATTERNS) {
-      result = result.replace(pattern, '');
-    }
-  } while (prev !== result);
-  return result.replace(/[\s\n]+$/, '');
-}
-
-function stripAdTitlePrefix(content: string): string {
-  return content.replace(/^\(광고\)[^\n]*\n{1,2}/, '');
-}
-
 function ensureAdPrefix(title: string): string {
   if (title.startsWith('(광고)')) return title;
   return `(광고)${title}`;
@@ -465,19 +429,6 @@ function truncateTitle(title: string, maxLen = 30): string {
   if (!title) return title;
   if (title.length <= maxLen) return title;
   return title.substring(0, maxLen);
-}
-
-function buildLmsMsg(title: string, body: string): string {
-  const cleanBody = stripDisclaimer(stripAdTitlePrefix(body)).replace(/[\s\n]+$/, '');
-  const adTitle = ensureAdPrefix(title);
-  // LMS 본문: (광고)제목 + 본문 + SK텔레콤 안내 + 감사 인사 + 무료 수신거부 1504
-  return `${adTitle}\n\n${cleanBody}\n\n${AD_DISCLAIMER}\n\n${LMS_CLOSING}`;
-}
-
-function appendDisclaimer(content: string): string {
-  // RCS 본문: 본문 + SK텔레콤 안내 + 감사합니다.
-  const cleanContent = stripDisclaimer(content).replace(/[\s\n]+$/, '');
-  return `${cleanContent}\n\n${AD_DISCLAIMER}\n\n${RCS_CLOSING}`;
 }
 
 interface GeofenceTarget {
@@ -1365,9 +1316,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rawMmsTitle = isRcs
         ? (message?.lmsTitle?.trim() || message?.title?.trim() || fallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
         : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
-      // BizChat API 규격: mms.title은 30자 제한 + (광고) 접두사 없이 원본 제목만 사용 (E000002 방지)
-      // (광고) 접두사는 mms.msg 본문 앞쪽에서 buildLmsMsg가 자동으로 처리함
-      const mmsTitle = truncateTitle(rawMmsTitle);
+      // BizChat API 규격: mms.title은 30자 제한 + (광고) 누락 시 자동 추가하는 안전장치 (E000002 방지)
+      const mmsTitle = truncateTitle(ensureAdPrefix(rawMmsTitle));
       
       // MMS에 사용할 URL 리스트 결정:
       // - 비-RCS 캠페인: 기존 필드 사용
@@ -1387,7 +1337,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[Submit] MMS fallback details: lmsContent=${hasLmsContent}, fallbackContent length=${fallbackContent.length}, mmsImageFileId=${mmsImageFileId}, mmsUrlLinks=${mmsUrlList.length} urls`);
       }
       
-      const mmsMsg = buildLmsMsg(rawMmsTitle, fallbackContent);
+      // 사용자가 작성한 본문을 그대로 전송 (안내 멘트 자동 합성 없음 - 폼 디폴트로 이동)
+      const mmsMsg = fallbackContent;
       console.log(`[Submit] MMS title: ${mmsTitle}`);
       console.log(`[Submit] MMS msg (first 200 chars): ${mmsMsg.substring(0, 200)}`);
       console.log(`[Submit] MMS msg (last 200 chars): ${mmsMsg.substring(mmsMsg.length - 200)}`);
@@ -1416,7 +1367,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // RCS 슬라이드: RCS 전용 필드 사용 (content, imageUrl, urlLinks, buttons)
       // BizChat API 규격: rcs[].title도 30자 제한 (E000002 방지)
       const rcsTitle = truncateTitle(message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
-      const rcsMsg = appendDisclaimer(message?.content || '');
+      // 사용자가 작성한 본문을 그대로 전송 (안내 멘트 자동 합성 없음 - 폼 디폴트로 이동)
+      const rcsMsg = message?.content || '';
       const rcsSlide: Record<string, unknown> | null = shouldIncludeRcsArray ? {
         slideNum: 1,
         title: rcsTitle,
@@ -2084,9 +2036,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       const updateRawMmsTitle = updateMmsTitle;
-      // BizChat API 규격: mms.title은 30자 제한 + (광고) 접두사 없이 원본 제목만 사용 (E000002 방지)
-      const updateMmsTitlePrefixed = truncateTitle(updateRawMmsTitle);
-      const updateMmsMsg = buildLmsMsg(updateRawMmsTitle, updateFallbackContent);
+      // BizChat API 규격: mms.title은 30자 제한 + (광고) 누락 시 자동 추가하는 안전장치 (E000002 방지)
+      const updateMmsTitlePrefixed = truncateTitle(ensureAdPrefix(updateRawMmsTitle));
+      // 사용자가 작성한 본문을 그대로 전송 (안내 멘트 자동 합성 없음 - 폼 디폴트로 이동)
+      const updateMmsMsg = updateFallbackContent;
       
       const updateMmsObject: Record<string, unknown> = {
         title: updateMmsTitlePrefixed,
@@ -2108,7 +2061,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // BizChat API 규격: rcs[].title도 30자 제한 (E000002 방지)
       const updateRcsTitle = truncateTitle(message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
-      const updateRcsMsg = appendDisclaimer(message?.content || '');
+      // 사용자가 작성한 본문을 그대로 전송 (안내 멘트 자동 합성 없음 - 폼 디폴트로 이동)
+      const updateRcsMsg = message?.content || '';
       const updateRcsSlide: Record<string, unknown> | null = shouldIncludeUpdateRcsArray ? {
         slideNum: 1,
         title: updateRcsTitle,
