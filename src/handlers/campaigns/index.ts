@@ -951,7 +951,7 @@ const createCampaignSchema = z.object({
   mapticsSendType: z.enum(['realtime', 'batch']).optional(),
   // Maptics 실시간 발송 시간대 (rcvType=1, HHMM 형식)
   rtStartHhmm: z.string().regex(/^(0[9]|1[0-9])([0-5][0])$/).optional(), // 0900~1950
-  rtEndHhmm: z.string().regex(/^(0[9]|1[0-9]|20)([0-1][0])$/).optional(), // 0910~2000
+  rtEndHhmm: z.string().regex(/^((0[9]|1[0-9])([0-5][0])|2000)$/).optional(), // 0910~2000
   // Maptics 일 균등 분할 (rcvType=1, 0: 미분할, 1: 분할)
   sndDayDiv: z.number().min(0).max(1).optional(),
   targetCount: z.number().min(100).default(1000),
