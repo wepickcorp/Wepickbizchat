@@ -19,6 +19,8 @@ const getOidcConfig = memoize(
   { maxAge: 3600 * 1000 }
 );
 
+const isLocalDevAuth = process.env.NODE_ENV === "development" && process.env.REPL_ID === "local-dev";
+
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
@@ -35,7 +37,7 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      secure: !isLocalDevAuth,
       maxAge: sessionTtl,
     },
   });
@@ -66,6 +68,20 @@ export async function setupAuth(app: Express) {
   app.use(getSession());
   app.use(passport.initialize());
   app.use(passport.session());
+
+  if (isLocalDevAuth) {
+    app.get("/api/login", (_req, res) => {
+      res.status(501).json({ message: "Replit login is disabled in local development" });
+    });
+
+    app.get("/api/logout", (req, res) => {
+      req.logout(() => {
+        res.redirect("/");
+      });
+    });
+
+    return;
+  }
 
   const config = await getOidcConfig();
 

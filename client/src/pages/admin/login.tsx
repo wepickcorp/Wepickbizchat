@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Shield, Building2 } from "lucide-react";
 
@@ -18,11 +18,11 @@ export default function AdminLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast({
         title: "입력 오류",
-        description: "이메일과 비밀번호를 입력해주세요",
+        description: "이메일과 비밀번호를 입력해 주세요",
         variant: "destructive",
       });
       return;
@@ -49,7 +49,7 @@ export default function AdminLogin() {
         localStorage.setItem("adminUser", JSON.stringify(data.admin));
         toast({
           title: "로그인 성공",
-          description: `${data.admin.name}님, 환영합니다`,
+          description: `${data.admin.name}님 환영합니다`,
         });
         navigate("/admin");
       } else {
@@ -57,7 +57,7 @@ export default function AdminLogin() {
         localStorage.setItem("agencyUser", JSON.stringify(data.agency));
         toast({
           title: "로그인 성공",
-          description: `${data.agency.name} 대행사님, 환영합니다`,
+          description: `${data.agency.name} 대행사님 환영합니다`,
         });
         navigate("/agency");
       }

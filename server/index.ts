@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
+import { localApiRouter } from "./localApiRouter";
 
 const app = express();
 const httpServer = createServer(app);
@@ -16,6 +17,11 @@ declare module "http" {
 }
 
 async function initStripe() {
+  if (process.env.NODE_ENV === "development" && process.env.REPL_ID === "local-dev") {
+    console.warn('Local development detected, skipping Stripe initialization');
+    return;
+  }
+
   const databaseUrl = process.env.DATABASE_URL;
 
   if (!databaseUrl) {
@@ -132,6 +138,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  if (process.env.NODE_ENV === "development") {
+    app.use(localApiRouter);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -157,14 +167,12 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
+  const listenOptions = {
+    port,
+    host: process.env.HOST || "0.0.0.0",
+    ...(process.platform === "win32" ? {} : { reusePort: true }),
+  };
+  httpServer.listen(listenOptions, () => {
+    log(`serving on port ${port}`);
+  });
 })();

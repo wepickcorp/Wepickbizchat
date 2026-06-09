@@ -49,6 +49,11 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.access_token) {
     headers["Authorization"] = `Bearer ${session.access_token}`;
+  } else {
+    const adminToken = localStorage.getItem("adminToken");
+    if (adminToken) {
+      headers["Authorization"] = `Bearer ${adminToken}`;
+    }
   }
   return headers;
 }

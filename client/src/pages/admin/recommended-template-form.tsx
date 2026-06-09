@@ -171,6 +171,14 @@ export default function AdminRecommendedTemplateForm() {
       });
       const advOpts = cfg.advancedOptions;
       const mapOpts = cfg.mapticsOptions;
+      const savedLocations = Array.isArray(advOpts?.locations)
+        ? advOpts.locations
+        : (advOpts?.areas || []).map((code) => ({
+            code,
+            type: 'home' as const,
+            name: code,
+          }));
+
       setAdvancedTargeting({
         targetingMode: cfg.mode === 'maptics' ? 'maptics' : 'ats',
         sndMosu: typeof advOpts?.sndMosu === 'number' ? advOpts.sndMosu : 0,
@@ -180,9 +188,10 @@ export default function AdminRecommendedTemplateForm() {
         shopping11stCategories: advOpts?.shopping11stCategories || [],
         webappCategories: advOpts?.webappCategories || [],
         callCategories: advOpts?.callCategories || [],
-        locations: [],
+        locations: savedLocations,
         profiling: [],
         geofences: mapOpts?.geofences || [],
+        sndDayDiv: mapOpts?.sndDayDiv,
       });
     } else {
       setTargetingEnabled(false);
@@ -214,6 +223,7 @@ export default function AdminRecommendedTemplateForm() {
       config.advancedOptions = {
         sndMosu: typeof advancedTargeting.sndMosu === 'number' ? advancedTargeting.sndMosu : 0,
         areas: advancedTargeting.locations.map(l => l.code),
+        locations: advancedTargeting.locations,
         interests: advancedTargeting.profiling.map(p => p.code),
         shopping11stCategories: advancedTargeting.shopping11stCategories,
         webappCategories: advancedTargeting.webappCategories,
@@ -226,6 +236,7 @@ export default function AdminRecommendedTemplateForm() {
         rcvType: advancedTargeting.mapticsSendType === 'batch' ? 2 : 1,
         rtStartHhmm: advancedTargeting.rtStartHhmm,
         rtEndHhmm: advancedTargeting.rtEndHhmm,
+        sndDayDiv: advancedTargeting.sndDayDiv,
         geofences: advancedTargeting.geofences,
       };
     }
@@ -270,6 +281,9 @@ export default function AdminRecommendedTemplateForm() {
     onSuccess: () => {
       toast({ title: isEditMode ? "템플릿이 수정되었습니다" : "템플릿이 생성되었습니다" });
       queryClient.invalidateQueries({ queryKey: ["/api/recommended-templates"] });
+      if (templateId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/recommended-templates", templateId] });
+      }
       navigate("/admin/recommended-templates");
     },
     onError: (error: Error) => {

@@ -176,21 +176,26 @@ export interface RecommendedTargetingConfig {
   
   // ATS 고급 타겟팅 옵션
   advancedOptions?: {
-    sndMosu?: number; // 모수 (최소 10,000)
-    areas?: string[]; // 지역 코드 배열
-    interests?: string[]; // 관심사 코드 배열
-    shopping11stCategories?: SelectedCategory[]; // 11번가 쇼핑 카테고리
-    webappCategories?: SelectedCategory[]; // 웹앱 카테고리
-    callCategories?: SelectedCategory[]; // 통화 카테고리
+    sndMosu?: number;
+    areas?: string[];
+    locations?: {
+      code: string;
+      type: "home" | "work";
+      name: string;
+    }[];
+    interests?: string[];
+    shopping11stCategories?: SelectedCategory[];
+    webappCategories?: SelectedCategory[];
+    callCategories?: SelectedCategory[];
   };
-  
   // 지오펜스 타겟팅 옵션
   mapticsOptions?: {
-    radius?: number; // 반경 (미터)
-    geofences?: SavedGeofence[]; // 지오펜스 목록
-    rcvType?: 1 | 2; // 1=실시간, 2=모아서보내기
-    rtStartHhmm?: string; // 실시간 발송 시작시간
-    rtEndHhmm?: string; // 실시간 발송 종료시간
+    radius?: number;
+    geofences?: SavedGeofence[];
+    rcvType?: 1 | 2;
+    rtStartHhmm?: string;
+    rtEndHhmm?: string;
+    sndDayDiv?: number;
   };
 }
 

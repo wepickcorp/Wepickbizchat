@@ -25,6 +25,19 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   } catch { return null; }
 }
 
+function verifyAdminToken(token: string): { adminId: string } | null {
+  try {
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+    const { data, signature } = decoded;
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    if (!payload.adminId) return null;
+    return { adminId: payload.adminId };
+  } catch { return null; }
+}
+
 export async function verifyAuth(req: VercelRequest) {
   const impersonateToken = req.headers['x-impersonate-token'] as string;
   const impersonateUserId = req.headers['x-impersonate-user-id'] as string;
@@ -38,8 +51,13 @@ export async function verifyAuth(req: VercelRequest) {
 
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.replace('Bearer ', '');
+  const admin = verifyAdminToken(token);
+  if (admin) {
+    return { userId: `admin:${admin.adminId}`, email: '' };
+  }
   try {
-    const { data: { user }, error } = await getSupabaseAdmin().auth.getUser(authHeader.replace('Bearer ', ''));
+    const { data: { user }, error } = await getSupabaseAdmin().auth.getUser(token);
     if (error || !user) return null;
     return { userId: user.id, email: user.email || '' };
   } catch { return null; }

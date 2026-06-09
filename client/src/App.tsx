@@ -234,7 +234,6 @@ function Router() {
       
       {/* Admin Routes */}
       <Route path="/admin/login" component={AdminLogin} />
-      <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
       <Route path="/admin/users" component={() => <AdminRoute component={AdminUsers} />} />
       <Route path="/admin/campaigns" component={() => <AdminRoute component={AdminCampaigns} />} />
       <Route path="/admin/transactions" component={() => <AdminRoute component={AdminTransactions} />} />
@@ -247,6 +246,7 @@ function Router() {
       <Route path="/admin/recommended-templates/:id/edit" component={() => <AdminRoute component={AdminRecommendedTemplateForm} />} />
       <Route path="/admin/recommended-templates" component={() => <AdminRoute component={AdminRecommendedTemplates} />} />
       <Route path="/admin/logs" component={() => <AdminRoute component={AdminLogs} />} />
+      <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
       
       {/* Agency Portal Routes */}
       <Route path="/agency/:rest*" component={AgencyPortal} />
