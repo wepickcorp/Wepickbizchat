@@ -621,6 +621,13 @@ export async function registerRoutes(
   });
 
   app.post("/api/transactions/charge", isAuthenticated, async (req, res) => {
+    const allowDirectCharge = process.env.NODE_ENV !== 'production' && process.env.ENABLE_DIRECT_CHARGE === 'true';
+    if (!allowDirectCharge) {
+      return res.status(403).json({
+        error: 'Direct charge API is disabled. Please use payment checkout.',
+      });
+    }
+
     try {
       const userId = (req as any).userId;
       const user = await storage.getUser(userId);

@@ -75,6 +75,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  const allowDirectCharge = process.env.NODE_ENV !== 'production' && process.env.ENABLE_DIRECT_CHARGE === 'true';
+  if (!allowDirectCharge) {
+    return res.status(403).json({
+      error: 'Direct charge API is disabled. Please use payment checkout.',
+    });
+  }
+
   const auth = await verifyAuth(req);
   if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 

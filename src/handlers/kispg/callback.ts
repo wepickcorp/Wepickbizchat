@@ -99,6 +99,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // KIS PG 샘플 기준: 콜백에서 받은 encData 검증은 하지 않음
     // 결제 승인 API 호출 시 새로운 encData 생성하여 사용
+    const amount = Number.parseFloat(amt);
+    if (!tid || !ordNo || !amt || !Number.isFinite(amount) || amount <= 0) {
+      const errorUrl = new URL(`${baseUrl}/billing`);
+      errorUrl.searchParams.set('error', 'true');
+      errorUrl.searchParams.set('message', 'Invalid payment callback data');
+      return res.redirect(302, errorUrl.toString());
+    }
+
+    const db = getDb();
+    const paymentReference = `kispg:${tid}`;
+    const [existingTransaction] = await db
+      .select()
+      .from(transactions)
+      .where(sql`${transactions.stripeSessionId} = ${paymentReference} OR ${transactions.description} LIKE ${`%${tid}%`}`)
+      .limit(1);
+
+    if (existingTransaction) {
+      console.warn('[KISPG Callback] Duplicate payment callback ignored:', tid);
+      const successUrl = new URL(`${baseUrl}/billing`);
+      successUrl.searchParams.set('success', 'true');
+      successUrl.searchParams.set('amount', amt);
+      successUrl.searchParams.set('duplicate', 'true');
+      return res.redirect(302, successUrl.toString());
+    }
+
     console.log('[KISPG Callback] Auth callback received - tid:', tid, 'amt:', amt);
 
     // KISPG_USE_PROD=true 설정 시에만 운영 API 사용, 기본값은 테스트 API
@@ -150,9 +175,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.redirect(302, errorUrl.toString());
     }
 
-    const db = getDb();
-    const amount = parseFloat(amt);
-
     const allUsers = await db.select().from(users);
     const userResult = allUsers.filter(u => u.id.replace(/-/g, '').startsWith(shortUserId));
     if (!userResult[0]) {
@@ -163,27 +185,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const userId = userResult[0].id;
-    const currentBalance = parseFloat(userResult[0].balance as string) || 0;
-    const newBalance = currentBalance + amount;
+    const creditResult = await db.execute(sql`
+      WITH target_user AS (
+        SELECT id, COALESCE(balance, 0) AS balance
+        FROM users
+        WHERE id = ${userId}
+        FOR UPDATE
+      ),
+      legacy_existing AS (
+        SELECT id
+        FROM transactions
+        WHERE description LIKE ${`%${tid}%`}
+        LIMIT 1
+      ),
+      inserted AS (
+        INSERT INTO transactions (
+          user_id,
+          type,
+          amount,
+          balance_after,
+          description,
+          payment_method,
+          stripe_session_id
+        )
+        SELECT
+          target_user.id,
+          'charge',
+          ${amount.toString()}::numeric,
+          target_user.balance + ${amount.toString()}::numeric,
+          ${`KISPG 카드 결제 (TID: ${tid})`},
+          'card',
+          ${paymentReference}
+        FROM target_user
+        WHERE NOT EXISTS (SELECT 1 FROM legacy_existing)
+        ON CONFLICT (stripe_session_id) DO NOTHING
+        RETURNING balance_after
+      ),
+      updated AS (
+        UPDATE users
+        SET
+          balance = inserted.balance_after,
+          updated_at = NOW()
+        FROM inserted
+        WHERE users.id = ${userId}
+        RETURNING users.id
+      )
+      SELECT
+        (EXISTS (SELECT 1 FROM legacy_existing) OR NOT EXISTS (SELECT 1 FROM inserted)) AS already_processed,
+        EXISTS (SELECT 1 FROM inserted) AS transaction_inserted,
+        EXISTS (SELECT 1 FROM updated) AS balance_updated
+    `) as any;
 
-    await db.update(users).set({
-      balance: newBalance.toString(),
-      updatedAt: new Date(),
-    }).where(eq(users.id, userId));
+    const creditRow = creditResult.rows?.[0] ?? creditResult[0];
 
-    // 거래 내역 삽입 (실패해도 잔액 업데이트는 유지)
-    try {
-      await db.insert(transactions).values({
-        userId,
-        type: 'charge',
-        amount: amount.toString(),
-        balanceAfter: newBalance.toString(),
-        description: `KISPG 카드 결제 (TID: ${tid})`,
-        paymentMethod: 'card',
-      });
-    } catch (txError) {
-      console.error('[KISPG Callback] Failed to insert transaction record:', txError);
-      // 거래 기록 실패는 경고만 로깅
+    if (creditRow?.already_processed) {
+      console.warn('[KISPG Callback] Duplicate payment callback ignored after approval:', tid);
+      const successUrl = new URL(`${baseUrl}/billing`);
+      successUrl.searchParams.set('success', 'true');
+      successUrl.searchParams.set('amount', amt);
+      successUrl.searchParams.set('duplicate', 'true');
+      return res.redirect(302, successUrl.toString());
+    }
+
+    if (!creditRow?.transaction_inserted || !creditRow?.balance_updated) {
+      throw new Error('Failed to credit KISPG payment');
     }
 
     const successUrl = new URL(`${baseUrl}/billing`);

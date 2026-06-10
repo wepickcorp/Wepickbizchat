@@ -10819,7 +10819,7 @@ __export(callback_exports, {
 });
 import { neon as neon41, neonConfig as neonConfig15 } from "@neondatabase/serverless";
 import { drizzle as drizzle41 } from "drizzle-orm/neon-http";
-import { eq as eq40, sql as sql25 } from "drizzle-orm";
+import { sql as sql25 } from "drizzle-orm";
 import { pgTable as pgTable40, text as text29, timestamp as timestamp37, numeric as numeric4 } from "drizzle-orm/pg-core";
 import { createHash as createHash2 } from "crypto";
 neonConfig15.fetchConnectionCache = true;
@@ -10895,6 +10895,24 @@ async function handler50(req, res) {
       errorUrl.searchParams.set("message", "\uACB0\uC81C \uC124\uC815 \uC624\uB958");
       return res.redirect(302, errorUrl.toString());
     }
+    const amount = Number.parseFloat(amt);
+    if (!tid || !ordNo || !amt || !Number.isFinite(amount) || amount <= 0) {
+      const errorUrl = new URL(`${baseUrl}/billing`);
+      errorUrl.searchParams.set("error", "true");
+      errorUrl.searchParams.set("message", "Invalid payment callback data");
+      return res.redirect(302, errorUrl.toString());
+    }
+    const db = getDb41();
+    const paymentReference = `kispg:${tid}`;
+    const [existingTransaction] = await db.select().from(transactions10).where(sql25`${transactions10.stripeSessionId} = ${paymentReference} OR ${transactions10.description} LIKE ${`%${tid}%`}`).limit(1);
+    if (existingTransaction) {
+      console.warn("[KISPG Callback] Duplicate payment callback ignored:", tid);
+      const successUrl2 = new URL(`${baseUrl}/billing`);
+      successUrl2.searchParams.set("success", "true");
+      successUrl2.searchParams.set("amount", amt);
+      successUrl2.searchParams.set("duplicate", "true");
+      return res.redirect(302, successUrl2.toString());
+    }
     console.log("[KISPG Callback] Auth callback received - tid:", tid, "amt:", amt);
     const useProductionApi = process.env.KISPG_USE_PROD === "true";
     const kispgPaymentUrl = useProductionApi ? "https://api.kispg.co.kr/v2/payment" : "https://testapi.kispg.co.kr/v2/payment";
@@ -10934,8 +10952,6 @@ async function handler50(req, res) {
       errorUrl.searchParams.set("message", "\uC0AC\uC6A9\uC790 \uC815\uBCF4 \uC624\uB958");
       return res.redirect(302, errorUrl.toString());
     }
-    const db = getDb41();
-    const amount = parseFloat(amt);
     const allUsers = await db.select().from(users20);
     const userResult = allUsers.filter((u) => u.id.replace(/-/g, "").startsWith(shortUserId));
     if (!userResult[0]) {
@@ -10945,23 +10961,67 @@ async function handler50(req, res) {
       return res.redirect(302, errorUrl.toString());
     }
     const userId = userResult[0].id;
-    const currentBalance = parseFloat(userResult[0].balance) || 0;
-    const newBalance = currentBalance + amount;
-    await db.update(users20).set({
-      balance: newBalance.toString(),
-      updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq40(users20.id, userId));
-    try {
-      await db.insert(transactions10).values({
-        userId,
-        type: "charge",
-        amount: amount.toString(),
-        balanceAfter: newBalance.toString(),
-        description: `KISPG \uCE74\uB4DC \uACB0\uC81C (TID: ${tid})`,
-        paymentMethod: "card"
-      });
-    } catch (txError) {
-      console.error("[KISPG Callback] Failed to insert transaction record:", txError);
+    const creditResult = await db.execute(sql25`
+      WITH target_user AS (
+        SELECT id, COALESCE(balance, 0) AS balance
+        FROM users
+        WHERE id = ${userId}
+        FOR UPDATE
+      ),
+      legacy_existing AS (
+        SELECT id
+        FROM transactions
+        WHERE description LIKE ${`%${tid}%`}
+        LIMIT 1
+      ),
+      inserted AS (
+        INSERT INTO transactions (
+          user_id,
+          type,
+          amount,
+          balance_after,
+          description,
+          payment_method,
+          stripe_session_id
+        )
+        SELECT
+          target_user.id,
+          'charge',
+          ${amount.toString()}::numeric,
+          target_user.balance + ${amount.toString()}::numeric,
+          ${`KISPG \uCE74\uB4DC \uACB0\uC81C (TID: ${tid})`},
+          'card',
+          ${paymentReference}
+        FROM target_user
+        WHERE NOT EXISTS (SELECT 1 FROM legacy_existing)
+        ON CONFLICT (stripe_session_id) DO NOTHING
+        RETURNING balance_after
+      ),
+      updated AS (
+        UPDATE users
+        SET
+          balance = inserted.balance_after,
+          updated_at = NOW()
+        FROM inserted
+        WHERE users.id = ${userId}
+        RETURNING users.id
+      )
+      SELECT
+        (EXISTS (SELECT 1 FROM legacy_existing) OR NOT EXISTS (SELECT 1 FROM inserted)) AS already_processed,
+        EXISTS (SELECT 1 FROM inserted) AS transaction_inserted,
+        EXISTS (SELECT 1 FROM updated) AS balance_updated
+    `);
+    const creditRow = creditResult.rows?.[0] ?? creditResult[0];
+    if (creditRow?.already_processed) {
+      console.warn("[KISPG Callback] Duplicate payment callback ignored after approval:", tid);
+      const successUrl2 = new URL(`${baseUrl}/billing`);
+      successUrl2.searchParams.set("success", "true");
+      successUrl2.searchParams.set("amount", amt);
+      successUrl2.searchParams.set("duplicate", "true");
+      return res.redirect(302, successUrl2.toString());
+    }
+    if (!creditRow?.transaction_inserted || !creditRow?.balance_updated) {
+      throw new Error("Failed to credit KISPG payment");
     }
     const successUrl = new URL(`${baseUrl}/billing`);
     successUrl.searchParams.set("success", "true");
@@ -12556,6 +12616,12 @@ async function verifyAuth29(req) {
 async function handler62(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  const allowDirectCharge = process.env.NODE_ENV !== "production" && process.env.ENABLE_DIRECT_CHARGE === "true";
+  if (!allowDirectCharge) {
+    return res.status(403).json({
+      error: "Direct charge API is disabled. Please use payment checkout."
+    });
+  }
   const auth = await verifyAuth29(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
