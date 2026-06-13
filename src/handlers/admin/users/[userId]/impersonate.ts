@@ -48,7 +48,7 @@ function verifyToken(token: string): { adminId: string } | null {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -71,8 +71,8 @@ async function verifyAdminToken(req: VercelRequest) {
 }
 
 function getClientIp(req: VercelRequest): string {
-  return (req.headers['x-forwarded-for'] as string)?.split(',')[0] || 
-         req.headers['x-real-ip'] as string || 
+  return (req.headers['x-forwarded-for'] as string)?.split(',')[0] ||
+         req.headers['x-real-ip'] as string ||
          'unknown';
 }
 
@@ -84,7 +84,7 @@ function generateImpersonateToken(userId: string, adminId: string): string {
     exp: Date.now() + (30 * 60 * 1000),
   };
   const data = JSON.stringify(payload);
-  const signature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+  const signature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
   return Buffer.from(JSON.stringify({ data, signature })).toString('base64');
 }
 
@@ -119,7 +119,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       action: 'impersonate',
       targetType: 'user',
       targetId: userId as string,
-      details: { 
+      details: {
         userEmail: user.email,
         adminName: admin.name,
       },

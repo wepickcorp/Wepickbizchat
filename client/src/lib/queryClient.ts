@@ -33,7 +33,7 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
   };
-  
+
   // 대리 로그인 중이면 impersonation 헤더 추가
   if (isImpersonating()) {
     const impersonateToken = localStorage.getItem("impersonateToken");
@@ -44,7 +44,7 @@ async function getAuthHeaders(): Promise<HeadersInit> {
     }
     return headers;
   }
-  
+
   // 일반 로그인: Supabase 토큰 사용
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.access_token) {
@@ -64,7 +64,7 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const headers = await getAuthHeaders();
-  
+
   const res = await fetch(url, {
     method,
     headers,
@@ -96,7 +96,7 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const headers = await getAuthHeaders();
-    
+
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
       headers,

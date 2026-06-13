@@ -138,7 +138,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.NODE_ENV === "development" && process.env.REPL_ID === "local-dev") {
     app.use(localApiRouter);
   }
 
@@ -170,7 +170,6 @@ app.use((req, res, next) => {
   const listenOptions = {
     port,
     host: process.env.HOST || "0.0.0.0",
-    ...(process.platform === "win32" ? {} : { reusePort: true }),
   };
   httpServer.listen(listenOptions, () => {
     log(`serving on port ${port}`);

@@ -13,7 +13,7 @@ export const CAMPAIGN_STATUS = {
   IN_PROGRESS: 30,
   COMPLETED: 40,
   STOPPED: 35,
-  CANCELLED: 90,
+  CANCELLED: 25,
 } as const;
 
 // 삭제 가능 상태 (BizChat API 규격)
@@ -112,11 +112,14 @@ export function formatDateTime(date: Date | string): string {
 
 export function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
+    draft: '임시등록',
     temp_registered: '임시등록',
+    approval_requested: '승인 대기',
     pending: '승인 대기',
     approved: '승인 완료',
     running: '발송 중',
     completed: '완료',
+    stopped: '발송 중단',
     rejected: '반려',
     cancelled: '취소',
   };

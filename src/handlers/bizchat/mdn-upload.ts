@@ -16,7 +16,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -112,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const boundary = `----FormBoundary${Date.now()}`;
       const fileName = `mdn_${tid}.csv`;
-      
+
       const formDataParts = [
         `--${boundary}`,
         `Content-Disposition: form-data; name="file"; filename="${fileName}"`,
@@ -122,7 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `--${boundary}--`,
         ''
       ];
-      
+
       const formDataBody = formDataParts.join('\r\n');
 
       const response = await fetch(url, {
@@ -163,9 +163,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Invalid action. Use "create-file"' });
   } catch (error) {
     console.error('[BizChat MDN Upload] Error:', error);
-    return res.status(500).json({ 
-      error: 'Internal server error', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    return res.status(500).json({
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }

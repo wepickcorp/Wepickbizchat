@@ -16,7 +16,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -35,7 +35,7 @@ async function verifyAuth(req: VercelRequest) {
     }
     return null;
   }
-  
+
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {
@@ -56,8 +56,8 @@ async function callBizChatAPI(
   useProduction: boolean = false
 ) {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -67,7 +67,7 @@ async function callBizChatAPI(
   const tid = generateTid();
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
-  
+
   console.log(`[BizChat Template] ${method} ${url}`);
 
   const options: RequestInit = {
@@ -85,7 +85,7 @@ async function callBizChatAPI(
 
   const response = await fetch(url, options);
   const responseText = await response.text();
-  
+
   console.log(`[BizChat Template] Response: ${response.status} - ${responseText.substring(0, 300)}`);
 
   let data;
@@ -130,12 +130,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     switch (action) {
       case 'list': {
         const { pageNumber = 1, pageSize = 20 } = req.body;
-        
+
         const result = await callBizChatAPI('/api/v1/cmpn/tpl/list', 'POST', {
           pageNumber,
           pageSize,
         }, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'list',
@@ -147,13 +147,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'read': {
         const { templateId } = req.body;
-        
+
         if (!templateId) {
           return res.status(400).json({ error: 'templateId is required' });
         }
 
         const result = await callBizChatAPI(`/api/v1/cmpn/tpl?id=${templateId}`, 'GET', undefined, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'read',
@@ -163,7 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case 'create': {
-        const { 
+        const {
           name,
           msgType,
           senderNumber,
@@ -179,9 +179,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const validMsgTypes = ['SMS', 'LMS', 'MMS', 'RCS'];
         if (!validMsgTypes.includes(msgType)) {
-          return res.status(400).json({ 
-            error: 'Invalid msgType', 
-            validTypes: validMsgTypes 
+          return res.status(400).json({
+            error: 'Invalid msgType',
+            validTypes: validMsgTypes
           });
         }
 
@@ -213,7 +213,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const result = await callBizChatAPI('/api/v1/cmpn/tpl/create', 'POST', payload, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'create',
@@ -244,7 +244,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const result = await callBizChatAPI(`/api/v1/cmpn/tpl/update?id=${templateId}`, 'POST', payload, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'update',
@@ -260,7 +260,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const result = await callBizChatAPI(`/api/v1/cmpn/tpl/delete?id=${templateId}`, 'POST', {}, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'delete',
@@ -276,7 +276,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const result = await callBizChatAPI(`/api/v1/cmpn/tpl/appr/req?id=${templateId}`, 'POST', {}, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'submit',

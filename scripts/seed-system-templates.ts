@@ -287,7 +287,7 @@ async function seedSystemTemplates() {
   // 먼저 시스템 사용자가 존재하는지 확인하고, 없으면 생성
   console.log('Checking system user...');
   const existingUser = await db.select().from(users).where(eq(users.id, SYSTEM_USER_ID));
-  
+
   if (existingUser.length === 0) {
     console.log('Creating system user...');
     await db.insert(users).values({
@@ -304,14 +304,14 @@ async function seedSystemTemplates() {
   }
 
   console.log('Checking existing system templates...');
-  
+
   const existing = await db.select().from(templates).where(eq(templates.userId, SYSTEM_USER_ID));
   const existingNames = new Set(existing.map(t => t.name));
-  
+
   console.log(`Found ${existing.length} existing system templates.`);
 
   console.log('Inserting new system templates...');
-  
+
   let addedCount = 0;
   for (const template of systemTemplates) {
     if (existingNames.has(template.name)) {

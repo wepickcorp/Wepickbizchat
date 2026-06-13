@@ -5,13 +5,19 @@ import { createHmac } from 'crypto';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
 import { pgTable, text, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import {
+  getNeededCampaignCredits,
+  isCreditModeEnabled,
+  releaseReservedCampaignCreditsForServerless,
+  reserveCampaignCreditsForServerless,
+} from '../../_shared/credit-ledger';
 
 neonConfig.fetchConnectionCache = true;
 
 const BIZCHAT_DEV_URL = process.env.BIZCHAT_DEV_API_URL || 'https://gw-dev.bizchat1.co.kr:8443';
 const BIZCHAT_PROD_URL = process.env.BIZCHAT_PROD_API_URL || 'https://gw.bizchat1.co.kr';
-const CALLBACK_BASE_URL = process.env.VERCEL_URL 
-  ? `https://${process.env.VERCEL_URL}` 
+const CALLBACK_BASE_URL = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
   : 'https://wepickbizchat-new.vercel.app';
 
 // 지역명 → hcode 매핑 (BizChat API 규격 v0.29.0)
@@ -75,21 +81,21 @@ function convertLegacySndMosuQuery(queryStr: string): { query: string; desc: str
     console.log('[Submit] Detected legacy SQL format in sndMosuQuery, returning as-is');
     return { query: trimmed, desc: '레거시 SQL 형식', isLegacySql: true };
   }
-  
+
   try {
     const parsed = JSON.parse(queryStr);
-    
+
     // 이미 올바른 형식인지 확인
     // Case 1: $and/$or 컨테이너가 있는 경우 - 내부 조건 검증 후 반환
     if (parsed['$and'] || parsed['$or']) {
       console.log('[Submit] sndMosuQuery has $and/$or container, validating conditions...');
       const container = parsed['$and'] || parsed['$or'];
       const operator = parsed['$and'] ? '$and' : '$or';
-      
+
       // 각 조건 검증 및 변환
       const validatedConditions: ATSFilterCondition[] = [];
       const descParts: string[] = [];
-      
+
       for (const cond of container) {
         const validated = validateAndConvertCondition(cond);
         if (validated) {
@@ -97,12 +103,12 @@ function convertLegacySndMosuQuery(queryStr: string): { query: string; desc: str
           if (validated.desc) descParts.push(validated.desc);
         }
       }
-      
+
       const newQuery = { [operator]: validatedConditions };
       console.log('[Submit] Validated sndMosuQuery:', JSON.stringify(newQuery));
       return { query: JSON.stringify(newQuery), desc: descParts.join(', ') };
     }
-    
+
     // Case 2: 단일 조건 객체 (metaType/code/dataType 필드가 있는 경우)
     if (parsed.metaType && parsed.dataType) {
       console.log('[Submit] sndMosuQuery is single condition, validating and wrapping in $and');
@@ -386,7 +392,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -443,25 +449,25 @@ interface GeofenceTarget {
 }
 
 async function createBizChatGeofence(
-  name: string, 
-  targets: GeofenceTarget[], 
+  name: string,
+  targets: GeofenceTarget[],
   useProduction: boolean
 ): Promise<{ success: boolean; geofenceId?: number; error?: string }> {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
-  
+
   if (!apiKey) {
     return { success: false, error: 'BizChat API key not configured' };
   }
-  
+
   const tid = generateTid();
-  
+
   try {
     console.log(`[Submit] Creating BizChat geofence: ${name}`);
     console.log(`[Submit] Geofence targets:`, JSON.stringify(targets, null, 2));
-    
+
     const response = await fetch(`${baseUrl}/api/v1/maptics/geofences/save?tid=${tid}`, {
       method: 'POST',
       headers: {
@@ -470,15 +476,15 @@ async function createBizChatGeofence(
       },
       body: JSON.stringify({ name, target: targets }),
     });
-    
+
     const result = await response.json();
     console.log(`[Submit] BizChat geofence create response:`, JSON.stringify(result));
-    
+
     if (result.code === 'S000001' && result.data?.id) {
       console.log(`[Submit] BizChat geofence created successfully: ${result.data.id}`);
       return { success: true, geofenceId: result.data.id };
     }
-    
+
     return { success: false, error: result.msg || 'Geofence creation failed' };
   } catch (error) {
     console.error('[Submit] BizChat geofence create error:', error);
@@ -502,10 +508,10 @@ function getKSTTimeComponents(date: Date): { hours: number; minutes: number; dat
   let hours = date.getUTCHours() + 9;
   if (hours >= 24) hours -= 24;
   const minutes = date.getUTCMinutes();
-  
+
   // KST 기준 Date 객체도 생성 (디버깅 용도)
   const kstTime = new Date(date.getTime() + (9 * 60 * 60 * 1000));
-  
+
   return {
     hours,
     minutes,
@@ -518,7 +524,7 @@ function getKSTTimeComponents(date: Date): { hours: number; minutes: number; dat
 // KST 09:00 = UTC 00:00, KST 19:00 = UTC 10:00
 function clampToKSTWindow(dateUTC: Date, minTime: Date): Date {
   const KST_OFFSET_HOURS = 9;
-  
+
   // 10분 단위 올림 헬퍼
   const roundUpTo10Min = (date: Date): Date => {
     const result = new Date(date);
@@ -531,16 +537,16 @@ function clampToKSTWindow(dateUTC: Date, minTime: Date): Date {
     }
     return result;
   };
-  
+
   // UTC 시간 기준으로 KST 시간 계산
   const utcHours = dateUTC.getUTCHours();
   const kstHours = utcHours + KST_OFFSET_HOURS;
   const kstHoursNormalized = kstHours % 24;
   const isNextDayKST = kstHours >= 24;
-  
+
   // KST 09:00~18:59 범위 체크
   const isInWindow = kstHoursNormalized >= 9 && kstHoursNormalized < 19;
-  
+
   if (isInWindow) {
     const effectiveDate = dateUTC > minTime ? dateUTC : minTime;
     const resultKstHours = (effectiveDate.getUTCHours() + KST_OFFSET_HOURS) % 24;
@@ -548,10 +554,10 @@ function clampToKSTWindow(dateUTC: Date, minTime: Date): Date {
       return roundUpTo10Min(effectiveDate);
     }
   }
-  
+
   // 발송 불가 시간대 → 다음 가능한 KST 09:00 (= UTC 00:00)으로 조정
   const adjusted = new Date(dateUTC);
-  
+
   if (kstHoursNormalized >= 19) {
     // KST 19:00~23:59 → 다음날 KST 09:00
     adjusted.setUTCDate(adjusted.getUTCDate() + 1);
@@ -564,17 +570,17 @@ function clampToKSTWindow(dateUTC: Date, minTime: Date): Date {
     }
     adjusted.setUTCHours(0, 0, 0, 0);
   }
-  
+
   // minTime 이후 보장 + KST 범위 재확인
   let result = adjusted > minTime ? adjusted : minTime;
-  
+
   const resultKstHours = (result.getUTCHours() + KST_OFFSET_HOURS) % 24;
   if (resultKstHours >= 19 || resultKstHours < 9) {
     result = new Date(result);
     result.setUTCDate(result.getUTCDate() + 1);
     result.setUTCHours(0, 0, 0, 0);
   }
-  
+
   const finalKstHours = (result.getUTCHours() + KST_OFFSET_HOURS) % 24;
   console.log(`[Submit] KST window clamp: ${dateUTC.toISOString()} → ${result.toISOString()} (KST ${String(finalKstHours).padStart(2, '0')}:${String(result.getUTCMinutes()).padStart(2, '0')})`);
   return roundUpTo10Min(result);
@@ -586,14 +592,14 @@ function clampToKSTWindow(dateUTC: Date, minTime: Date): Date {
 // 3. 10분 단위로 시간 체크
 function validateSendTime(sendDate: Date | string | null): { valid: boolean; error?: string; adjustedDate?: Date } {
   if (!sendDate) return { valid: true };
-  
+
   const targetDate = typeof sendDate === 'string' ? new Date(sendDate) : new Date(sendDate);
   const now = new Date();
   const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-  
+
   // KST 기준 시간 추출
   const kstTarget = getKSTTimeComponents(targetDate);
-  
+
   // 1. 발송 시간대 체크 (09:00~19:00, 19시 미포함) - KST 기준
   // 범위 밖이면 자동으로 다음 가능한 시간으로 조정
   if (kstTarget.hours < 9 || kstTarget.hours >= 19) {
@@ -603,7 +609,7 @@ function validateSendTime(sendDate: Date | string | null): { valid: boolean; err
     console.log(`[Submit] Adjusted to ${kstAdjusted.hours}:${kstAdjusted.minutes.toString().padStart(2, '0')} KST (${adjustedDate.toISOString()})`);
     return { valid: true, adjustedDate };
   }
-  
+
   // 2. 최소 1시간 여유 체크
   if (targetDate < oneHourFromNow) {
     // 최소 1시간 후로 조정하고 KST 범위도 확인
@@ -611,7 +617,7 @@ function validateSendTime(sendDate: Date | string | null): { valid: boolean; err
     console.log(`[Submit] Send time is less than 1 hour from now, adjusted to ${adjustedDate.toISOString()}`);
     return { valid: true, adjustedDate };
   }
-  
+
   // 3. 10분 단위 체크 (자동 올림 처리)
   const adjustedDate = new Date(targetDate);
   adjustedDate.setSeconds(0);
@@ -621,14 +627,14 @@ function validateSendTime(sendDate: Date | string | null): { valid: boolean; err
   if (remainder !== 0) {
     adjustedDate.setMinutes(minutes + (10 - remainder));
   }
-  
+
   // 조정 후 KST 기준으로 다시 체크 - 19시 넘어가면 다음날로 조정
   const kstAdjusted = getKSTTimeComponents(adjustedDate);
   if (kstAdjusted.hours >= 19) {
     const finalAdjusted = clampToKSTWindow(adjustedDate, oneHourFromNow);
     return { valid: true, adjustedDate: finalAdjusted };
   }
-  
+
   return { valid: true, adjustedDate };
 }
 
@@ -668,39 +674,39 @@ function validateATSMosu(data: {
   if (data.rcvType !== 0) {
     return { valid: true };
   }
-  
+
   const sndGoalCnt = data.sndGoalCnt || 0;
   const sndMosu = data.sndMosu || 0;
   const sndMosuFlag = data.sndMosuFlag ?? 0; // 0: 150% 체크 사용, 1: 체크 안 함
-  
+
   // 모수가 0이면 승인 불가
   if (sndMosu === 0) {
-    return { 
-      valid: false, 
-      error: '발송 대상 모수가 0명입니다. 타겟팅 조건을 변경해주세요.' 
+    return {
+      valid: false,
+      error: '발송 대상 모수가 0명입니다. 타겟팅 조건을 변경해주세요.'
     };
   }
-  
+
   // 최대값 체크: 400,000
   if (sndMosu > 400000) {
-    return { 
+    return {
       valid: false,
-      error: `발송 모수(${sndMosu.toLocaleString()}명)가 최대값(400,000명)을 초과합니다. 타겟팅 조건을 좁혀주세요.` 
+      error: `발송 모수(${sndMosu.toLocaleString()}명)가 최대값(400,000명)을 초과합니다. 타겟팅 조건을 좁혀주세요.`
     };
   }
-  
+
   // 150% 체크 (sndMosuFlag=0일 때만)
   if (sndMosuFlag === 0) {
     const minMosu = Math.ceil(sndGoalCnt * 1.5);
     if (sndMosu < minMosu) {
-      return { 
-        valid: false, 
+      return {
+        valid: false,
         error: `발송 모수(${sndMosu.toLocaleString()}명)가 발송 목표(${sndGoalCnt.toLocaleString()}건)의 150%(${minMosu.toLocaleString()}명) 미만입니다. 타겟팅 조건을 변경하거나 발송 목표를 줄여주세요.`,
         warning: `발송 모수가 부족합니다. 최소 ${minMosu.toLocaleString()}명 이상이 필요합니다.`
       };
     }
   }
-  
+
   return { valid: true };
 }
 
@@ -719,37 +725,37 @@ function validateMapticsCollStartDate(data: {
   if (data.rcvType !== 1 && data.rcvType !== 2) {
     return { valid: true };
   }
-  
+
   if (!data.collStartDate) {
-    return { 
-      valid: false, 
-      error: 'Maptics 캠페인은 수집 시작일(collStartDate)이 필수입니다.' 
+    return {
+      valid: false,
+      error: 'Maptics 캠페인은 수집 시작일(collStartDate)이 필수입니다.'
     };
   }
-  
-  const collStartDate = typeof data.collStartDate === 'string' 
-    ? new Date(data.collStartDate) 
+
+  const collStartDate = typeof data.collStartDate === 'string'
+    ? new Date(data.collStartDate)
     : data.collStartDate;
   const now = new Date();
-  
+
   // 최소 1시간 이후
   const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
   if (collStartDate < oneHourFromNow) {
-    return { 
-      valid: false, 
-      error: '수집 시작일은 현재 시간으로부터 최소 1시간 이후여야 합니다.' 
+    return {
+      valid: false,
+      error: '수집 시작일은 현재 시간으로부터 최소 1시간 이후여야 합니다.'
     };
   }
-  
+
   // 권장: 24시간 이상 여유
   const oneDayFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   if (collStartDate < oneDayFromNow) {
-    return { 
-      valid: true, 
-      warning: '⚠️ Maptics 캠페인은 수집 시작일 최소 24시간 전에 생성하시는 것을 권장합니다. 승인 절차를 고려해주세요.' 
+    return {
+      valid: true,
+      warning: '⚠️ Maptics 캠페인은 수집 시작일 최소 24시간 전에 생성하시는 것을 권장합니다. 승인 절차를 고려해주세요.'
     };
   }
-  
+
   return { valid: true };
 }
 
@@ -760,8 +766,8 @@ async function callATSMosuAPI(
   useProduction: boolean = false
 ): Promise<{ success: boolean; query: string; filterStr: string; count: number; error?: string }> {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -770,7 +776,7 @@ async function callATSMosuAPI(
 
   const tid = generateTid();
   const url = `${baseUrl}/api/v1/ats/mosu?tid=${tid}`;
-  
+
   console.log(`[ATS Mosu] POST ${url}`);
   console.log(`[ATS Mosu] Payload:`, JSON.stringify(filterPayload, null, 2));
 
@@ -788,7 +794,7 @@ async function callATSMosuAPI(
     console.log(`[ATS Mosu] Response: ${response.status} - ${responseText.substring(0, 1000)}`);
 
     const data = JSON.parse(responseText);
-    
+
     if (data.code === 'S000001' && data.data?.query) {
       console.log(`[ATS Mosu] Success - query: ${data.data.query.substring(0, 200)}...`);
       return {
@@ -798,23 +804,23 @@ async function callATSMosuAPI(
         count: data.data.cnt || 0,
       };
     }
-    
+
     console.error(`[ATS Mosu] Failed - code: ${data.code}, msg: ${data.msg}`);
-    return { 
-      success: false, 
-      query: '', 
-      filterStr: '', 
-      count: 0, 
-      error: `ATS API failed: ${data.code} - ${data.msg}` 
+    return {
+      success: false,
+      query: '',
+      filterStr: '',
+      count: 0,
+      error: `ATS API failed: ${data.code} - ${data.msg}`
     };
   } catch (error) {
     console.error(`[ATS Mosu] Error:`, error);
-    return { 
-      success: false, 
-      query: '', 
-      filterStr: '', 
-      count: 0, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      query: '',
+      filterStr: '',
+      count: 0,
+      error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
 }
@@ -834,7 +840,7 @@ function buildATSFilterFromTargeting(targetingData: TargetingData): { payload: {
   if (targetingData.atsQuery) {
     try {
       const atsQueryParsed = JSON.parse(targetingData.atsQuery);
-      
+
       // $and 또는 $or 컨테이너가 있는 경우 그대로 반환
       if (atsQueryParsed['$and'] && Array.isArray(atsQueryParsed['$and'])) {
         const descParts = atsQueryParsed['$and']
@@ -866,7 +872,7 @@ function buildATSFilterFromTargeting(targetingData: TargetingData): { payload: {
   const descParts: string[] = [];
 
   // 연령 필터
-  if (targetingData.ageMin !== null && targetingData.ageMin !== undefined || 
+  if (targetingData.ageMin !== null && targetingData.ageMin !== undefined ||
       targetingData.ageMax !== null && targetingData.ageMax !== undefined) {
     const min = targetingData.ageMin ?? 0;
     const max = targetingData.ageMax ?? 100;
@@ -934,8 +940,8 @@ async function callBizChatAPI(
 ): Promise<{ status: number; data: Record<string, unknown> }> {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
   const envKeyName = useProduction ? 'BIZCHAT_PROD_API_KEY' : 'BIZCHAT_DEV_API_KEY';
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   console.log(`[BizChat Submit] Environment: ${useProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
@@ -952,7 +958,7 @@ async function callBizChatAPI(
   const tid = generateTid();
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
-  
+
   console.log(`[BizChat] ${method} ${url}`);
 
   const options: RequestInit = {
@@ -971,7 +977,7 @@ async function callBizChatAPI(
 
   const response = await fetch(url, options);
   const responseText = await response.text();
-  
+
   console.log(`[BizChat] Response: ${response.status} - ${responseText.substring(0, 500)}`);
 
   let data;
@@ -1008,7 +1014,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const db = getDb();
-  
+
   // 환경 감지: 개발 완료 전까지 항상 개발 API 사용
   // SK 담당자 요청: 개발 완료될 때까지 상용 URL이 아닌 개발 URL(gw-dev.bizchat1.co.kr:8443)로 요청
   const detectProductionEnvironment = (): boolean => {
@@ -1025,7 +1031,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (process.env.NODE_ENV === 'production') return true;
     return false;
   };
-  
+
   const useProduction = detectProductionEnvironment();
   console.log(`[BizChat Submit] Environment: ${useProduction ? 'PRODUCTION' : 'DEVELOPMENT'} (VERCEL_ENV=${process.env.VERCEL_ENV})`);
 
@@ -1039,6 +1045,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (campaign.userId !== auth.userId) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!campaign.sndNum) {
+      return res.status(400).json({ error: '발신번호를 선택한 캠페인만 검수 요청할 수 있어요' });
+    }
+
+    const currentStatusCode = Number(campaign.statusCode ?? 0);
+    if (currentStatusCode === 10) {
+      const approvalRequestedCreditEstimate = getNeededCampaignCredits(campaign.sndGoalCnt || campaign.targetCount || 0);
+      if (isCreditModeEnabled()) {
+        if (approvalRequestedCreditEstimate.isBelowMinimum) {
+          return res.status(400).json({
+            error: `템플릿 1개는 최소 ${approvalRequestedCreditEstimate.minTargetCount.toLocaleString('ko-KR')}건부터 검수 요청할 수 있어요`,
+          });
+        }
+
+        const reserveResult = await reserveCampaignCreditsForServerless(db, {
+          userId: auth.userId,
+          campaignId: id,
+          neededCredits: approvalRequestedCreditEstimate.neededCredits,
+          scheduledAt: campaign.scheduledAt,
+          description: `캠페인 승인요청 예약: ${campaign.name}`,
+        });
+
+        if (!reserveResult.success) {
+          return res.status(400).json({
+            error: reserveResult.error || '크레딧 예약 중 문제가 생겼어요. 보유 크레딧을 확인해주세요.',
+          });
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        campaignId: id,
+        bizchatCampaignId: campaign.bizchatCampaignId,
+        statusCode: 10,
+        status: 'approval_requested',
+        alreadyRequested: true,
+        message: '이미 검수 요청된 캠페인이에요.',
+      });
+    }
+
+    if (currentStatusCode !== 0) {
+      return res.status(400).json({ error: '임시 저장 상태의 캠페인만 검수 요청할 수 있어요' });
     }
 
     const messageResult = await db.select().from(messages).where(eq(messages.campaignId, id));
@@ -1088,7 +1138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // rcvType 10: MDN 직접 지정 (테스트 발송) - 시간 검증 완화 (10분 단위 조정만)
     const rcvType = campaign.rcvType ?? 0;
     let sendDateToValidate = scheduledAt || campaign.atsSndStartDate || campaign.scheduledAt;
-    
+
     // 발송 시간이 없으면 기본값 생성
     if (!sendDateToValidate && (rcvType === 0 || rcvType === 10)) {
       const now = new Date();
@@ -1107,7 +1157,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sendDateToValidate = defaultSendDate;
       console.log(`[Submit] No scheduledAt provided, using default send date for rcvType ${rcvType}:`, defaultSendDate.toISOString());
     }
-    
+
     // 테스트 발송(rcvType: 10)은 시간 검증 완화 - 10분 단위 조정만 수행
     let adjustedSendDate: Date | string | null | undefined = sendDateToValidate;
     if (rcvType === 10) {
@@ -1136,6 +1186,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ========== ATS 발송 모수(sndMosu) 검증 ==========
     // BizChat API 규격 v0.29.0: sndMosu는 sndGoalCnt의 150% 이상, 최대 400,000
     const sndGoalCnt = campaign.sndGoalCnt || campaign.targetCount || 1000;
+    const creditEstimate = getNeededCampaignCredits(sndGoalCnt);
+    if (isCreditModeEnabled() && creditEstimate.isBelowMinimum) {
+      return res.status(400).json({
+        error: `템플릿 1개는 최소 ${creditEstimate.minTargetCount.toLocaleString('ko-KR')}건부터 발송할 수 있습니다`,
+      });
+    }
+
     const mosuValidation = validateATSMosu({
       rcvType: rcvType,
       sndGoalCnt: sndGoalCnt,
@@ -1144,7 +1201,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     if (!mosuValidation.valid) {
       console.error('[Submit] ATS mosu validation failed:', mosuValidation.error);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: mosuValidation.error,
         hint: '발송 목표 건수를 줄이거나 타겟팅 조건을 조정하여 발송 대상 모수를 늘려주세요.'
       });
@@ -1161,7 +1218,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     if (!mapticsValidation.valid) {
       console.error('[Submit] Maptics collStartDate validation failed:', mapticsValidation.error);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: mapticsValidation.error,
         hint: 'Maptics 캠페인은 수집 시작일 최소 24시간 전에 생성하시는 것을 권장합니다.'
       });
@@ -1197,13 +1254,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // - RCS LMS(3): mms + rcs, 파일 없음
       const isRcs = billingType === 1 || billingType === 3;
       const needsFile = billingType === 1 || billingType === 2;
-      
+
       // ========== 이미지 파일 업로드 처리 ==========
       // BizChat API는 base64 대신 업로드된 파일 ID(origId)를 필요로 함
       // RCS 캠페인의 경우 RCS용 이미지와 LMS fallback용 이미지를 분리하여 업로드
       let imageFileId: string | null = null;
       let lmsImageFileIdResolved: string | null = null;
-      
+
       const uploadImageHelper = async (imgUrl: string, rcsFlag: number, label: string): Promise<string | null> => {
         if (imgUrl.startsWith('data:')) {
           console.log(`[Submit] ${label} image is base64, uploading to BizChat file API (rcs=${rcsFlag})...`);
@@ -1212,13 +1269,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
             const protocol = req.headers['x-forwarded-proto'] || (isLocalhost ? 'http' : 'https');
             const baseUrlForUpload = `${protocol}://${host}`;
-            
+
             const mimeMatch = imgUrl.match(/^data:([^;]+);/);
             const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
             const extMatch = mimeType.match(/image\/(\w+)/);
             const ext = extMatch ? extMatch[1] : 'jpg';
             const fileName = `campaign_${id}_${label}_${Date.now()}.${ext}`;
-            
+
             const uploadResponse = await fetch(`${baseUrlForUpload}/api/bizchat/file`, {
               method: 'POST',
               headers: {
@@ -1235,7 +1292,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 rcs: rcsFlag,
               }),
             });
-            
+
             const uploadResult = await uploadResponse.json();
             if (uploadResult.success && uploadResult.fileId) {
               console.log(`[Submit] ${label} image uploaded successfully, fileId: ${uploadResult.fileId}`);
@@ -1253,7 +1310,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return imgUrl;
         }
       };
-      
+
       if (needsFile && message?.imageUrl) {
         // RCS 캠페인: RCS용 이미지 업로드 (rcs: 1)
         const rcsFlag = isRcs ? 1 : 0;
@@ -1266,7 +1323,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
       }
-      
+
       // RCS 캠페인: LMS fallback용 이미지 별도 업로드 (rcs: 0)
       if (isRcs && needsFile) {
         const lmsImgUrl = (message as any)?.lmsImageUrl;
@@ -1285,64 +1342,64 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log('[Submit] No LMS fallback image provided, MMS fallback will have no image');
         }
       }
-      
+
       // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
       // RCS URL 리스트 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함)
       const rcsUrlLinksData = (message as any)?.urlLinks as { list?: string[]; reward?: number } | null;
       const rcsUrlList: string[] = rcsUrlLinksData?.list || (message as any)?.urls || [];
       const rcsUrlReward = rcsUrlLinksData?.reward;
-      
+
       // LMS fallback URL 리스트 (RCS 캠페인용)
       const lmsUrlLinksData = (message as any)?.lmsUrlLinks as { list?: string[]; reward?: number } | null;
       const lmsUrlList: string[] = lmsUrlLinksData?.list || [];
       const lmsUrlReward = lmsUrlLinksData?.reward;
-      
+
       // buttons 추출 (jsonb 컬럼은 Drizzle이 자동으로 파싱함) - RCS 전용
       const buttonsData = (message as any)?.buttons as { list?: Array<{ type: string; name: string; val1: string; val2?: string }> } | null;
       const rcsButtons = buttonsData?.list || (message as any)?.rcsButtons || [];
-      
+
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
       // BizChat API 규격: mms.title은 필수 필드 - 빈 문자열 불가, 실제 값 필요
       // RCS 캠페인: MMS는 fallback 메시지 → lms* 필드 사용
       // 비-RCS 캠페인: MMS는 메인 메시지 → 기존 필드 사용
-      // 
+      //
       // ★ E100037 오류 방지: lmsContent가 비어있어서 content로 폴백할 때,
       //   msg에 [URL분석N] 플레이스홀더가 있으면 urlLink도 함께 폴백해야 함.
       //   lms* 필드가 모두 비어있으면 RCS 필드 전체를 MMS에도 사용 (일괄 폴백)
       const hasLmsContent = !!((message as any)?.lmsContent?.trim());
       const useLmsFallback = isRcs && hasLmsContent;
-      
+
       const fallbackContent = isRcs ? ((message as any)?.lmsContent || message?.content || '') : (message?.content || '');
       const rawMmsTitle = isRcs
         ? (message?.lmsTitle?.trim() || message?.title?.trim() || fallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
         : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
       // BizChat API 규격: mms.title은 30자 제한 + (광고) 누락 시 자동 추가하는 안전장치 (E000002 방지)
       const mmsTitle = truncateTitle(ensureAdPrefix(rawMmsTitle));
-      
+
       // MMS에 사용할 URL 리스트 결정:
       // - 비-RCS 캠페인: 기존 필드 사용
       // - RCS + lmsContent 있음: lmsUrlLinks 사용 (별도 폴백 메시지)
       // - RCS + lmsContent 없음: rcsUrlList로 폴백 (content와 urlLinks가 쌍으로 이동)
       const mmsUrlList: string[] = isRcs ? (useLmsFallback ? lmsUrlList : rcsUrlList) : rcsUrlList;
       const mmsUrlReward = isRcs ? (useLmsFallback ? lmsUrlReward : rcsUrlReward) : rcsUrlReward;
-      
+
       // MMS에 사용할 이미지:
       // - 비-RCS 캠페인: imageFileId
       // - RCS + lmsContent 있음: lmsImageFileIdResolved (별도 폴백 이미지)
       // - RCS + lmsContent 없음: imageFileId로 폴백 (RCS 이미지를 MMS에도 사용)
       const mmsImageFileId = isRcs ? (useLmsFallback ? lmsImageFileIdResolved : imageFileId) : imageFileId;
-      
+
       if (isRcs) {
         console.log(`[Submit] RCS campaign MMS fallback mode: ${useLmsFallback ? 'SEPARATE (lms* fields)' : 'UNIFIED (using RCS fields as fallback)'}`);
         console.log(`[Submit] MMS fallback details: lmsContent=${hasLmsContent}, fallbackContent length=${fallbackContent.length}, mmsImageFileId=${mmsImageFileId}, mmsUrlLinks=${mmsUrlList.length} urls`);
       }
-      
+
       // 사용자가 작성한 본문을 그대로 전송 (안내 멘트 자동 합성 없음 - 폼 디폴트로 이동)
       const mmsMsg = fallbackContent;
       console.log(`[Submit] MMS title: ${mmsTitle}`);
       console.log(`[Submit] MMS msg (first 200 chars): ${mmsMsg.substring(0, 200)}`);
       console.log(`[Submit] MMS msg (last 200 chars): ${mmsMsg.substring(mmsMsg.length - 200)}`);
-      
+
       const mmsObject: Record<string, unknown> = {
         title: mmsTitle,
         msg: mmsMsg,
@@ -1350,7 +1407,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
         ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), ...(mmsUrlReward !== undefined && { reward: mmsUrlReward }) } }),
       };
-      
+
       // RCS 배열 구성 - RCS 타입일 때만 포함, 아니면 완전히 생략
       // BizChat API 규격: slideNum은 모든 RCS 타입에서 필수 (누락 시 E000001 오류)
       // effectiveRcsType: campaign.rcsType이 유효하면 사용, 아니면 billingType에 따라 결정
@@ -1358,12 +1415,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? campaign.rcsType
         : (billingType === 1 ? 4 : 1);
       console.log(`[Submit] effectiveRcsType: ${effectiveRcsType}, including slideNum: 1`);
-      
+
       // BizChat API 규격: 모든 RCS 타입(0~5)에서 rcs 배열이 필요함
       // E100018 오류 방지: rcsType에 맞는 슬라이드 개수가 필요 (rcsType=1도 1개 필요)
       const shouldIncludeRcsArray = isRcs;
       console.log(`[Submit] shouldIncludeRcsArray: ${shouldIncludeRcsArray}, effectiveRcsType: ${effectiveRcsType}, isRcs: ${isRcs}`);
-      
+
       // RCS 슬라이드: RCS 전용 필드 사용 (content, imageUrl, urlLinks, buttons)
       // BizChat API 규격: rcs[].title도 30자 제한 (E000002 방지)
       const rcsTitle = truncateTitle(message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
@@ -1376,9 +1433,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...(needsFile && imageFileId && { imgOrigId: imageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
         ...(rcsUrlList.length > 0 && { urlLink: { list: rcsUrlList.slice(0, 3), ...(rcsUrlReward !== undefined && { reward: rcsUrlReward }) } }),
-        ...(rcsButtons.length > 0 && { 
-          buttons: { list: rcsButtons.map((btn: any) => ({ 
-            ...btn, 
+        ...(rcsButtons.length > 0 && {
+          buttons: { list: rcsButtons.map((btn: any) => ({
+            ...btn,
             type: String(btn.type),
             val2: btn.val2 ?? ''
           })) }
@@ -1390,7 +1447,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ATS 필드(sndMosu, sndMosuFlag, atsSndStartDate)는 ATS 캠페인(rcvType=0,10)에서만 사용
       const rcvTypeForPayload = campaign.rcvType ?? 0;
       const isMapticsCampaign = rcvTypeForPayload === 1 || rcvTypeForPayload === 2;
-      
+
       const createPayload: Record<string, unknown> = {
         tgtCompanyName: campaign.tgtCompanyName || '위픽',
         name: campaign.name,
@@ -1428,36 +1485,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (campaign.sndDayDiv !== null && campaign.sndDayDiv !== undefined) {
           createPayload.sndDayDiv = campaign.sndDayDiv;
         }
-        
+
         // BizChat geofence 생성 또는 기존 ID 사용
         // 1. campaign.sndGeofenceId가 이미 있으면 사용 (이전에 생성된 BizChat geofence ID)
         // 2. 없으면 targeting 테이블에서 geofenceIds 조회 후 BizChat geofence 생성
         let bizchatGeofenceId: number | null = campaign.sndGeofenceId || null;
-        
+
         if (!bizchatGeofenceId) {
           console.log('[Submit] No sndGeofenceId found, looking up geofences from targeting table...');
-          
+
           // targeting 테이블에서 geofenceIds 조회
           const targetingResult = await db.select().from(targeting).where(eq(targeting.campaignId, id));
           const campaignTargeting = targetingResult[0];
-          
+
           if (campaignTargeting?.geofenceIds?.length) {
             console.log('[Submit] Found geofenceIds in targeting:', campaignTargeting.geofenceIds);
-            
+
             // geofences 테이블에서 지오펜스 정보 조회
             const geofenceResult = await db.select().from(geofences).where(
               eq(geofences.id, campaignTargeting.geofenceIds[0])
             );
             const geofence = geofenceResult[0];
-            
+
             if (geofence) {
               console.log('[Submit] Found geofence in DB:', geofence.name, geofence.latitude, geofence.longitude);
-              
+
               // 기존 bizchatGeofenceId가 있으면 재사용
               if (geofence.bizchatGeofenceId) {
                 bizchatGeofenceId = parseInt(geofence.bizchatGeofenceId, 10);
                 console.log('[Submit] Reusing existing bizchatGeofenceId:', bizchatGeofenceId);
-                
+
                 // campaign.sndGeofenceId에도 저장
                 await db.update(campaigns)
                   .set({ sndGeofenceId: bizchatGeofenceId, updatedAt: new Date() })
@@ -1474,17 +1531,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   lat: geofence.latitude,
                   lon: geofence.longitude,
                 }];
-                
+
                 const geofenceCreateResult = await createBizChatGeofence(
                   `${campaign.name}_geofence_${Date.now()}`,
                   geofenceTargets,
                   useProduction
                 );
-                
+
                 if (geofenceCreateResult.success && geofenceCreateResult.geofenceId) {
                   bizchatGeofenceId = geofenceCreateResult.geofenceId;
                   console.log('[Submit] BizChat geofence created, ID:', bizchatGeofenceId);
-                  
+
                   // DB에 bizchatGeofenceId 저장 (campaign.sndGeofenceId 및 geofences.bizchatGeofenceId)
                   await Promise.all([
                     db.update(campaigns)
@@ -1520,19 +1577,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
           }
         }
-        
+
         // sndGeofenceId 추가 (필수)
         createPayload.sndGeofenceId = bizchatGeofenceId;
-        
+
         // collStartDate/collEndDate/collSndDate 추가 (rcvType=1/2 필수)
         // BizChat API 규격: 데이터 수집 시작/종료 일시 (Unix timestamp, 초 단위)
         // collStartDate: 지오펜스 데이터 수집 시작 시점 (반드시 현재보다 미래여야 함)
         // collEndDate: 지오펜스 데이터 수집 종료 시점
         // collSndDate: 발송 시작 시점 (rcvType=2 모아서 보내기용, rcvType=1은 실시간 발송)
-        // 
-        // E100015 규칙: rcvType=1(실시간)의 경우 rtStartHhmm~rtEndHhmm 시간대가 
+        //
+        // E100015 규칙: rcvType=1(실시간)의 경우 rtStartHhmm~rtEndHhmm 시간대가
         // collStartDate~collEndDate 범위 내에 포함되어야 함
-        
+
         // 발송 시작 시간 기준으로 기본값 계산
         // 우선순위: adjustedSendDate → campaign.scheduledAt → campaign.atsSndStartDate → now + 24h
         let scheduledSendTimestamp: number;
@@ -1542,15 +1599,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           scheduledSendTimestamp = toUnixTimestamp(new Date(campaign.scheduledAt));
         } else if (campaign.atsSndStartDate) {
           // atsSndStartDate가 이미 Unix timestamp라면 그대로 사용
-          scheduledSendTimestamp = typeof campaign.atsSndStartDate === 'number' 
-            ? campaign.atsSndStartDate 
+          scheduledSendTimestamp = typeof campaign.atsSndStartDate === 'number'
+            ? campaign.atsSndStartDate
             : toUnixTimestamp(new Date(campaign.atsSndStartDate));
         } else {
           // 기본값: 현재로부터 24시간 후
           scheduledSendTimestamp = toUnixTimestamp(new Date()) + 86400;
         }
         const nowTimestamp = toUnixTimestamp(new Date());
-        
+
         // 발송일의 날짜 부분 추출 (KST 기준)
         const scheduledDate = new Date(scheduledSendTimestamp * 1000);
         // KST = UTC + 9시간
@@ -1559,20 +1616,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const year = kstDate.getUTCFullYear();
         const month = kstDate.getUTCMonth();
         const day = kstDate.getUTCDate();
-        
+
         console.log(`[Submit] Maptics coll* calculation - scheduledSendTimestamp: ${scheduledSendTimestamp} (${scheduledDate.toISOString()}), KST date: ${year}-${month+1}-${day}`);
-        
+
         // rcvType=1 (실시간)의 경우 rtStartHhmm/rtEndHhmm 시간대를 고려
         // collStartDate는 rtStartHhmm 이전, collEndDate는 rtEndHhmm 이후가 되어야 함
         let collStartTimestamp: number;
         let collEndTimestamp: number;
-        
+
         if (rcvType === 1 && campaign.rtStartHhmm && campaign.rtEndHhmm) {
           // hhmm 형식에서 시간/분 추출 (예: "1500" → 15:00, "15:00" → 15:00)
           // non-digit 문자 제거 후 파싱
           const rtStartClean = String(campaign.rtStartHhmm).replace(/\D/g, '').padStart(4, '0');
           const rtEndClean = String(campaign.rtEndHhmm).replace(/\D/g, '').padStart(4, '0');
-          
+
           // 유효성 검증 (4자리 숫자인지 확인)
           if (rtStartClean.length < 4 || rtEndClean.length < 4) {
             console.error(`[Submit] Invalid rtHhmm format: rtStart=${campaign.rtStartHhmm}, rtEnd=${campaign.rtEndHhmm}`);
@@ -1582,12 +1639,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               hint: '발송 시간은 HHMM 형식(예: 1500)으로 입력해주세요.',
             });
           }
-          
+
           const rtStartHour = parseInt(rtStartClean.substring(0, 2), 10);
           const rtStartMin = parseInt(rtStartClean.substring(2, 4), 10);
           const rtEndHour = parseInt(rtEndClean.substring(0, 2), 10);
           const rtEndMin = parseInt(rtEndClean.substring(2, 4), 10);
-          
+
           // NaN 체크
           if (isNaN(rtStartHour) || isNaN(rtStartMin) || isNaN(rtEndHour) || isNaN(rtEndMin)) {
             console.error(`[Submit] NaN in rtHhmm parsing: ${rtStartHour}:${rtStartMin} ~ ${rtEndHour}:${rtEndMin}`);
@@ -1597,31 +1654,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               hint: '발송 시간을 확인해주세요.',
             });
           }
-          
+
           // rtStart/rtEnd UTC timestamp 계산
           const rtStartUtcMs = Date.UTC(year, month, day, rtStartHour - 9, rtStartMin, 0);
           const rtStartTimestamp = Math.floor(rtStartUtcMs / 1000);
           let rtEndUtcMs = Date.UTC(year, month, day, rtEndHour - 9, rtEndMin, 0);
           let rtEndTimestamp = Math.floor(rtEndUtcMs / 1000);
-          
+
           // 자정 넘김 처리: rtEnd < rtStart인 경우 (예: 23:00~01:00)
           // rtEndTimestamp에 24시간 추가
           if (rtEndTimestamp <= rtStartTimestamp) {
             rtEndTimestamp += 86400; // +24시간
             console.log(`[Submit] Cross-midnight detected: rtEnd adjusted to next day`);
           }
-          
+
           // BizChat 규칙: collStart ≤ rtStart ≤ rtEnd ≤ collEnd
           // collStartDate: rtStart와 동일 (BizChat은 같은 경우도 허용)
           // collEndDate: rtEnd + 30분
           collStartTimestamp = rtStartTimestamp;
           collEndTimestamp = rtEndTimestamp + 1800; // rtEnd + 30분
-          
+
           console.log(`[Submit] rcvType=1: rtStart=${rtStartHour}:${rtStartMin}, rtEnd=${rtEndHour}:${rtEndMin}`);
           console.log(`[Submit] rtStartTimestamp: ${rtStartTimestamp} (${new Date(rtStartTimestamp * 1000).toISOString()})`);
           console.log(`[Submit] rtEndTimestamp: ${rtEndTimestamp} (${new Date(rtEndTimestamp * 1000).toISOString()})`);
           console.log(`[Submit] Calculated collStart: ${new Date(collStartTimestamp * 1000).toISOString()}, collEnd: ${new Date(collEndTimestamp * 1000).toISOString()}`);
-          
+
           // collStartDate는 반드시 미래여야 함
           // 현재 시간이 이미 rtStart를 지났다면(초과) 캠페인 제출 불가
           // BizChat은 collStart == rtStart를 허용하므로 > 사용 (>= 아님)
@@ -1633,7 +1690,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               hint: `발송 시작 시간(${rtStartHour}:${String(rtStartMin).padStart(2, '0')})이 현재 시간보다 이후여야 합니다.`,
             });
           }
-          
+
           // collStartDate가 현재보다 과거거나 같으면 현재 + 60초로 조정
           // 단, rtStartTimestamp를 초과하면 안 됨
           if (collStartTimestamp <= nowTimestamp) {
@@ -1657,7 +1714,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               collStartTimestamp = nowPlus1Hour;
             }
           }
-          
+
           if (campaign.collEndDate) {
             collEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
             if (collEndTimestamp <= collStartTimestamp) {
@@ -1667,10 +1724,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             collEndTimestamp = scheduledSendTimestamp;
           }
         }
-        
+
         createPayload.collStartDate = collStartTimestamp;
         createPayload.collEndDate = collEndTimestamp;
-        
+
         // rcvType=2 (모아서 보내기)의 경우 collSndDate 추가
         if (rcvType === 2) {
           let collSndTimestamp: number;
@@ -1682,7 +1739,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
           createPayload.collSndDate = collSndTimestamp;
         }
-        
+
         console.log(`[Submit] Maptics campaign fields - rcvType: ${rcvType}, sndGeofenceId: ${bizchatGeofenceId}, collStartDate: ${collStartTimestamp} (${new Date(collStartTimestamp * 1000).toISOString()}), collEndDate: ${collEndTimestamp} (${new Date(collEndTimestamp * 1000).toISOString()}), rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
       }
 
@@ -1690,17 +1747,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // BizChat API 규격: sndMosuQuery는 ATS mosu API 응답의 query 문자열(SQL 형식)을 사용해야 함
       // 항상 targeting 테이블에서 조건을 조회하여 현재 환경(상용/개발)에 맞는 ATS API로 쿼리 생성
       let atsFilterStr = '';
-      
+
       // 1. targeting 테이블에서 타겟팅 조건 조회
       const targetingResult = await db.select().from(targeting).where(eq(targeting.campaignId, id));
       const campaignTargetingForAts = targetingResult[0];
-      
+
       console.log('[Submit] Querying targeting table for campaign:', id);
       console.log('[Submit] Found targeting data:', campaignTargetingForAts ? 'yes' : 'no');
-      
+
       // 2. targeting 테이블 조건 또는 campaign.sndMosuQuery 사용
       let filterPayload: Record<string, unknown>;
-      
+
       if (campaignTargetingForAts && (
         campaignTargetingForAts.gender ||
         campaignTargetingForAts.ageMin ||
@@ -1722,10 +1779,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else if (campaign.sndMosuQuery) {
         // fallback: campaign.sndMosuQuery 사용
         console.log('[Submit] Using campaign.sndMosuQuery as fallback...');
-        const queryString = typeof campaign.sndMosuQuery === 'string' 
-          ? campaign.sndMosuQuery 
+        const queryString = typeof campaign.sndMosuQuery === 'string'
+          ? campaign.sndMosuQuery
           : JSON.stringify(campaign.sndMosuQuery);
-        
+
         // JSON 형식의 필터 조건을 ATS mosu API에 전송하여 SQL query 획득
         const { query: convertedQuery, desc } = convertLegacySndMosuQuery(queryString);
         try {
@@ -1737,17 +1794,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // 타겟팅 조건 없음 - 기본 빈 필터
         filterPayload = { '$and': [] };
       }
-      
+
       // 3. ATS mosu API 호출 (필터 조건이 있는 경우만)
       const hasFilterConditions = filterPayload['$and'] && (filterPayload['$and'] as unknown[]).length > 0;
-      
+
       if (hasFilterConditions) {
         console.log('[Submit] Calling ATS mosu API to get SQL query...');
         console.log('[Submit] Filter payload:', JSON.stringify(filterPayload, null, 2));
-        
+
         // ATS mosu API 호출하여 SQL 형식의 query 획득
         const atsResult = await callATSMosuAPI(filterPayload, useProduction);
-        
+
         if (atsResult.success && atsResult.query) {
           // ATS API 응답의 SQL query를 sndMosuQuery로 사용
           createPayload.sndMosuQuery = atsResult.query;
@@ -1765,14 +1822,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         console.log('[Submit] No ATS filter conditions, skipping ATS mosu API call');
       }
-      
+
       // BizChat API 규격: sndMosuDesc는 HTML 형식이어야 함
       // 우선순위: 1. ATS API 응답의 filterStr, 2. DB에 저장된 sndMosuDesc
       if (atsFilterStr || campaign.sndMosuDesc) {
         const desc = atsFilterStr || campaign.sndMosuDesc || '';
         const isHtml = desc.startsWith('<html>') || desc.includes('<body>') || desc.includes('<table>');
-        createPayload.sndMosuDesc = isHtml 
-          ? desc 
+        createPayload.sndMosuDesc = isHtml
+          ? desc
           : `<html><body><p>${desc}</p></body></html>`;
         console.log('[Submit] sndMosuDesc:', createPayload.sndMosuDesc?.toString().substring(0, 200) + '...');
       }
@@ -1788,7 +1845,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // RCS 타입 설정 (billingType 1 또는 3일 때)
       // BizChat API rcsType: 0=스탠다드, 1=LMS(텍스트), 2=슬라이드(캐러셀), 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
-      // 
+      //
       // 각 RCS 타입별 이미지 규격:
       // - 스탠다드(0): 400x240, 500x300 (작은 이미지)
       // - 슬라이드(2): 464x336
@@ -1800,7 +1857,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 해결: 큰 이미지가 있는 RCS MMS는 이미지강조B(rcsType=4)를 사용 (900x900 지원)
       if (isRcs) {
         const slideCount = rcsSlide ? 1 : 0;
-        
+
         // rcsType 결정 로직:
         // 1. campaign.rcsType이 유효하면 사용 (0~5 범위)
         // 2. 유효하지 않으면 billingType에 따라 자동 결정:
@@ -1836,7 +1893,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('[Submit] Creating campaign in BizChat...');
       console.log('[Submit] Full createPayload:', JSON.stringify(createPayload, null, 2));
       const createResult = await callBizChatAPI('/api/v1/cmpn/create', 'POST', createPayload, useProduction);
-      
+
       if (createResult.data.code !== 'S000001') {
         console.error('[Submit] BizChat API error:', createResult.data);
         return res.status(400).json({
@@ -1846,9 +1903,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           response: createResult.data,
         });
       }
-      
+
       const bizchatCampaignId = (createResult.data.data as { id?: string })?.id as string;
-      
+
       if (!bizchatCampaignId) {
         return res.status(400).json({
           error: 'BizChat did not return campaign ID',
@@ -1857,15 +1914,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // DB에 조정된 발송 시간도 저장 (재제출 시 일관성 유지)
-      const updateData: Record<string, unknown> = { 
+      const updateData: Record<string, unknown> = {
         bizchatCampaignId,
         statusCode: 0,
         status: 'temp_registered',
         updatedAt: new Date(),
       };
       if (adjustedSendDate) {
-        updateData.atsSndStartDate = typeof adjustedSendDate === 'string' 
-          ? new Date(adjustedSendDate) 
+        updateData.atsSndStartDate = typeof adjustedSendDate === 'string'
+          ? new Date(adjustedSendDate)
           : adjustedSendDate;
         updateData.scheduledAt = updateData.atsSndStartDate;
       }
@@ -1885,15 +1942,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else if (campaign.messageType === 'MMS' || hasImage) {
         billingType = 2;
       }
-      
+
       const isRcs = billingType === 1 || billingType === 3;
       const needsFile = billingType === 1 || billingType === 2;
-      
+
       // ========== 이미지 파일 업로드 처리 (재제출 시) ==========
       // RCS 캠페인의 경우 RCS용 이미지와 LMS fallback용 이미지를 분리하여 업로드
       let updateImageFileId: string | null = null;
       let updateLmsImageFileIdResolved: string | null = null;
-      
+
       const updateUploadImageHelper = async (imgUrl: string, rcsFlag: number, label: string): Promise<string | null> => {
         if (imgUrl.startsWith('data:')) {
           console.log(`[Submit Update] ${label} image is base64, uploading to BizChat file API (rcs=${rcsFlag})...`);
@@ -1902,13 +1959,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
             const protocol = req.headers['x-forwarded-proto'] || (isLocalhost ? 'http' : 'https');
             const baseUrlForUpload = `${protocol}://${host}`;
-            
+
             const mimeMatch = imgUrl.match(/^data:([^;]+);/);
             const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
             const extMatch = mimeType.match(/image\/(\w+)/);
             const ext = extMatch ? extMatch[1] : 'jpg';
             const fileName = `campaign_${id}_${label}_${Date.now()}.${ext}`;
-            
+
             const uploadResponse = await fetch(`${baseUrlForUpload}/api/bizchat/file`, {
               method: 'POST',
               headers: {
@@ -1925,7 +1982,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 rcs: rcsFlag,
               }),
             });
-            
+
             const uploadResult = await uploadResponse.json();
             if (uploadResult.success && uploadResult.fileId) {
               console.log(`[Submit Update] ${label} image uploaded successfully, fileId: ${uploadResult.fileId}`);
@@ -1943,7 +2000,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return imgUrl;
         }
       };
-      
+
       if (needsFile && message?.imageUrl) {
         const rcsFlag = isRcs ? 1 : 0;
         const result = await updateUploadImageHelper(message.imageUrl, rcsFlag, isRcs ? 'RCS' : 'MMS');
@@ -1955,7 +2012,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
       }
-      
+
       // RCS 캠페인: LMS fallback용 이미지 별도 업로드 (rcs: 0)
       if (isRcs && needsFile) {
         const lmsImgUrl = (message as any)?.lmsImageUrl;
@@ -1974,33 +2031,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log('[Submit Update] No LMS fallback image provided, MMS fallback will have no image');
         }
       }
-      
+
       // 타겟팅/발송 수량 재계산
       const sndGoalCnt = campaign.sndGoalCnt || campaign.targetCount || 1000;
       const sndMosu = campaign.sndMosu || Math.ceil(sndGoalCnt * 1.5);
       console.log(`[Submit Update] Using sndMosu: ${sndMosu.toLocaleString()} (from ${campaign.sndMosu ? 'campaign' : 'calculated'})`);
-      
+
       // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
       // RCS URL 리스트 추출 (urlLinks는 JSONB로 저장됨: { list: string[], reward?: number })
-      const updateParsedUrlLinks = typeof (message as any)?.urlLinks === 'string' 
-        ? JSON.parse((message as any).urlLinks) 
+      const updateParsedUrlLinks = typeof (message as any)?.urlLinks === 'string'
+        ? JSON.parse((message as any).urlLinks)
         : (message as any)?.urlLinks;
       const updateRcsUrlList: string[] = updateParsedUrlLinks?.list || (message as any)?.urls || [];
       const updateRcsUrlReward = updateParsedUrlLinks?.reward;
-      
+
       // LMS fallback URL 리스트 (RCS 캠페인용)
       const updateLmsUrlLinksData = typeof (message as any)?.lmsUrlLinks === 'string'
         ? JSON.parse((message as any).lmsUrlLinks)
         : (message as any)?.lmsUrlLinks;
       const updateLmsUrlList: string[] = updateLmsUrlLinksData?.list || [];
       const updateLmsUrlReward = updateLmsUrlLinksData?.reward;
-      
+
       // buttons는 JSONB로 저장됨: { list: [{ type, name, val1, val2? }] } - RCS 전용
       const updateParsedButtons = typeof (message as any)?.buttons === 'string'
         ? JSON.parse((message as any).buttons)
         : (message as any)?.buttons;
       const updateRcsButtons = updateParsedButtons?.list || (message as any)?.rcsButtons || [];
-      
+
       // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
       // BizChat API 규격: mms.title은 필수 필드 - 빈 문자열 불가, 실제 값 필요
       // RCS 캠페인: MMS는 fallback 메시지 → lms* 필드 사용
@@ -2011,36 +2068,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       //   lms* 필드가 모두 비어있으면 RCS 필드 전체를 MMS에도 사용 (일괄 폴백)
       const updateHasLmsContent = !!((message as any)?.lmsContent?.trim());
       const updateUseLmsFallback = isRcs && updateHasLmsContent;
-      
+
       const updateFallbackContent = isRcs ? ((message as any)?.lmsContent || message?.content || '') : (message?.content || '');
       const updateMmsTitle = isRcs
         ? (message?.lmsTitle?.trim() || message?.title?.trim() || updateFallbackContent.split('\n')[0].trim().substring(0, 30) || '광고')
         : (message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
-      
+
       // MMS에 사용할 URL 리스트 결정:
       // - 비-RCS 캠페인: 기존 필드 사용
       // - RCS + lmsContent 있음: lmsUrlLinks 사용 (별도 폴백 메시지)
       // - RCS + lmsContent 없음: rcsUrlList로 폴백 (content와 urlLinks가 쌍으로 이동)
       const updateMmsUrlList: string[] = isRcs ? (updateUseLmsFallback ? updateLmsUrlList : updateRcsUrlList) : updateRcsUrlList;
       const updateMmsUrlReward = isRcs ? (updateUseLmsFallback ? updateLmsUrlReward : updateRcsUrlReward) : updateRcsUrlReward;
-      
+
       // MMS에 사용할 이미지:
       // - 비-RCS 캠페인: updateImageFileId
       // - RCS + lmsContent 있음: updateLmsImageFileIdResolved (별도 폴백 이미지)
       // - RCS + lmsContent 없음: updateImageFileId로 폴백 (RCS 이미지를 MMS에도 사용)
       const updateMmsImageFileId = isRcs ? (updateUseLmsFallback ? updateLmsImageFileIdResolved : updateImageFileId) : updateImageFileId;
-      
+
       if (isRcs) {
         console.log(`[Submit Update] RCS campaign MMS fallback mode: ${updateUseLmsFallback ? 'SEPARATE (lms* fields)' : 'UNIFIED (using RCS fields as fallback)'}`);
         console.log(`[Submit Update] MMS fallback details: lmsContent=${updateHasLmsContent}, fallbackContent length=${updateFallbackContent.length}, mmsImageFileId=${updateMmsImageFileId}, mmsUrlLinks=${updateMmsUrlList.length} urls`);
       }
-      
+
       const updateRawMmsTitle = updateMmsTitle;
       // BizChat API 규격: mms.title은 30자 제한 + (광고) 누락 시 자동 추가하는 안전장치 (E000002 방지)
       const updateMmsTitlePrefixed = truncateTitle(ensureAdPrefix(updateRawMmsTitle));
       // 사용자가 작성한 본문을 그대로 전송 (안내 멘트 자동 합성 없음 - 폼 디폴트로 이동)
       const updateMmsMsg = updateFallbackContent;
-      
+
       const updateMmsObject: Record<string, unknown> = {
         title: updateMmsTitlePrefixed,
         msg: updateMmsMsg,
@@ -2048,17 +2105,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...((message as any)?.urlFile && { urlFile: (message as any).urlFile }),
         ...(updateMmsUrlList.length > 0 && { urlLink: { list: updateMmsUrlList.slice(0, 3), ...(updateMmsUrlReward !== undefined && { reward: updateMmsUrlReward }) } }),
       };
-      
+
       // RCS 슬라이드 구성 - RCS 타입일 때만 생성
       // RCS 슬라이드: RCS 전용 필드 사용 (content, imageUrl, urlLinks, buttons)
       const updateEffectiveRcsType = (campaign.rcsType !== null && campaign.rcsType !== undefined && campaign.rcsType >= 0 && campaign.rcsType <= 5)
         ? campaign.rcsType
         : (billingType === 1 ? 4 : 1);
       console.log(`[Submit Update] effectiveRcsType for slideNum check: ${updateEffectiveRcsType}`);
-      
+
       const shouldIncludeUpdateRcsArray = isRcs;
       console.log(`[Submit Update] shouldIncludeRcsArray: ${shouldIncludeUpdateRcsArray}, effectiveRcsType: ${updateEffectiveRcsType}`);
-      
+
       // BizChat API 규격: rcs[].title도 30자 제한 (E000002 방지)
       const updateRcsTitle = truncateTitle(message?.title?.trim() || (message?.content || '').split('\n')[0].trim().substring(0, 30) || '광고');
       // 사용자가 작성한 본문을 그대로 전송 (안내 멘트 자동 합성 없음 - 폼 디폴트로 이동)
@@ -2070,21 +2127,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...(needsFile && updateImageFileId && { imgOrigId: updateImageFileId }),
         ...((message as any)?.rcsUrlFile && { urlFile: (message as any).rcsUrlFile }),
         ...(updateRcsUrlList.length > 0 && { urlLink: { list: updateRcsUrlList.slice(0, 3), ...(updateRcsUrlReward !== undefined && { reward: updateRcsUrlReward }) } }),
-        ...(updateRcsButtons.length > 0 && { 
-          buttons: { list: updateRcsButtons.map((btn: any) => ({ 
-            ...btn, 
+        ...(updateRcsButtons.length > 0 && {
+          buttons: { list: updateRcsButtons.map((btn: any) => ({
+            ...btn,
             type: String(btn.type),
             val2: btn.val2 ?? ''
           })) }
         }),
         opts: (message as any)?.rcsOpts || {},
       } : null;
-      
+
       // Maptics 캠페인(rcvType=1,2) 여부 확인
       // ATS 필드(sndMosu, sndMosuFlag, atsSndStartDate)는 ATS 캠페인(rcvType=0,10)에서만 사용
       const updateRcvTypeForPayload = campaign.rcvType ?? 0;
       const updateIsMapticsCampaign = updateRcvTypeForPayload === 1 || updateRcvTypeForPayload === 2;
-      
+
       // 업데이트 페이로드 구성 - 빈 배열/객체 완전히 생략
       const updatePayload: Record<string, unknown> = {
         name: campaign.name,
@@ -2117,26 +2174,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (campaign.sndDayDiv !== null && campaign.sndDayDiv !== undefined) {
           updatePayload.sndDayDiv = campaign.sndDayDiv;
         }
-        
+
         // sndGeofenceId 필수 추가 (기존 ID 사용 또는 targeting에서 조회/생성)
         let updateBizchatGeofenceId: number | null = campaign.sndGeofenceId || null;
-        
+
         if (!updateBizchatGeofenceId) {
           console.log('[Submit Update] No sndGeofenceId found, looking up geofences from targeting table...');
-          
+
           // targeting 테이블에서 geofenceIds 조회
           const targetingResult = await db.select().from(targeting).where(eq(targeting.campaignId, id));
           const campaignTargeting = targetingResult[0];
-          
+
           if (campaignTargeting?.geofenceIds?.length) {
             console.log('[Submit Update] Found geofenceIds in targeting:', campaignTargeting.geofenceIds);
-            
+
             // geofences 테이블에서 지오펜스 정보 조회
             const geofenceResult = await db.select().from(geofences).where(
               eq(geofences.id, campaignTargeting.geofenceIds[0])
             );
             const geofence = geofenceResult[0];
-            
+
             if (geofence) {
               // 기존 bizchatGeofenceId가 있으면 재사용
               if (geofence.bizchatGeofenceId) {
@@ -2154,17 +2211,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   lat: geofence.latitude,
                   lon: geofence.longitude,
                 }];
-                
+
                 const geofenceCreateResult = await createBizChatGeofence(
                   `${campaign.name}_geofence_${Date.now()}`,
                   geofenceTargets,
                   useProduction
                 );
-                
+
                 if (geofenceCreateResult.success && geofenceCreateResult.geofenceId) {
                   updateBizchatGeofenceId = geofenceCreateResult.geofenceId;
                   console.log('[Submit Update] BizChat geofence created, ID:', updateBizchatGeofenceId);
-                  
+
                   // DB에 저장
                   await Promise.all([
                     db.update(campaigns)
@@ -2182,7 +2239,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   });
                 }
               }
-              
+
               // campaign.sndGeofenceId에도 저장
               await db.update(campaigns)
                 .set({ sndGeofenceId: updateBizchatGeofenceId, updatedAt: new Date() })
@@ -2202,14 +2259,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
           }
         }
-        
+
         updatePayload.sndGeofenceId = updateBizchatGeofenceId;
-        
+
         // collStartDate/collEndDate/collSndDate 추가 (rcvType=1/2 필수)
         // BizChat API 규격: 데이터 수집 시작/종료 일시 (Unix timestamp, 초 단위)
-        // E100015 규칙: rcvType=1(실시간)의 경우 rtStartHhmm~rtEndHhmm 시간대가 
+        // E100015 규칙: rcvType=1(실시간)의 경우 rtStartHhmm~rtEndHhmm 시간대가
         // collStartDate~collEndDate 범위 내에 포함되어야 함
-        
+
         // 발송 시작 시간 기준으로 기본값 계산
         // 우선순위: adjustedSendDate → campaign.scheduledAt → campaign.atsSndStartDate → now + 24h
         let updateScheduledSendTimestamp: number;
@@ -2218,14 +2275,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } else if (campaign.scheduledAt) {
           updateScheduledSendTimestamp = toUnixTimestamp(new Date(campaign.scheduledAt));
         } else if (campaign.atsSndStartDate) {
-          updateScheduledSendTimestamp = typeof campaign.atsSndStartDate === 'number' 
-            ? campaign.atsSndStartDate 
+          updateScheduledSendTimestamp = typeof campaign.atsSndStartDate === 'number'
+            ? campaign.atsSndStartDate
             : toUnixTimestamp(new Date(campaign.atsSndStartDate));
         } else {
           updateScheduledSendTimestamp = toUnixTimestamp(new Date()) + 86400;
         }
         const updateNowTimestamp = toUnixTimestamp(new Date());
-        
+
         // 발송일의 날짜 부분 추출 (KST 기준)
         const updateScheduledDate = new Date(updateScheduledSendTimestamp * 1000);
         const updateKstOffset = 9 * 60 * 60 * 1000;
@@ -2233,18 +2290,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const updateYear = updateKstDate.getUTCFullYear();
         const updateMonth = updateKstDate.getUTCMonth();
         const updateDay = updateKstDate.getUTCDate();
-        
+
         console.log(`[Submit Update] Maptics coll* calculation - scheduledSendTimestamp: ${updateScheduledSendTimestamp} (${updateScheduledDate.toISOString()}), KST date: ${updateYear}-${updateMonth+1}-${updateDay}`);
-        
+
         // rcvType=1 (실시간)의 경우 rtStartHhmm/rtEndHhmm 시간대를 고려
         let updateCollStartTimestamp: number;
         let updateCollEndTimestamp: number;
-        
+
         if (updateRcvType === 1 && campaign.rtStartHhmm && campaign.rtEndHhmm) {
           // hhmm 형식에서 시간/분 추출 (non-digit 문자 제거)
           const rtStartClean = String(campaign.rtStartHhmm).replace(/\D/g, '').padStart(4, '0');
           const rtEndClean = String(campaign.rtEndHhmm).replace(/\D/g, '').padStart(4, '0');
-          
+
           if (rtStartClean.length < 4 || rtEndClean.length < 4) {
             console.error(`[Submit Update] Invalid rtHhmm format`);
             return res.status(400).json({
@@ -2253,12 +2310,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               hint: '발송 시간은 HHMM 형식(예: 1500)으로 입력해주세요.',
             });
           }
-          
+
           const rtStartHour = parseInt(rtStartClean.substring(0, 2), 10);
           const rtStartMin = parseInt(rtStartClean.substring(2, 4), 10);
           const rtEndHour = parseInt(rtEndClean.substring(0, 2), 10);
           const rtEndMin = parseInt(rtEndClean.substring(2, 4), 10);
-          
+
           if (isNaN(rtStartHour) || isNaN(rtStartMin) || isNaN(rtEndHour) || isNaN(rtEndMin)) {
             console.error(`[Submit Update] NaN in rtHhmm parsing`);
             return res.status(400).json({
@@ -2267,28 +2324,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               hint: '발송 시간을 확인해주세요.',
             });
           }
-          
+
           // rtStart/rtEnd UTC timestamp 계산
           const updateRtStartUtcMs = Date.UTC(updateYear, updateMonth, updateDay, rtStartHour - 9, rtStartMin, 0);
           const updateRtStartTimestamp = Math.floor(updateRtStartUtcMs / 1000);
           let updateRtEndUtcMs = Date.UTC(updateYear, updateMonth, updateDay, rtEndHour - 9, rtEndMin, 0);
           let updateRtEndTimestamp = Math.floor(updateRtEndUtcMs / 1000);
-          
+
           // 자정 넘김 처리: rtEnd < rtStart인 경우 (예: 23:00~01:00)
           if (updateRtEndTimestamp <= updateRtStartTimestamp) {
             updateRtEndTimestamp += 86400; // +24시간
             console.log(`[Submit Update] Cross-midnight detected: rtEnd adjusted to next day`);
           }
-          
+
           // BizChat 규칙: collStart ≤ rtStart ≤ rtEnd ≤ collEnd
           updateCollStartTimestamp = updateRtStartTimestamp;
           updateCollEndTimestamp = updateRtEndTimestamp + 1800;
-          
+
           console.log(`[Submit Update] rcvType=1: rtStart=${rtStartHour}:${rtStartMin}, rtEnd=${rtEndHour}:${rtEndMin}`);
           console.log(`[Submit Update] rtStartTimestamp: ${updateRtStartTimestamp} (${new Date(updateRtStartTimestamp * 1000).toISOString()})`);
           console.log(`[Submit Update] rtEndTimestamp: ${updateRtEndTimestamp} (${new Date(updateRtEndTimestamp * 1000).toISOString()})`);
           console.log(`[Submit Update] Calculated collStart: ${new Date(updateCollStartTimestamp * 1000).toISOString()}, collEnd: ${new Date(updateCollEndTimestamp * 1000).toISOString()}`);
-          
+
           // 현재 시간이 이미 rtStart를 지났다면(초과) 캠페인 제출 불가
           // BizChat은 collStart == rtStart를 허용하므로 > 사용
           if (updateNowTimestamp > updateRtStartTimestamp) {
@@ -2299,7 +2356,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               hint: `발송 시작 시간(${rtStartHour}:${String(rtStartMin).padStart(2, '0')})이 현재 시간보다 이후여야 합니다.`,
             });
           }
-          
+
           // collStartDate가 현재보다 과거거나 같으면 현재 + 60초로 조정
           if (updateCollStartTimestamp <= updateNowTimestamp) {
             updateCollStartTimestamp = Math.min(updateNowTimestamp + 60, updateRtStartTimestamp);
@@ -2321,7 +2378,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               updateCollStartTimestamp = nowPlus1Hour;
             }
           }
-          
+
           if (campaign.collEndDate) {
             updateCollEndTimestamp = toUnixTimestamp(new Date(campaign.collEndDate));
             if (updateCollEndTimestamp <= updateCollStartTimestamp) {
@@ -2331,10 +2388,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             updateCollEndTimestamp = updateScheduledSendTimestamp;
           }
         }
-        
+
         updatePayload.collStartDate = updateCollStartTimestamp;
         updatePayload.collEndDate = updateCollEndTimestamp;
-        
+
         // rcvType=2 (모아서 보내기)의 경우 collSndDate 추가
         if (updateRcvType === 2) {
           let updateCollSndTimestamp: number;
@@ -2345,23 +2402,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
           updatePayload.collSndDate = updateCollSndTimestamp;
         }
-        
+
         console.log(`[Submit Update] Maptics campaign fields - rcvType: ${updateRcvType}, sndGeofenceId: ${updateBizchatGeofenceId}, collStartDate: ${updateCollStartTimestamp} (${new Date(updateCollStartTimestamp * 1000).toISOString()}), collEndDate: ${updateCollEndTimestamp} (${new Date(updateCollEndTimestamp * 1000).toISOString()}), rtStartHhmm: ${campaign.rtStartHhmm}, rtEndHhmm: ${campaign.rtEndHhmm}, sndDayDiv: ${campaign.sndDayDiv}`);
       }
-      
+
       // 발송 시간 업데이트 (ATS 캠페인에서만 - Maptics는 collStartDate 사용)
       if (adjustedSendDate && !updateIsMapticsCampaign) {
         updatePayload.atsSndStartDate = toUnixTimestamp(
           typeof adjustedSendDate === 'string' ? new Date(adjustedSendDate) : adjustedSendDate
         );
       }
-      
+
       // RCS 타입 설정
       // BizChat API rcsType: 0=스탠다드, 1=LMS(텍스트), 2=슬라이드(캐러셀), 3=이미지강조A, 4=이미지강조B, 5=상품소개세로
       // E100038 오류 방지: 이미지가 있는 RCS MMS는 이미지강조B(rcsType=4) 사용
       if (isRcs) {
         const updateSlideCount = updateRcsSlide ? 1 : 0;
-        
+
         // rcsType 결정 로직:
         // 1. campaign.rcsType이 유효하면 사용 (0~5 범위)
         // 2. 유효하지 않으면 billingType에 따라 자동 결정
@@ -2388,21 +2445,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updatePayload.slideCnt = updateSlideCount || 1;
         }
       }
-      
+
       // sndMosuDesc/sndMosuQuery 업데이트 (타겟팅 필터)
       // BizChat API 규격: sndMosuQuery는 ATS mosu API 응답의 query 문자열(SQL 형식)을 사용해야 함
       // 항상 targeting 테이블에서 조건을 조회하여 현재 환경(상용/개발)에 맞는 ATS API로 쿼리 생성
       let updateAtsFilterStr = '';
-      
+
       // targeting 테이블에서 타겟팅 조건 조회
       const updateTargetingResult = await db.select().from(targeting).where(eq(targeting.campaignId, id));
       const updateCampaignTargeting = updateTargetingResult[0];
-      
+
       console.log('[Submit Update] Querying targeting table for campaign:', id);
       console.log('[Submit Update] Found targeting data:', updateCampaignTargeting ? 'yes' : 'no');
-      
+
       let updateFilterPayload: Record<string, unknown>;
-      
+
       if (updateCampaignTargeting && (
         updateCampaignTargeting.gender ||
         updateCampaignTargeting.ageMin ||
@@ -2424,12 +2481,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else if (campaign.sndMosuQuery) {
         // fallback: campaign.sndMosuQuery 사용
         console.log('[Submit Update] Using campaign.sndMosuQuery as fallback...');
-        const queryString = typeof campaign.sndMosuQuery === 'string' 
-          ? campaign.sndMosuQuery 
+        const queryString = typeof campaign.sndMosuQuery === 'string'
+          ? campaign.sndMosuQuery
           : JSON.stringify(campaign.sndMosuQuery);
-        
+
         const convertResult = convertLegacySndMosuQuery(queryString);
-        
+
         // 레거시 SQL 형식인 경우 그대로 사용
         if (convertResult.isLegacySql) {
           console.log('[Submit Update] Using legacy SQL query directly (skipping ATS mosu API)');
@@ -2446,16 +2503,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         updateFilterPayload = { '$and': [] };
       }
-      
+
       // ATS mosu API 호출 (필터 조건이 있는 경우만)
       const updateHasConditions = updateFilterPayload['$and'] && (updateFilterPayload['$and'] as unknown[]).length > 0;
-      
+
       if (updateHasConditions) {
         console.log('[Submit Update] Calling ATS mosu API to get SQL query...');
         console.log('[Submit Update] Filter payload:', JSON.stringify(updateFilterPayload, null, 2));
-        
+
         const atsResult = await callATSMosuAPI(updateFilterPayload, useProduction);
-        
+
         if (atsResult.success && atsResult.query) {
           updatePayload.sndMosuQuery = atsResult.query;
           updateAtsFilterStr = atsResult.filterStr;
@@ -2470,40 +2527,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         console.log('[Submit Update] No ATS filter conditions, skipping ATS mosu API call');
       }
-      
+
       if (updateAtsFilterStr || campaign.sndMosuDesc) {
         const desc = updateAtsFilterStr || campaign.sndMosuDesc || '';
         const isHtml = desc.startsWith('<html>') || desc.includes('<body>') || desc.includes('<table>');
         updatePayload.sndMosuDesc = isHtml ? desc : `<html><body><p>${desc}</p></body></html>`;
       }
-      
+
       console.log('[Submit] Updating existing BizChat campaign...');
       console.log('[Submit] Update payload:', JSON.stringify(updatePayload, null, 2));
-      
+
       const updateResult = await callBizChatAPI(
         `/api/v1/cmpn/update?id=${campaign.bizchatCampaignId}`,
         'POST',
         updatePayload,
         useProduction
       );
-      
+
       if (updateResult.data.code !== 'S000001') {
         console.warn('[Submit] BizChat update warning:', updateResult.data);
         // 업데이트 실패해도 승인 요청은 계속 진행
       } else {
         console.log('[Submit] BizChat campaign updated successfully');
       }
-      
+
       // DB에도 조정된 시간 저장
       if (adjustedSendDate) {
         await db.update(campaigns)
-          .set({ 
+          .set({
             atsSndStartDate: typeof adjustedSendDate === 'string' ? new Date(adjustedSendDate) : adjustedSendDate,
             scheduledAt: typeof adjustedSendDate === 'string' ? new Date(adjustedSendDate) : adjustedSendDate,
             updatedAt: new Date(),
           })
           .where(eq(campaigns.id, id));
       }
+    }
+
+    let reservedCreditsForApproval = false;
+
+    if (isCreditModeEnabled()) {
+      const reserveResult = await reserveCampaignCreditsForServerless(db, {
+        userId: auth.userId,
+        campaignId: id,
+        neededCredits: creditEstimate.neededCredits,
+        scheduledAt: adjustedSendDate,
+        description: `캠페인 예약: ${campaign.name}`,
+      });
+
+      if (!reserveResult.success) {
+        return res.status(400).json({
+          error: reserveResult.error || '예약 크레딧 처리 중 오류가 발생했습니다',
+        });
+      }
+
+      reservedCreditsForApproval = true;
     }
 
     console.log('[Submit] Requesting approval...');
@@ -2516,6 +2593,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (approvalResult.data.code !== 'S000001') {
       console.error('[Submit] Approval request failed:', approvalResult.data);
+      if (reservedCreditsForApproval) {
+        await releaseReservedCampaignCreditsForServerless(db, {
+          userId: auth.userId,
+          campaignId: id,
+          description: `승인 요청 실패로 예약 크레딧 해제 (${campaign.name})`,
+          statusCode: campaign.statusCode || 0,
+          status: campaign.status || 'temp_registered',
+        });
+      }
       return res.status(400).json({
         error: `승인 요청 실패: ${approvalResult.data.msg || approvalResult.data.code}`,
         bizchatCode: approvalResult.data.code,
@@ -2525,14 +2611,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 승인 요청 후 상태 업데이트 (조정된 발송 시간 유지)
-    const approvalUpdateData: Record<string, unknown> = { 
+    const approvalUpdateData: Record<string, unknown> = {
       statusCode: 10,
       status: 'approval_requested',
       updatedAt: new Date(),
     };
     if (adjustedSendDate) {
-      approvalUpdateData.scheduledAt = typeof adjustedSendDate === 'string' 
-        ? new Date(adjustedSendDate) 
+      approvalUpdateData.scheduledAt = typeof adjustedSendDate === 'string'
+        ? new Date(adjustedSendDate)
         : adjustedSendDate;
       approvalUpdateData.atsSndStartDate = approvalUpdateData.scheduledAt;
     }
@@ -2541,14 +2627,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .where(eq(campaigns.id, id));
 
     console.log(`[Submit] Approval requested for campaign: ${id}`);
-    
+
     return res.status(200).json({
       success: true,
       campaignId: id,
       bizchatCampaignId: campaign.bizchatCampaignId,
       statusCode: 10,
       status: 'approval_requested',
-      message: scheduledAt 
+      message: scheduledAt
         ? `캠페인이 BizChat에 등록되었고, ${new Date(scheduledAt).toLocaleString('ko-KR')}에 발송 예정입니다.`
         : '캠페인이 BizChat에 등록되었고, 승인 요청이 완료되었습니다.',
     });

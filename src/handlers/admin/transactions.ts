@@ -45,7 +45,7 @@ function verifyToken(token: string): { adminId: string } | null {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -102,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .where(and(eq(transactions.type, 'charge'), gte(transactions.createdAt, monthStart)));
 
     const conditions = [];
-    
+
     if (search) {
       conditions.push(ilike(users.email, `%${search}%`));
     }

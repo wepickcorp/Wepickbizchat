@@ -8,6 +8,7 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { createClient } from "@supabase/supabase-js";
+import { getLocalDevSessionUserId } from "./devAuth";
 
 const getOidcConfig = memoize(
   async () => {
@@ -23,16 +24,8 @@ const isLocalDevAuth = process.env.NODE_ENV === "development" && process.env.REP
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const pgStore = connectPg(session);
-  const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
-    ttl: sessionTtl,
-    tableName: "sessions",
-  });
-  return session({
-    secret: process.env.SESSION_SECRET!,
-    store: sessionStore,
+  const sessionOptions: session.SessionOptions = {
+    secret: process.env.SESSION_SECRET || (isLocalDevAuth ? "local-dev-session-secret" : ""),
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -40,7 +33,25 @@ export function getSession() {
       secure: !isLocalDevAuth,
       maxAge: sessionTtl,
     },
-  });
+  };
+
+  if (!sessionOptions.secret) {
+    throw new Error("SESSION_SECRET must be set");
+  }
+
+  if (process.env.DATABASE_URL) {
+    const pgStore = connectPg(session);
+    sessionOptions.store = new pgStore({
+      conString: process.env.DATABASE_URL,
+      createTableIfMissing: false,
+      ttl: sessionTtl,
+      tableName: "sessions",
+    });
+  } else if (!isLocalDevAuth) {
+    throw new Error("DATABASE_URL must be set");
+  }
+
+  return session(sessionOptions);
 }
 
 function updateUserSession(
@@ -148,11 +159,11 @@ export async function setupAuth(app: Express) {
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
+
   if (!supabaseUrl || !supabaseServiceKey) {
     return null;
   }
-  
+
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
@@ -164,7 +175,7 @@ function getSupabaseAdmin() {
 async function verifySupabaseToken(token: string): Promise<{ userId: string; email: string } | null> {
   const supabase = getSupabaseAdmin();
   if (!supabase) return null;
-  
+
   try {
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (error || !user) return null;
@@ -181,7 +192,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -193,10 +204,17 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  const localDevUserId = getLocalDevSessionUserId(req);
+  if (localDevUserId) {
+    (req as any).userId = localDevUserId;
+    (req as any).userEmail = "";
+    return next();
+  }
+
   // 대리 로그인 토큰 확인 (X-Impersonate-Token 헤더)
   const impersonateToken = req.headers['x-impersonate-token'] as string;
   const impersonateUserId = req.headers['x-impersonate-user-id'] as string;
-  
+
   if (impersonateToken && impersonateUserId) {
     const verified = verifyImpersonateToken(impersonateToken);
     if (verified && verified.userId === impersonateUserId) {
@@ -208,9 +226,9 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     // 토큰이 유효하지 않으면 401 반환
     return res.status(401).json({ message: "Impersonation token invalid or expired" });
   }
-  
+
   const authHeader = req.headers.authorization;
-  
+
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.replace('Bearer ', '');
     const auth = await verifySupabaseToken(token);
@@ -220,7 +238,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
       return next();
     }
   }
-  
+
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user?.expires_at) {

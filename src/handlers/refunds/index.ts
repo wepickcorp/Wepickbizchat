@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { sql, desc, eq, and } from 'drizzle-orm';
 import { pgTable, varchar, timestamp, decimal, text } from 'drizzle-orm/pg-core';
 import { createClient } from '@supabase/supabase-js';
+import { CREDIT_PRODUCTS } from '../../../shared/credit-policy';
 
 const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -28,6 +29,21 @@ const refunds = pgTable("refunds", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+const creditGrants = pgTable("credit_grants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  productType: varchar("product_type", { length: 30 }),
+  remainingCredits: decimal("remaining_credits", { precision: 12, scale: 0 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+const CREDIT_UNIT_PRICE: Record<string, number> = {
+  light: CREDIT_PRODUCTS.light.priceKrw / CREDIT_PRODUCTS.light.credits,
+  topup: CREDIT_PRODUCTS.topup.priceKrw / CREDIT_PRODUCTS.topup.credits,
+  booster: CREDIT_PRODUCTS.booster.priceKrw / CREDIT_PRODUCTS.booster.credits,
+  enterprise: CREDIT_PRODUCTS.enterprise.priceKrw / CREDIT_PRODUCTS.enterprise.credits,
+};
+
 function getDb() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL not configured');
@@ -37,13 +53,13 @@ function getDb() {
 async function getAuthenticatedUser(req: VercelRequest) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
-  
+
   const token = authHeader.replace('Bearer ', '');
   const supabase = createClient(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-  
+
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return null;
   return user;
@@ -75,7 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     try {
       const { amount, reason, bankName, accountNumber, accountHolder } = req.body || {};
-      
+
       const numAmount = Number(amount);
       if (isNaN(numAmount) || numAmount < 10000) {
         return res.status(400).json({ error: '환불 금액은 최소 10,000원 이상이어야 합니다' });
@@ -92,9 +108,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: '사용자를 찾을 수 없습니다' });
       }
 
-      const currentBalance = Number(dbUser.balance || 0);
-      if (numAmount > currentBalance) {
-        return res.status(400).json({ error: '환불 금액이 현재 잔액보다 많습니다' });
+      if (process.env.CREDIT_MODE_ENABLED === 'true') {
+        const activeCreditLots = await db
+          .select({
+            remainingCredits: creditGrants.remainingCredits,
+            productType: creditGrants.productType,
+          })
+          .from(creditGrants)
+          .where(and(
+            eq(creditGrants.userId, user.id),
+            sql`${creditGrants.remainingCredits} > 0`,
+            sql`${creditGrants.expiresAt} > ${new Date()}`,
+          ));
+        const refundableCredits = activeCreditLots.reduce(
+          (sum, lot) => sum + Number(lot.remainingCredits || 0),
+          0,
+        );
+        if (refundableCredits <= 0) {
+          return res.status(400).json({
+            error: '환불 가능한 크레딧이 없습니다. 예약 중이거나 이미 사용된 크레딧은 환불 신청에서 제외됩니다',
+          });
+        }
+        const refundableValueKrw = activeCreditLots.reduce((sum, lot) => {
+          const productType = String(lot.productType || '');
+          const unitPrice = CREDIT_UNIT_PRICE[productType] || 0;
+          return sum + Number(lot.remainingCredits || 0) * unitPrice;
+        }, 0);
+        if (numAmount > Math.floor(refundableValueKrw)) {
+          return res.status(400).json({
+            error: `환불 가능 금액은 약 ${Math.floor(refundableValueKrw).toLocaleString('ko-KR')}원입니다`,
+          });
+        }
+      } else {
+        const currentBalance = Number(dbUser.balance || 0);
+        if (numAmount > currentBalance) {
+          return res.status(400).json({ error: '환불 금액이 현재 잔액보다 많습니다' });
+        }
       }
 
       const [pendingRefund] = await db

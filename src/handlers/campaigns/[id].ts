@@ -118,7 +118,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -140,7 +140,7 @@ async function verifyAuth(req: VercelRequest) {
     console.log('[Campaign API] Impersonate token verification failed');
     return null;
   }
-  
+
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {
@@ -197,7 +197,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const message = messageResult[0];
 
       const updateData: Record<string, unknown> = { ...req.body, updatedAt: new Date() };
-      
+
       // Date 필드 변환 (Maptics 필드 포함)
       const dateFields = ['scheduledAt', 'atsSndStartDate', 'completedAt', 'collStartDate', 'collEndDate', 'collSndDate'];
       for (const field of dateFields) {
@@ -207,7 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updateData[field] = null;
         }
       }
-      
+
       // 숫자 필드 변환 (문자열로 전달된 경우) - Maptics 필드 포함
       const intFields = ['sndMosu', 'sndGoalCnt', 'targetCount', 'rcvType', 'billingType', 'rcsType', 'settleCnt', 'statusCode', 'sndGeofenceId', 'sndDayDiv'];
       for (const field of intFields) {
@@ -232,7 +232,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // SIM_ 접두사는 시뮬레이션 ID이므로 BizChat 호출 생략
       const bizchatId = campaign.bizchatCampaignId;
       const isSimulation = bizchatId?.startsWith('SIM_');
-      
+
       // 수정 가능 상태: 임시등록(0), 검수완료(2), 반려(17)
       const editableStates = [0, 2, 17];
       const canUpdateBizChat = bizchatId && !isSimulation && editableStates.includes(campaign.statusCode || 0);
@@ -243,7 +243,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
           const protocol = req.headers['x-forwarded-proto'] || (isLocalhost ? 'http' : 'https');
           const baseUrl = `${protocol}://${host}`;
-          
+
           // 메시지 업데이트가 있으면 messages 테이블도 업데이트
           const messageUpdate = req.body.message;
           let currentMessage = message;
@@ -260,7 +260,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (messageUpdate.lmsImageUrl !== undefined) messageUpdateData.lmsImageUrl = messageUpdate.lmsImageUrl;
             if (messageUpdate.lmsImageFileId !== undefined) messageUpdateData.lmsImageFileId = messageUpdate.lmsImageFileId;
             if (messageUpdate.lmsUrlLinks !== undefined) messageUpdateData.lmsUrlLinks = messageUpdate.lmsUrlLinks;
-            
+
             if (Object.keys(messageUpdateData).length > 0 && message) {
               await db.update(messages).set(messageUpdateData).where(eq(messages.campaignId, id));
               currentMessage = { ...message, ...messageUpdateData };
@@ -305,12 +305,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const rcvType = updatedCampaign.rcvType ?? campaign.rcvType ?? 0;
           const billingType = updatedCampaign.billingType ?? campaign.billingType ?? 0;
           const sndGoalCnt = updatedCampaign.sndGoalCnt || campaign.sndGoalCnt || 1;
-          
+
           // Unix timestamp (초 단위) 계산
           // 발송일시 재설정 로직: 기존 값이 과거이거나 1시간 이내이면 현재+2시간으로 자동 설정
           // BizChat 규격: 발송 시간은 10분 단위여야 함 (예: 7:30, 7:40)
           const now = new Date();
-          
+
           // 10분 단위로 올림하는 함수
           const roundUpTo10Minutes = (date: Date): Date => {
             const ms = date.getTime();
@@ -318,12 +318,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const rounded = Math.ceil(ms / tenMinutes) * tenMinutes;
             return new Date(rounded);
           };
-          
+
           // 현재 + 2시간, 10분 단위로 올림
           const minSendTime = roundUpTo10Minutes(new Date(now.getTime() + 120 * 60 * 1000));
-          
+
           let effectiveAtsSndStartDate = updatedCampaign.atsSndStartDate || campaign.atsSndStartDate;
-          
+
           // 기존 발송일시 검증 및 자동 재설정
           if (effectiveAtsSndStartDate) {
             const existingSendTime = new Date(effectiveAtsSndStartDate);
@@ -342,35 +342,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             effectiveAtsSndStartDate = minSendTime;
             console.log(`[Campaign PATCH] 발송일시 기본값 설정: ${minSendTime.toISOString()} (10분 단위)`);
           }
-          
-          const atsSndStartTimestamp = effectiveAtsSndStartDate 
-            ? Math.floor(new Date(effectiveAtsSndStartDate).getTime() / 1000) 
+
+          const atsSndStartTimestamp = effectiveAtsSndStartDate
+            ? Math.floor(new Date(effectiveAtsSndStartDate).getTime() / 1000)
             : undefined;
-          
+
           // 로컬 DB에도 재설정된 발송일시 반영
           if (effectiveAtsSndStartDate && (
-            !campaign.atsSndStartDate || 
+            !campaign.atsSndStartDate ||
             new Date(campaign.atsSndStartDate).getTime() !== new Date(effectiveAtsSndStartDate).getTime()
           )) {
-            await db.update(campaigns).set({ 
+            await db.update(campaigns).set({
               atsSndStartDate: new Date(effectiveAtsSndStartDate),
               scheduledAt: new Date(effectiveAtsSndStartDate),
               updatedAt: new Date()
             }).where(eq(campaigns.id, id));
           }
-          
+
           // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
           // MMS 객체 구성 - 조건부로 필드 포함 (빈 객체/배열 생략)
           const existingMms = existingBizchatData?.mms as Record<string, unknown> | undefined;
           const existingFileInfo = existingMms?.fileInfo;
           const existingUrlFile = existingMms?.urlFile;
           const existingUrlLink = existingMms?.urlLink as { list?: unknown[] } | undefined;
-          
+
           // 새 이미지가 있으면 사용, 없으면 기존 BizChat fileInfo 보존
           const newFileInfo = (currentMessage?.imageUrl && currentMessage.imageUrl.trim())
             ? { list: [{ origId: currentMessage.imageUrl }] }
             : existingFileInfo;
-          
+
           // mms.title은 LMS 폴백 제목. RCS 캠페인(billingType=1,3)은 lmsTitle을 우선 사용
           const isRcsCampaign = billingType === 1 || billingType === 3;
           const rawMmsTitle = isRcsCampaign
@@ -378,7 +378,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             : (currentMessage?.title?.trim() || updatedCampaign.name || campaign.name || '');
           // BizChat 규격: mms.title 최대 30자
           const mmsTitle = rawMmsTitle.length > 30 ? rawMmsTitle.substring(0, 30) : rawMmsTitle;
-          
+
           const mmsPayload: Record<string, unknown> = {
             title: mmsTitle,
             msg: currentMessage?.content || '',
@@ -416,13 +416,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             } else if (existingBizchatData?.atsSndStartDate) {
               bizchatUpdatePayload.atsSndStartDate = existingBizchatData.atsSndStartDate;
             }
-            
+
             // sndMosu: 요청에서 전달된 값을 그대로 사용 (프론트엔드에서 ATS mosu API로 계산된 값)
             // 프론트엔드가 타겟팅 변경 시 새로운 모수를 계산하여 전달해야 함
             const sndMosu = updatedCampaign.sndMosu || campaign.sndMosu || (existingBizchatData?.sndMosu as number) || 0;
             const minSndMosu = Math.ceil(sndGoalCnt * 1.5);
             const maxSndMosu = 400000;
-            
+
             // 최대값 검증 (자동 제한 없이 에러 반환 - 프론트엔드에서 타겟팅 조건 수정 필요)
             if (sndMosu > maxSndMosu) {
               const { sndGoalCnt: _, ...restCampaign } = updatedCampaign;
@@ -435,7 +435,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 hint: '연령대 범위 축소, 지역 제한 등으로 타겟팅을 좁히면 모수가 줄어듭니다.',
               });
             }
-            
+
             // 최소값 검증 (150% 이상)
             if (sndMosu < minSndMosu) {
               const { sndGoalCnt: _, ...restCampaign2 } = updatedCampaign;
@@ -447,13 +447,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 sndGoalCnt,
               });
             }
-            
+
             bizchatUpdatePayload.sndMosu = sndMosu;
             bizchatUpdatePayload.sndMosuQuery = updatedCampaign.sndMosuQuery || campaign.sndMosuQuery || (existingBizchatData?.sndMosuQuery as string) || '';
             bizchatUpdatePayload.sndMosuDesc = updatedCampaign.sndMosuDesc || campaign.sndMosuDesc || (existingBizchatData?.sndMosuDesc as string) || '';
-            
+
             console.log(`[Campaign PATCH] Using sndMosu: ${sndMosu.toLocaleString()} (from ${updatedCampaign.sndMosu ? 'request' : 'stored'})`);
-            
+
             // sndMosuQuery가 비어있으면 에러
             if (!bizchatUpdatePayload.sndMosuQuery) {
               return res.status(400).json({
@@ -481,18 +481,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const collStartDate = existingBizchatData?.collStartDate;
             const collEndDate = existingBizchatData?.collEndDate;
             const sndGeofenceId = existingBizchatData?.sndGeofenceId;
-            
+
             if (!collStartDate || !collEndDate || !sndGeofenceId) {
               return res.status(400).json({
                 error: 'Maptics 타겟팅 캠페인에 필수 필드(collStartDate, collEndDate, sndGeofenceId)가 없습니다.',
                 ...updatedCampaign,
               });
             }
-            
+
             bizchatUpdatePayload.collStartDate = collStartDate;
             bizchatUpdatePayload.collEndDate = collEndDate;
             bizchatUpdatePayload.sndGeofenceId = sndGeofenceId;
-            
+
             if (rcvType === 1) {
               // 실시간 보내기
               const rtStartHhmm = existingBizchatData?.rtStartHhmm;
@@ -543,7 +543,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
 
           const updateResult = await updateResponse.json();
-          
+
           if (!updateResponse.ok || !updateResult.success) {
             console.error('[Campaign PATCH] BizChat update failed:', updateResult);
             // BizChat 업데이트 실패 시 에러 반환 (로컬은 이미 업데이트됨)
@@ -590,13 +590,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const campaign = campaignResult[0];
       if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
       if (campaign.userId !== userId) return res.status(403).json({ error: 'Access denied' });
-      
+
       // BizChat API 규격: isTmp=1 또는 state=0 (임시등록) 캠페인만 삭제 가능
       const DELETABLE_STATUS_CODES = [0];
       if (!DELETABLE_STATUS_CODES.includes(campaign.statusCode || 0)) {
         console.error(`Cannot delete campaign with status ${campaign.statusCode}`);
-        return res.status(400).json({ 
-          error: '임시등록(0) 상태의 캠페인만 삭제할 수 있습니다.' 
+        return res.status(400).json({
+          error: '임시등록(0) 상태의 캠페인만 삭제할 수 있습니다.'
         });
       }
 
@@ -604,14 +604,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // SIM_ 접두사는 시뮬레이션 ID이므로 BizChat 호출 생략
       const bizchatId = campaign.bizchatCampaignId;
       const isSimulation = bizchatId?.startsWith('SIM_');
-      
+
       if (bizchatId && !isSimulation) {
         try {
           const host = req.headers.host || process.env.VERCEL_URL || 'localhost:5000';
           const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
           const protocol = req.headers['x-forwarded-proto'] || (isLocalhost ? 'http' : 'https');
           const baseUrl = `${protocol}://${host}`;
-          
+
           const deleteResponse = await fetch(`${baseUrl}/api/bizchat/campaigns`, {
             method: 'POST',
             headers: {

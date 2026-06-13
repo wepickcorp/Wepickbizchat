@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Users, Megaphone, Send, Target, MousePointer, TrendingUp, BarChart3 } from "lucide-react";
+import { calculateCampaignCredits } from "@shared/credit-policy";
 
 interface AnalyticsData {
   period: { days: number; startDate: string };
@@ -194,7 +195,7 @@ export default function AdminAnalytics() {
           <Card>
             <CardHeader>
               <CardTitle>Top 광고주</CardTitle>
-              <CardDescription>기간 내 예산 기준 상위 10개 광고주</CardDescription>
+              <CardDescription>기간 내 발송량과 필요 크레딧 기준 상위 광고주</CardDescription>
             </CardHeader>
             <CardContent>
               {data?.topAdvertisers?.length ? (
@@ -206,23 +207,33 @@ export default function AdminAnalytics() {
                         <th className="text-left py-3 px-2">광고주</th>
                         <th className="text-right py-3 px-2">캠페인 수</th>
                         <th className="text-right py-3 px-2">발송 건수</th>
-                        <th className="text-right py-3 px-2">총 예산</th>
+                        <th className="text-right py-3 px-2">필요 크레딧</th>
+                        <th className="text-right py-3 px-2">레거시 예산</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.topAdvertisers.map((advertiser, index) => (
-                        <tr key={advertiser.userId} className="border-b">
-                          <td className="py-3 px-2">
-                            <Badge variant={index < 3 ? "default" : "secondary"}>{index + 1}</Badge>
-                          </td>
-                          <td className="py-3 px-2 font-medium">{advertiser.userEmail}</td>
-                          <td className="py-3 px-2 text-right">{advertiser.campaignCount}건</td>
-                          <td className="py-3 px-2 text-right">{Number(advertiser.totalSent).toLocaleString()}건</td>
-                          <td className="py-3 px-2 text-right font-bold">
-                            ₩{Number(advertiser.totalBudget).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
+                      {data.topAdvertisers.map((advertiser, index) => {
+                        const neededCredits = calculateCampaignCredits({
+                          targetCount: Number(advertiser.totalSent || 0),
+                        }).neededCredits;
+
+                        return (
+                          <tr key={advertiser.userId} className="border-b">
+                            <td className="py-3 px-2">
+                              <Badge variant={index < 3 ? "default" : "secondary"}>{index + 1}</Badge>
+                            </td>
+                            <td className="py-3 px-2 font-medium">{advertiser.userEmail}</td>
+                            <td className="py-3 px-2 text-right">{advertiser.campaignCount}건</td>
+                            <td className="py-3 px-2 text-right">{Number(advertiser.totalSent).toLocaleString()}건</td>
+                            <td className="py-3 px-2 text-right font-bold">
+                              {neededCredits.toLocaleString("ko-KR")}C
+                            </td>
+                            <td className="py-3 px-2 text-right text-muted-foreground">
+                              ₩{Number(advertiser.totalBudget).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -244,8 +255,8 @@ export default function AdminAnalytics() {
                       <div key={item.date} className="flex items-center justify-between">
                         <span className="text-muted-foreground">{item.date}</span>
                         <div className="flex items-center gap-2">
-                          <div 
-                            className="h-2 bg-primary rounded" 
+                          <div
+                            className="h-2 bg-primary rounded"
                             style={{ width: `${Math.min(100, item.count * 20)}px` }}
                           />
                           <span className="font-medium w-8 text-right">{item.count}</span>
@@ -270,8 +281,8 @@ export default function AdminAnalytics() {
                       <div key={item.date} className="flex items-center justify-between">
                         <span className="text-muted-foreground">{item.date}</span>
                         <div className="flex items-center gap-2">
-                          <div 
-                            className="h-2 bg-primary rounded" 
+                          <div
+                            className="h-2 bg-primary rounded"
                             style={{ width: `${Math.min(100, item.count * 20)}px` }}
                           />
                           <span className="font-medium w-8 text-right">{item.count}</span>

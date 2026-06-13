@@ -10,8 +10,8 @@ function getBizChatUrl() {
 }
 
 function getBizChatApiKey() {
-  return process.env.BIZCHAT_USE_PROD === 'true' 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  return process.env.BIZCHAT_USE_PROD === 'true'
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 }
 
@@ -47,7 +47,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -202,7 +202,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
       ...(cat.cat2 && { cat2: cat.cat2Name || cat.cat2 }),  // 카테고리 이름 (예: "침대/소파")
       ...(cat.cat3 && { cat3: cat.cat3Name || cat.cat3 }),  // 카테고리 이름 (예: "펠트")
     }));
-    
+
     // 설명에는 표시명 사용
     const categoryDesc = params.shopping11stCategories.map(cat => {
       const cat1Display = cat.cat1Name || cat.cat1;
@@ -210,7 +210,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
       const cat3Display = cat.cat3 ? (cat.cat3Name || cat.cat3) : '';
       return `${cat1Display}${cat2Display ? ' > ' + cat2Display : ''}${cat3Display ? ' > ' + cat3Display : ''}`;
     }).join(', ');
-    
+
     conditions.push({
       data: categoryData,
       dataType: 'cate',
@@ -231,7 +231,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
       ...(cat.cat2 && { cat2: cat.cat2Name || cat.cat2 }),  // 카테고리 이름 (예: "VR/AR게임")
       ...(cat.cat3 && { cat3: cat.cat3Name || cat.cat3 }),  // 카테고리 이름 (예: "포켓몬 고")
     }));
-    
+
     // 설명에는 표시명 사용
     const categoryDesc = params.webappCategories.map(cat => {
       const cat1Display = cat.cat1Name || cat.cat1;
@@ -239,7 +239,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
       const cat3Display = cat.cat3 ? (cat.cat3Name || cat.cat3) : '';
       return `${cat1Display}${cat2Display ? ' > ' + cat2Display : ''}${cat3Display ? ' > ' + cat3Display : ''}`;
     }).join(', ');
-    
+
     conditions.push({
       data: categoryData,
       dataType: 'cate',
@@ -260,7 +260,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
       ...(cat.cat2 && { cat2: cat.cat2Name || cat.cat2 }),
       ...(cat.cat3 && { cat3: cat.cat3Name || cat.cat3 }),
     }));
-    
+
     // 설명에는 표시명 사용
     const categoryDesc = params.callCategories.map(cat => {
       const cat1Display = cat.cat1Name || cat.cat1;
@@ -268,7 +268,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
       const cat3Display = cat.cat3 ? (cat.cat3Name || cat.cat3) : '';
       return `${cat1Display}${cat2Display ? ' > ' + cat2Display : ''}${cat3Display ? ' > ' + cat3Display : ''}`;
     }).join(', ');
-    
+
     conditions.push({
       data: categoryData,
       dataType: 'cate',
@@ -284,7 +284,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
   if (params.locations && params.locations.length > 0) {
     const homeLocations = params.locations.filter(l => l.type === 'home');
     const workLocations = params.locations.filter(l => l.type === 'work');
-    
+
     if (homeLocations.length > 0) {
       const hcodes = homeLocations.map(l => l.code);
       const names = homeLocations.map(l => l.name);
@@ -298,7 +298,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
       });
       descParts.push(`집주소: ${names.join(', ')}`);
     }
-    
+
     if (workLocations.length > 0) {
       const hcodes = workLocations.map(l => l.code);
       const names = workLocations.map(l => l.name);
@@ -321,7 +321,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
       // 값 처리: 문자열 gt/lt를 숫자로 변환
       let processedValue: unknown = pro.value;
       let dataType: 'number' | 'boolean' | 'code' = 'number';
-      
+
       if (typeof pro.value === 'object' && pro.value !== null && 'gt' in pro.value) {
         // 범위 값 - 숫자로 변환
         processedValue = {
@@ -338,7 +338,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
       } else if (typeof pro.value === 'number') {
         dataType = 'number';
       }
-      
+
       conditions.push({
         data: processedValue,
         dataType: dataType,
@@ -351,7 +351,7 @@ function buildATSMosuPayload(params: TargetingParams): { payload: { '$and': ATSF
     }
   }
 
-  return { 
+  return {
     payload: { '$and': conditions },
     desc: descParts.join(', '),
   };
@@ -367,7 +367,7 @@ interface ATSMosuResult {
 async function callATSMosuAPI(mosuQuery: { '$and': ATSFilterCondition[] }): Promise<ATSMosuResult> {
   const tid = generateTid();
   const apiKey = getBizChatApiKey();
-  
+
   if (!apiKey) {
     console.log('[Estimate] BizChat API key not configured, returning mock data');
     return { estimatedCount: 500000 };
@@ -397,9 +397,9 @@ async function callATSMosuAPI(mosuQuery: { '$and': ATSFilterCondition[] }): Prom
       // BizChat ATS mosu API 응답에서 sndMosu와 query 추출
       const estimatedCount = data.data?.sndMosu || data.data?.cnt || 0;
       const sndMosuQuery = data.data?.query || undefined;  // SQL 형식 query
-      
+
       console.log('[Estimate] Extracted sndMosu:', estimatedCount, 'sndMosuQuery:', sndMosuQuery?.substring(0, 200));
-      
+
       return { estimatedCount, sndMosuQuery };
     } else {
       console.error('[Estimate] ATS mosu API error:', data.code, data.msg);
@@ -431,7 +431,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('[Estimate] Maptics mode - returning geofence-based estimate');
       const geofenceCount = params.geofences?.length ?? 0;
       const estimatedCount = geofenceCount > 0 ? geofenceCount * 50000 : 0;
-      
+
       return res.status(200).json({
         estimatedCount,
         minCount: Math.floor(estimatedCount * 0.8),

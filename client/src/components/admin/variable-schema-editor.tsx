@@ -28,6 +28,31 @@ const VARIABLE_TYPES: { value: VariableSchemaItem['type']; label: string; descri
   { value: 'url', label: 'URL', description: '링크 주소' },
 ];
 
+function inferVariableType(key: string): VariableSchemaItem['type'] {
+  const normalized = key.toLowerCase();
+  if (/(기간|일정|date_range|daterange|period)/i.test(key)) return 'dateRange';
+  if (/(날짜|시작일|종료일|예약일|date)/i.test(key)) return 'date';
+  if (/(url|링크|link|홈페이지|페이지)/i.test(normalized)) return 'url';
+  if (/(전화|연락처|휴대폰|tel|phone)/i.test(key)) return 'tel';
+  if (/(수량|인원|금액|가격|할인율|할인|포인트|number|price|amount|percent)/i.test(key)) return 'number';
+  return 'text';
+}
+
+function extractVariableKeys(contentTemplate: string) {
+  const keys = new Set<string>();
+  const doubleBraceMatches = Array.from(contentTemplate.matchAll(/\{\{([^{}]+)\}\}/g));
+  for (const match of doubleBraceMatches) {
+    if (match[1]) keys.add(match[1]);
+  }
+
+  const singleBraceMatches = Array.from(contentTemplate.matchAll(/(?<!\{)\{([^{}]+)\}(?!\})/g));
+  for (const match of singleBraceMatches) {
+    if (match[1]) keys.add(match[1]);
+  }
+
+  return Array.from(keys);
+}
+
 interface VariableSchemaEditorProps {
   value: VariableSchemaItem[];
   onChange: (value: VariableSchemaItem[]) => void;
@@ -67,25 +92,24 @@ export function VariableSchemaEditor({ value, onChange, contentTemplate }: Varia
 
   const extractVariablesFromTemplate = () => {
     if (!contentTemplate) return;
-    const matches = contentTemplate.match(/\{([^}]+)\}/g);
-    if (!matches) return;
-    
+    const keys = extractVariableKeys(contentTemplate);
+    if (keys.length === 0) return;
+
     const existingKeys = new Set(value.map(v => v.key));
     const newVariables: VariableSchemaItem[] = [];
-    
-    matches.forEach(match => {
-      const key = match.slice(1, -1);
+
+    keys.forEach(key => {
       if (!existingKeys.has(key)) {
         newVariables.push({
           key,
           label: key,
-          type: 'text',
+          type: inferVariableType(key),
           required: true,
         });
         existingKeys.add(key);
       }
     });
-    
+
     if (newVariables.length > 0) {
       onChange([...value, ...newVariables]);
     }
@@ -93,7 +117,8 @@ export function VariableSchemaEditor({ value, onChange, contentTemplate }: Varia
 
   const getUnusedVariables = () => {
     if (!contentTemplate) return [];
-    return value.filter(v => !contentTemplate.includes(`{${v.key}}`));
+    const templateKeys = new Set(extractVariableKeys(contentTemplate));
+    return value.filter(v => !templateKeys.has(v.key));
   };
 
   const unusedVariables = getUnusedVariables();
@@ -110,9 +135,9 @@ export function VariableSchemaEditor({ value, onChange, contentTemplate }: Varia
           </div>
           <div className="flex gap-2">
             {contentTemplate && (
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
                 onClick={extractVariablesFromTemplate}
                 data-testid="button-extract-variables"
@@ -120,9 +145,9 @@ export function VariableSchemaEditor({ value, onChange, contentTemplate }: Varia
                 템플릿에서 추출
               </Button>
             )}
-            <Button 
-              type="button" 
-              size="sm" 
+            <Button
+              type="button"
+              size="sm"
               onClick={addVariable}
               data-testid="button-add-variable"
             >

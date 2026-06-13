@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
-import { 
-  LayoutDashboard, 
-  Users, 
-  Megaphone, 
-  CreditCard, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Users,
+  Megaphone,
+  CreditCard,
+  FileText,
   LogOut,
   Shield,
   ChevronLeft,
@@ -15,7 +15,8 @@ import {
   Receipt,
   BarChart3,
   TrendingUp,
-  MessageSquarePlus
+  MessageSquarePlus,
+  MessageSquareText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ const navItems = [
   { href: "/admin/users", icon: Users, label: "광고주 관리" },
   { href: "/admin/campaigns", icon: Megaphone, label: "캠페인" },
   { href: "/admin/recommended-templates", icon: MessageSquarePlus, label: "추천 메시지" },
+  { href: "/admin/message-copy-requests", icon: MessageSquareText, label: "메시지 유형 요청함" },
   { href: "/admin/transactions", icon: CreditCard, label: "결제 내역" },
   { href: "/admin/announcements", icon: Bell, label: "공지사항" },
   { href: "/admin/refunds", icon: RefreshCcw, label: "환불 관리" },
@@ -45,11 +47,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [copyRequestCount, setCopyRequestCount] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem("adminToken");
     const user = localStorage.getItem("adminUser");
-    
+
     if (!token) {
       navigate("/admin/login");
       return;
@@ -64,6 +67,21 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     }
   }, [navigate]);
 
+  useEffect(() => {
+    const token = localStorage.getItem("adminToken");
+    if (!token) return;
+
+    fetch("/api/admin/message-copy-requests?status=reviewing", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const count = Number(data?.counts?.reviewing || data?.requests?.length || 0);
+        setCopyRequestCount(count);
+      })
+      .catch(() => setCopyRequestCount(0));
+  }, [location]);
+
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
     localStorage.removeItem("adminUser");
@@ -76,7 +94,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen bg-muted/30">
-      <aside 
+      <aside
         className={cn(
           "bg-background border-r flex flex-col transition-all duration-300",
           sidebarOpen ? "w-64" : "w-16"
@@ -101,21 +119,30 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 p-2 space-y-1">
           {navItems.map((item) => {
-            const isActive = location === item.href || 
+            const isActive = location === item.href ||
               (item.href !== "/admin" && location.startsWith(item.href));
             return (
               <Link key={item.href} href={item.href}>
                 <a
                   className={cn(
                     "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
-                    isActive 
-                      ? "bg-primary text-primary-foreground" 
+                    isActive
+                      ? "bg-primary text-primary-foreground"
                       : "hover-elevate text-muted-foreground hover:text-foreground"
                   )}
                   data-testid={`link-admin-nav-${item.label}`}
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
-                  {sidebarOpen && <span>{item.label}</span>}
+                  {sidebarOpen && (
+                    <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                      <span className="truncate">{item.label}</span>
+                      {item.href === "/admin/message-copy-requests" && copyRequestCount > 0 && (
+                        <span className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold text-destructive-foreground">
+                          {copyRequestCount > 99 ? "99+" : copyRequestCount}
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </a>
               </Link>
             );

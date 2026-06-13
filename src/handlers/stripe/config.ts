@@ -7,7 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
-    
+
     if (!publishableKey) {
       return res.status(500).json({ error: 'Stripe not configured' });
     }

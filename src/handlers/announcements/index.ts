@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const db = getDb();
     const now = new Date();
-    
+
     const activeAnnouncements = await db
       .select()
       .from(announcements)

@@ -3,6 +3,16 @@ import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
 import { pgTable, text, integer, timestamp, decimal, serial, varchar } from 'drizzle-orm/pg-core';
+import {
+  getBizChatCallbackCreditPlan,
+  readBizChatCallbackCounts,
+  type BizChatStateCallbackPayload,
+} from '../../../shared/bizchat-callback';
+import {
+  isCreditModeEnabled,
+  releaseReservedCampaignCreditsForServerless,
+  restoreUsedCampaignCreditsForServerless,
+} from '../../_shared/credit-ledger';
 
 neonConfig.fetchConnectionCache = true;
 
@@ -14,7 +24,8 @@ const campaigns = pgTable('campaigns', {
   bizchatCampaignId: text('bizchat_campaign_id'),
   statusCode: integer('status_code').default(0),
   status: text('status').default('temp_registered'),
-  stateReason: text('state_reason'),
+  targetCount: integer('target_count').default(0),
+  settleCnt: integer('settle_cnt').default(0),
   sentCount: integer('sent_count').default(0),
   successCount: integer('success_count').default(0),
   costPerMessage: decimal('cost_per_message', { precision: 10, scale: 0 }).default('100'),
@@ -71,8 +82,8 @@ function verifyCallbackAuth(req: VercelRequest): boolean {
   }
 
   // BizChat에서 전송하는 인증 헤더 확인
-  const providedKey = req.headers['bizchat-callback-auth-key'] || 
-                      req.headers['x-auth-key'] || 
+  const providedKey = req.headers['bizchat-callback-auth-key'] ||
+                      req.headers['x-auth-key'] ||
                       req.headers['authorization'];
 
   if (providedKey === authKey) {
@@ -84,7 +95,7 @@ function verifyCallbackAuth(req: VercelRequest): boolean {
 }
 
 // BizChat 캠페인 상태 변경 Callback 페이로드 (문서 규격)
-interface BizChatStateCallback {
+interface BizChatStateCallback extends BizChatStateCallbackPayload {
   id: string;              // BizChat 캠페인 ID
   state: number;           // 상태 코드
   stateUpdateDate: number; // 상태 변경 일시 (unix timestamp)
@@ -111,12 +122,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const payload = req.body as BizChatStateCallback;
-    
+
     console.log('[Callback] Received state change:', JSON.stringify(payload));
 
     // 필수 필드 검증 (문서 규격)
     if (!payload.id || payload.state === undefined) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Invalid payload',
         required: ['id', 'state'],
         received: payload,
@@ -133,7 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (campaignResult.length === 0) {
       console.warn(`[Callback] Campaign not found for bizchat ID: ${payload.id}`);
       // BizChat에 200 응답 반환 (재시도 방지)
-      return res.status(200).json({ 
+      return res.status(200).json({
         success: false,
         message: 'Campaign not found in local database',
         bizchatCampaignId: payload.id,
@@ -141,9 +152,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const campaign = campaignResult[0];
-    const statusInfo = STATUS_CODE_MAP[payload.state] || { 
-      status: 'unknown', 
-      label: `상태코드: ${payload.state}` 
+    const statusInfo = STATUS_CODE_MAP[payload.state] || {
+      status: 'unknown',
+      label: `상태코드: ${payload.state}`
     };
 
     // 캠페인 상태 업데이트
@@ -152,10 +163,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       status: statusInfo.status,
       updatedAt: new Date(),
     };
+    const observedCounts = readBizChatCallbackCounts(payload);
+    const { sendCnt, successCnt, settleCnt } = observedCounts;
 
-    // 반려 사유 저장
-    if (payload.stateReason) {
-      updateData.stateReason = payload.stateReason;
+    console.log('[Callback] Observed count fields:', JSON.stringify(observedCounts));
+
+    if (sendCnt !== undefined) {
+      updateData.sentCount = sendCnt;
+    }
+
+    if (successCnt !== undefined) {
+      updateData.successCount = successCnt;
+    }
+
+    if (settleCnt !== undefined) {
+      updateData.settleCnt = settleCnt;
     }
 
     await db.update(campaigns)
@@ -163,17 +185,111 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .where(eq(campaigns.id, campaign.id));
 
     console.log(`[Callback] Updated campaign ${campaign.id}: ${statusInfo.status} (state=${payload.state})`);
+    let creditAction: Record<string, unknown> = { type: 'none' };
+
+    if (isCreditModeEnabled() && (payload.state === 17 || payload.state === 25)) {
+      try {
+        const releaseResult = await releaseReservedCampaignCreditsForServerless(db, {
+          userId: campaign.userId,
+          campaignId: campaign.id,
+          description: `BizChat ${statusInfo.label}로 예약 크레딧 해제`,
+          statusCode: payload.state,
+          status: statusInfo.status,
+        });
+
+        if (!releaseResult.success) {
+          console.error('[Callback] Error releasing reserved credits:', releaseResult.error);
+          creditAction = {
+            type: 'release_failed',
+            error: releaseResult.error,
+          };
+        } else if (releaseResult.releasedCredits > 0) {
+          console.log(`[Callback] Released ${releaseResult.releasedCredits} reserved credits for campaign ${campaign.id}`);
+          creditAction = {
+            type: 'release',
+            releasedCredits: releaseResult.releasedCredits,
+          };
+        } else {
+          creditAction = {
+            type: 'release_noop',
+            releasedCredits: 0,
+          };
+        }
+      } catch (releaseError) {
+        console.error('[Callback] Error releasing reserved credits:', releaseError);
+        creditAction = {
+          type: 'release_failed',
+          error: releaseError instanceof Error ? releaseError.message : 'Unknown release error',
+        };
+      }
+    }
+
+    if (isCreditModeEnabled() && (payload.state === 35 || payload.state === 40)) {
+      const targetCount = Number(campaign.targetCount || 0);
+      const creditPlan = getBizChatCallbackCreditPlan({
+        state: payload.state,
+        targetCount,
+        observedCounts,
+      });
+
+      if (creditPlan.type === 'restore_skipped_no_count') {
+        console.warn(`[Callback] No chargeable count found for campaign ${campaign.id}; skipping automatic credit restore`);
+        creditAction = {
+          type: 'restore_skipped_no_count',
+          targetCount: creditPlan.targetCount,
+          countSources: creditPlan.countSources,
+        };
+      }
+
+      if (creditPlan.type === 'restore') {
+        try {
+          const restoreResult = await restoreUsedCampaignCreditsForServerless(db, {
+            userId: campaign.userId,
+            campaignId: campaign.id,
+            reason: creditPlan.reason,
+            description: creditPlan.chargeableCount === 0
+              ? `SKT 접수 실패 복구: ${campaign.name}`
+              : `잔여 발송분 복구: ${campaign.name}`,
+            restoreCredits: creditPlan.restoreCredits,
+            statusCode: payload.state,
+            status: statusInfo.status,
+          });
+
+          if (restoreResult.restoredCredits > 0) {
+            console.log(
+              `[Callback] Restored ${restoreResult.restoredCredits} credits for campaign ${campaign.id} (${creditPlan.chargeableCount}/${creditPlan.targetCount} chargeable)`,
+            );
+          }
+          creditAction = {
+            type: 'restore',
+            reason: creditPlan.reason,
+            targetCount: creditPlan.targetCount,
+            chargeableCount: creditPlan.chargeableCount,
+            restoreCredits: creditPlan.restoreCredits,
+            restoredCredits: restoreResult.restoredCredits,
+          };
+        } catch (restoreError) {
+          console.error('[Callback] Error restoring used credits:', restoreError);
+          creditAction = {
+            type: 'restore_failed',
+            targetCount: creditPlan.targetCount,
+            chargeableCount: creditPlan.chargeableCount,
+            error: restoreError instanceof Error ? restoreError.message : 'Unknown restore error',
+          };
+        }
+      }
+    }
 
     // 발송 완료(state=40) 또는 중단(state=35) 시 비용 차감
-    if (payload.state === 40 || payload.state === 35) {
+    if (!isCreditModeEnabled() && (payload.state === 40 || payload.state === 35)) {
       try {
         // 중복 차감 방지: 트랜잭션 테이블에서 이미 차감 기록이 있는지 확인
         const existingSpend = await db.select()
           .from(transactions)
           .where(eq(transactions.referenceId, campaign.id));
-        
+
         const alreadyCharged = existingSpend.some(t => t.type === 'spend');
-        
+
         if (alreadyCharged) {
           console.log(`[Callback] Skipping duplicate charge for campaign ${campaign.id} (already charged)`);
         } else {
@@ -182,18 +298,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (userResult.length > 0) {
             const user = userResult[0];
             const currentBalance = parseFloat(user.balance as string || '0');
-            
+
             // 실제 발송 건수 기준으로 비용 계산
             const sentCount = campaign.successCount || campaign.sentCount || 0;
             const messageType = campaign.messageType || 'LMS';
             const costPerMessage = MESSAGE_PRICES[messageType] || MESSAGE_PRICES.LMS;
             const totalCost = sentCount * costPerMessage;
-            
+
             if (totalCost > 0 && currentBalance > 0) {
               // 실제 차감 금액은 잔액을 초과할 수 없음
               const actualDeduction = Math.min(totalCost, currentBalance);
               const newBalance = currentBalance - actualDeduction;
-              
+
               // 트랜잭션 먼저 기록 (중복 방지의 핵심)
               await db.insert(transactions).values({
                 userId: campaign.userId,
@@ -203,15 +319,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 description: `캠페인 발송 비용 (${campaign.name})`,
                 referenceId: campaign.id,
               });
-              
+
               // 잔액 차감
               await db.update(users).set({
                 balance: newBalance.toString(),
                 updatedAt: new Date(),
               }).where(eq(users.id, campaign.userId));
-              
+
               console.log(`[Callback] Deducted ${actualDeduction} KRW from user ${campaign.userId} for campaign ${campaign.id} (${sentCount} messages × ${costPerMessage} KRW)`);
-              
+
               if (actualDeduction < totalCost) {
                 console.warn(`[Callback] Insufficient balance: charged ${actualDeduction} of ${totalCost} KRW`);
               }
@@ -234,6 +350,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       state: payload.state,
       status: statusInfo.status,
       label: statusInfo.label,
+      observedCounts,
+      creditAction,
     });
 
   } catch (error) {

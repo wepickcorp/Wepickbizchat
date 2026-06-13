@@ -5,6 +5,16 @@ import { insertCampaignSchema, insertMessageSchema, insertTargetingSchema, inser
 import { z } from "zod";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { calculateCampaignCredits } from "@shared/credit-policy";
+import { featureFlags } from "./featureFlags";
+import {
+  estimateCampaignCreditAvailability,
+  getCreditProductForCheckout,
+  getCreditPolicySnapshot,
+  getProductExpiryDate,
+  isCreditProductType,
+} from "./services/creditService";
+import { registerDevAuthRoutes } from "./devAuth";
 import multer from "multer";
 import { promises as fs } from "fs";
 import path from "path";
@@ -54,6 +64,40 @@ function simulateBizChatCampaignAction(action: string, campaignId?: string) {
         campaignId,
       };
   }
+}
+
+function replaceTemplateVariables(template: string | null | undefined, variables: Record<string, any>) {
+  if (!template) return template || null;
+  return Object.entries(variables || {}).reduce((result, [key, value]) => {
+    let displayValue = value;
+    if (value && typeof value === "object" && "start" in value && "end" in value) {
+      displayValue = `${value.start} ~ ${value.end}`;
+    }
+    return result
+      .split(`{{${key}}}`)
+      .join(displayValue == null ? "" : String(displayValue))
+      .split(`{${key}}`)
+      .join(displayValue == null ? "" : String(displayValue));
+  }, template);
+}
+
+function isTemplateVariableMissing(value: any) {
+  if (value && typeof value === "object" && ("start" in value || "end" in value)) {
+    return !value.start || !value.end;
+  }
+  return value === undefined || value === null || String(value).trim() === "";
+}
+
+function getMissingRequiredTemplateVariables(variableSchema: unknown, variables: Record<string, any>) {
+  if (!Array.isArray(variableSchema)) return [];
+  return variableSchema.filter((variable: any) => {
+    const key = typeof variable?.key === "string" ? variable.key : "";
+    return Boolean(variable?.required && key && isTemplateVariableMissing(variables[key]));
+  });
+}
+
+function hasUnresolvedTemplateVariables(...templates: Array<string | null | undefined>) {
+  return templates.some((template) => /\{[^}]+\}/.test(template || ""));
 }
 
 // ATS 메타데이터 시뮬레이션 데이터
@@ -119,6 +163,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   await setupAuth(app);
+  registerDevAuthRoutes(app);
 
   app.get("/api/auth/user", isAuthenticated, async (req, res) => {
     try {
@@ -152,7 +197,7 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const templates = await storage.getTemplates(userId);
-      
+
       // Add send history stats for each template (filtered by userId for security)
       const templatesWithStats = await Promise.all(
         templates.map(async (template) => {
@@ -168,7 +213,7 @@ export async function registerRoutes(
           };
         })
       );
-      
+
       res.json(templatesWithStats);
     } catch (error) {
       console.error("Error fetching templates:", error);
@@ -179,10 +224,10 @@ export async function registerRoutes(
   app.get("/api/templates/approved", isAuthenticated, async (req, res) => {
     try {
       const userId = (req as any).userId;
-      
-      // 1. 로컬 DB 템플릿 조회
-      const localTemplates = await storage.getTemplates(userId);
-      
+
+      // 1. 로컬 DB 승인 템플릿 조회
+      const localTemplates = await storage.getApprovedTemplates(userId);
+
       // 2. BizChat 템플릿 조회 (선택적)
       let bizchatTemplates: any[] = [];
       let bizchatError: string | null = null;
@@ -193,7 +238,7 @@ export async function registerRoutes(
         const bizchatApiKey = process.env.BIZCHAT_USE_PROD === 'true'
           ? process.env.BIZCHAT_PROD_API_KEY
           : process.env.BIZCHAT_DEV_API_KEY;
-        
+
         if (bizchatApiKey) {
           const tid = Date.now().toString();
           const response = await fetch(`${bizchatApiUrl}/api/v1/cmpn/tpl/list?tid=${tid}`, {
@@ -204,7 +249,7 @@ export async function registerRoutes(
             },
             body: JSON.stringify({ pageNumber: 1, pageSize: 100 }),
           });
-          
+
           if (response.ok) {
             const data = await response.json();
             if (data.code === 'S000001' && data.data?.list) {
@@ -235,7 +280,7 @@ export async function registerRoutes(
         bizchatError = err instanceof Error ? err.message : 'BizChat 템플릿 조회 실패';
         // BizChat 오류는 무시하고 로컬 템플릿만 반환
       }
-      
+
       // 3. 로컬 + BizChat 템플릿 병합 (중복 제거)
       const allTemplates = [...localTemplates];
       for (const bzTpl of bizchatTemplates) {
@@ -247,9 +292,9 @@ export async function registerRoutes(
           allTemplates.push(bzTpl);
         }
       }
-      
+
       // 배열 형태로 반환 (프론트엔드 호환성)
-      console.log(`[Templates/approved] 반환: 로컬 ${localTemplates.length}개, BizChat ${bizchatTemplates.length}개, 총 ${allTemplates.length}개`);
+      console.log(`[Templates/approved] 반환: 로컬 승인 ${localTemplates.length}개, BizChat 승인 ${bizchatTemplates.length}개, 총 ${allTemplates.length}개`);
       if (bizchatError) {
         console.warn(`[Templates/approved] BizChat 오류: ${bizchatError}`);
       }
@@ -264,15 +309,15 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const template = await storage.getTemplate(req.params.id);
-      
+
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
-      
+
       if (template.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       res.json(template);
     } catch (error) {
       console.error("Error fetching template:", error);
@@ -338,14 +383,14 @@ export async function registerRoutes(
     message: "RCS 메시지의 경우 RCS 메시지도 필수로 입력해주세요",
     path: ["content"],
   });
-  
+
   const updateTemplateSchema = baseTemplateSchema.partial();
 
   app.post("/api/templates", isAuthenticated, async (req, res) => {
     try {
       const userId = (req as any).userId;
       const data = createTemplateSchema.parse(req.body);
-      
+
       const template = await storage.createTemplate({
         userId,
         name: data.name,
@@ -364,7 +409,7 @@ export async function registerRoutes(
         buttons: data.buttons,
         status: "draft",
       });
-      
+
       res.status(201).json(template);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -379,26 +424,26 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const template = await storage.getTemplate(req.params.id);
-      
+
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
-      
+
       if (template.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       const data = updateTemplateSchema.parse(req.body);
-      
+
       // RCS 메시지 업데이트 시 lmsContent 검증 (기존 템플릿과 병합하여 확인)
       const mergedData = { ...template, ...data };
       if (mergedData.messageType === "RCS" && (!mergedData.lmsContent || mergedData.lmsContent.trim().length === 0)) {
-        return res.status(400).json({ 
-          error: "Invalid template data", 
-          details: [{ path: ["lmsContent"], message: "RCS 메시지의 경우 일반(LMS) 메시지도 필수로 입력해주세요" }] 
+        return res.status(400).json({
+          error: "Invalid template data",
+          details: [{ path: ["lmsContent"], message: "RCS 메시지의 경우 일반(LMS) 메시지도 필수로 입력해주세요" }]
         });
       }
-      
+
       const updatedTemplate = await storage.updateTemplate(req.params.id, data);
       res.json(updatedTemplate);
     } catch (error) {
@@ -414,15 +459,15 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const template = await storage.getTemplate(req.params.id);
-      
+
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
-      
+
       if (template.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       await storage.deleteTemplate(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -435,7 +480,45 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const campaigns = await storage.getCampaigns(userId);
-      res.json(campaigns);
+      const campaignsWithTargetingSummary = await Promise.all(
+        campaigns.map(async (campaign) => {
+          const campaignTargeting = await storage.getTargeting(campaign.id);
+          const locationCount = campaignTargeting?.locationTypes?.length || 0;
+          const regionCount = campaignTargeting?.regions?.length || 0;
+          const interestCount =
+            (campaignTargeting?.shopping11stCategories?.length || 0) +
+            (campaignTargeting?.webappCategories?.length || 0) +
+            (campaignTargeting?.callUsageTypes?.length || 0);
+          const geofenceCount = campaignTargeting?.geofenceIds?.length || 0;
+
+          const modeLabel =
+            campaign.rcvType === 1
+              ? "방문 위치 · 바로"
+              : campaign.rcvType === 2
+                ? "방문 위치 · 모아서"
+                : locationCount > 0
+                  ? `위치 ${locationCount}개`
+                  : interestCount > 0
+                    ? `관심사 ${interestCount}개`
+                    : regionCount > 0
+                      ? `${regionCount}개 지역`
+                      : geofenceCount > 0
+                        ? `방문 위치 ${geofenceCount}개`
+                        : "기본 조건";
+
+          return {
+            ...campaign,
+            targetingSummary: {
+              modeLabel,
+              locationCount,
+              regionCount,
+              interestCount,
+              geofenceCount,
+            },
+          };
+        }),
+      );
+      res.json(campaignsWithTargetingSummary);
     } catch (error) {
       console.error("Error fetching campaigns:", error);
       res.status(500).json({ error: "Failed to fetch campaigns" });
@@ -445,20 +528,20 @@ export async function registerRoutes(
   app.get("/api/campaigns/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = (req as any).userId;
-      const campaign = await storage.getCampaign(req.params.id);
-      
+      let campaign = await storage.getCampaign(req.params.id);
+
       if (!campaign) {
         return res.status(404).json({ error: "Campaign not found" });
       }
-      
+
       if (campaign.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       const message = await storage.getMessage(campaign.id);
       const targeting = await storage.getTargeting(campaign.id);
       const report = await storage.getReport(campaign.id);
-      
+
       res.json({
         ...campaign,
         message,
@@ -480,44 +563,118 @@ export async function registerRoutes(
     ageMin: z.number().min(10).max(100).default(20),
     ageMax: z.number().min(10).max(100).default(60),
     regions: z.array(z.string()).default([]),
-    targetCount: z.number().min(100).default(1000),
+    targetCount: z.number().min(1000).default(1000),
     budget: z.number().min(10000),
     scheduledAt: z.string().optional(),
+    creationMode: z.enum(["recommended", "self"]).optional(),
+    recommendedTemplateId: z.string().optional(),
+    variableValues: z.record(z.any()).optional(),
+    shopping11stCategories: z.array(z.any()).optional(),
+    webappCategories: z.array(z.any()).optional(),
+    callCategories: z.array(z.any()).optional(),
+    locations: z.array(z.any()).optional(),
+    profiling: z.array(z.any()).optional(),
+    geofenceIds: z.array(z.string()).optional(),
+    geofences: z.array(z.any()).optional(),
+    mapticsSendType: z.enum(["realtime", "batch"]).optional(),
+    rtStartHhmm: z.string().optional(),
+    rtEndHhmm: z.string().optional(),
+    sndDayDiv: z.number().optional(),
   });
 
   app.post("/api/campaigns", isAuthenticated, async (req, res) => {
     try {
       const userId = (req as any).userId;
       const user = await storage.getUser(userId);
-      
+
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      
+
       const data = createCampaignSchema.parse(req.body);
-      
+
       const template = await storage.getTemplate(data.templateId);
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
-      
+
       // 시스템 템플릿(추천 템플릿)은 모든 사용자가 사용 가능
       const SYSTEM_USER_ID = 'system';
       if (template.userId !== userId && template.userId !== SYSTEM_USER_ID) {
         return res.status(403).json({ error: "Access denied to template" });
       }
-      
+
       if (template.status !== "approved") {
         return res.status(400).json({ error: "Template must be approved before creating campaign" });
       }
-      
+
+      const resolvedVariableValues = data.variableValues || {};
+      const missingVariables = getMissingRequiredTemplateVariables(template.variableSchema, resolvedVariableValues);
+      if (missingVariables.length > 0) {
+        return res.status(400).json({
+          error: `${missingVariables.map((variable: any) => variable.label || variable.key).join(", ")} 항목을 입력해주세요`,
+          code: "TEMPLATE_VARIABLES_REQUIRED",
+        });
+      }
+
+      const resolvedTitle = replaceTemplateVariables(template.title, resolvedVariableValues);
+      const resolvedContent = replaceTemplateVariables(template.content, resolvedVariableValues) || template.content;
+      const resolvedLmsContent = replaceTemplateVariables(template.lmsContent, resolvedVariableValues);
+      if (hasUnresolvedTemplateVariables(resolvedTitle, resolvedContent, resolvedLmsContent)) {
+        return res.status(400).json({
+          error: "템플릿에 아직 입력되지 않은 정보가 남아 있습니다",
+          code: "TEMPLATE_VARIABLES_UNRESOLVED",
+        });
+      }
+
       const userBalance = parseFloat(user.balance as string || "0");
       const estimatedCost = data.targetCount * 50;
-      
-      if (userBalance < estimatedCost) {
+      const creditEstimate = calculateCampaignCredits(
+        { targetCount: data.targetCount, templateCount: 1 },
+        userBalance,
+      );
+
+      if (featureFlags.creditShadowLogEnabled) {
+        console.info("[Credit shadow] campaign create estimate", {
+          creditModeEnabled: featureFlags.creditModeEnabled,
+          targetCount: data.targetCount,
+          legacyEstimatedCost: estimatedCost,
+          neededCredits: creditEstimate.neededCredits,
+          isBelowMinimum: creditEstimate.isBelowMinimum,
+          shortageCredits: creditEstimate.shortageCredits,
+        });
+      }
+
+      if (featureFlags.creditModeEnabled) {
+        if (creditEstimate.isBelowMinimum) {
+          return res.status(400).json({
+            error: `템플릿 1개는 최소 ${creditEstimate.minTargetCount.toLocaleString("ko-KR")}건부터 발송할 수 있습니다`,
+          });
+        }
+
+        const creditSummary = await storage.getCreditSummary(userId);
+        const effectiveAvailableCredits = creditSummary.hasLedger
+          ? creditSummary.availableCredits
+          : creditSummary.legacyBalance;
+
+        if (effectiveAvailableCredits < creditEstimate.neededCredits) {
+          return res.status(400).json({
+            error: `크레딧이 부족합니다. ${creditEstimate.neededCredits.toLocaleString("ko-KR")}C가 필요합니다`,
+          });
+        }
+      } else if (userBalance < estimatedCost) {
         return res.status(400).json({ error: "잔액이 부족합니다" });
       }
-      
+
+      const geofenceIds = data.geofenceIds?.length
+        ? data.geofenceIds
+        : (data.geofences || []).map((geofence: any) => String(geofence.id)).filter(Boolean);
+      const hasGeofence = geofenceIds.length > 0;
+      const rcvType = hasGeofence ? (data.mapticsSendType === "batch" ? 2 : 1) : 0;
+      const mapticsStartDate = data.scheduledAt ? new Date(data.scheduledAt) : new Date();
+      const mapticsEndDate = new Date(mapticsStartDate);
+      mapticsEndDate.setDate(mapticsEndDate.getDate() + 7);
+
       const campaign = await storage.createCampaign({
         userId,
         name: data.name,
@@ -526,33 +683,51 @@ export async function registerRoutes(
         sndNum: data.sndNum,
         statusCode: CAMPAIGN_STATUS.DRAFT.code,
         status: CAMPAIGN_STATUS.DRAFT.status,
+        rcvType,
+        sndGoalCnt: data.targetCount,
+        sndGeofenceId: hasGeofence ? Number(geofenceIds[0]) : undefined,
+        collStartDate: hasGeofence ? mapticsStartDate : undefined,
+        collEndDate: hasGeofence ? mapticsEndDate : undefined,
+        collSndDate: rcvType === 2 ? mapticsStartDate : undefined,
+        rtStartHhmm: rcvType === 1 ? data.rtStartHhmm || "0900" : undefined,
+        rtEndHhmm: rcvType === 1 ? data.rtEndHhmm || "2000" : undefined,
+        sndDayDiv: rcvType === 1 ? data.sndDayDiv ?? 0 : undefined,
         targetCount: data.targetCount,
         budget: data.budget.toString(),
+        creationMode: data.creationMode,
+        recommendedTemplateId: data.recommendedTemplateId,
+        variableValues: data.variableValues,
         scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
       });
-      
+
       await storage.createMessage({
         campaignId: campaign.id,
-        title: template.title || null,
-        content: template.content,
+        title: resolvedTitle,
+        content: resolvedContent,
         imageUrl: template.imageUrl,
         imageFileId: template.imageFileId || null,
         urlLinks: template.urlLinks || null,
         buttons: template.buttons || null,
-        lmsContent: template.lmsContent || null,
+        lmsContent: resolvedLmsContent,
         lmsImageUrl: template.lmsImageUrl || null,
         lmsImageFileId: template.lmsImageFileId || null,
         lmsUrlLinks: template.lmsUrlLinks || null,
       });
-      
+
       await storage.createTargeting({
         campaignId: campaign.id,
         gender: data.gender,
         ageMin: data.ageMin,
         ageMax: data.ageMax,
         regions: data.regions,
+        shopping11stCategories: data.shopping11stCategories?.map((category: any) => JSON.stringify(category)) || [],
+        webappCategories: data.webappCategories?.map((category: any) => JSON.stringify(category)) || [],
+        callUsageTypes: data.callCategories?.map((category: any) => JSON.stringify(category)) || [],
+        locationTypes: data.locations?.map((location: any) => JSON.stringify(location)) || [],
+        geofenceIds,
+        atsQuery: hasGeofence ? JSON.stringify({ geofenceIds, rcvType }) : null,
       });
-      
+
       res.status(201).json(campaign);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -566,16 +741,16 @@ export async function registerRoutes(
   app.patch("/api/campaigns/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = (req as any).userId;
-      const campaign = await storage.getCampaign(req.params.id);
-      
+      let campaign = await storage.getCampaign(req.params.id);
+
       if (!campaign) {
         return res.status(404).json({ error: "Campaign not found" });
       }
-      
+
       if (campaign.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       const updatedCampaign = await storage.updateCampaign(req.params.id, req.body);
       res.json(updatedCampaign);
     } catch (error) {
@@ -588,19 +763,19 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const campaign = await storage.getCampaign(req.params.id);
-      
+
       if (!campaign) {
         return res.status(404).json({ error: "Campaign not found" });
       }
-      
+
       if (campaign.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       if (campaign.statusCode !== CAMPAIGN_STATUS.DRAFT.code) {
         return res.status(400).json({ error: "Only draft campaigns can be deleted" });
       }
-      
+
       await storage.deleteCampaign(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -620,6 +795,152 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/credits/policy", isAuthenticated, async (_req, res) => {
+    res.json({
+      enabled: featureFlags.creditModeEnabled,
+      ...getCreditPolicySnapshot(),
+    });
+  });
+
+  app.get("/api/credits/summary", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const summary = await storage.getCreditSummary(userId);
+      const effectiveAvailableCredits = summary.hasLedger
+        ? summary.availableCredits
+        : summary.legacyBalance;
+
+      res.json({
+        enabled: featureFlags.creditModeEnabled,
+        effectiveAvailableCredits,
+        ...summary,
+      });
+    } catch (error) {
+      console.error("Error fetching credit summary:", error);
+      res.status(500).json({ error: "Failed to fetch credit summary" });
+    }
+  });
+
+  const devCreditGrantSchema = z.object({
+    productType: z.string().refine(isCreditProductType, {
+      message: "Invalid credit product type",
+    }),
+  });
+
+  app.post("/api/credits/dev-grant", isAuthenticated, async (req, res) => {
+    const allowDevCreditGrant = process.env.NODE_ENV !== "production" && featureFlags.creditModeEnabled;
+    if (!allowDevCreditGrant) {
+      return res.status(403).json({
+        error: "Development credit grant API is disabled.",
+      });
+    }
+
+    try {
+      const userId = (req as any).userId;
+      const user = await storage.getUser(userId);
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const { productType } = devCreditGrantSchema.parse(req.body);
+      const product = getCreditProductForCheckout(productType);
+
+      if (product.productType === "light") {
+        const alreadyPurchased = await storage.hasPurchasedCreditProductInCurrentKstMonth(userId, "light");
+        if (alreadyPurchased) {
+          return res.status(400).json({
+            error: "라이트 충전은 매월 1회만 지급할 수 있습니다",
+          });
+        }
+      }
+
+      const currentBalance = Number(user.balance || 0);
+      const newBalance = currentBalance + product.priceKrw;
+      const paymentReference = `dev-credit:${userId}:${product.productType}:${Date.now()}:${Math.random()
+        .toString(36)
+        .slice(2)}`;
+
+      const transaction = await storage.createTransaction({
+        userId,
+        type: "charge",
+        amount: product.priceKrw.toString(),
+        balanceAfter: newBalance.toString(),
+        description: `[로컬 테스트] ${product.name} 지급`,
+        paymentMethod: "dev_credit_seed",
+      });
+
+      await storage.updateUserBalance(userId, newBalance.toString());
+
+      const creditResult = await storage.grantPurchasedCreditsAtomically({
+        userId,
+        transactionId: transaction.id,
+        productType: product.productType,
+        credits: product.credits,
+        expiresAt: getProductExpiryDate(new Date()),
+        paymentReference,
+        description: `[로컬 테스트] ${product.name} 크레딧 지급`,
+      });
+
+      if (!creditResult.success) {
+        return res.status(400).json({
+          error: creditResult.error || "크레딧 지급 중 오류가 발생했습니다",
+        });
+      }
+
+      const summary = await storage.getCreditSummary(userId);
+
+      res.status(201).json({
+        success: true,
+        product,
+        transaction,
+        grant: creditResult.grant,
+        ledgerEntry: creditResult.ledgerEntry,
+        summary,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Error granting development credits:", error);
+      res.status(500).json({ error: "Failed to grant development credits" });
+    }
+  });
+
+  const creditEstimateSchema = z.object({
+    targetCount: z.number().int().min(0),
+    templateCount: z.number().int().min(1).default(1),
+  });
+
+  app.post("/api/credits/estimate", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const user = await storage.getUser(userId);
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const data = creditEstimateSchema.parse(req.body);
+      const availableCredits = Number(user.balance || 0);
+
+      res.json({
+        enabled: featureFlags.creditModeEnabled,
+        estimate: estimateCampaignCreditAvailability({
+          availableCredits,
+          targetCount: data.targetCount,
+          templateCount: data.templateCount,
+        }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Error estimating credits:", error);
+      res.status(500).json({ error: "Failed to estimate credits" });
+    }
+  });
+
   app.post("/api/transactions/charge", isAuthenticated, async (req, res) => {
     const allowDirectCharge = process.env.NODE_ENV !== 'production' && process.env.ENABLE_DIRECT_CHARGE === 'true';
     if (!allowDirectCharge) {
@@ -631,20 +952,20 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const user = await storage.getUser(userId);
-      
+
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      
+
       const { amount, paymentMethod } = req.body;
-      
+
       if (!amount || amount < 10000) {
         return res.status(400).json({ error: "Minimum charge amount is 10,000 KRW" });
       }
-      
+
       const currentBalance = parseFloat(user.balance as string || "0");
       const newBalance = currentBalance + amount;
-      
+
       const transaction = await storage.createTransaction({
         userId,
         type: "charge",
@@ -653,9 +974,9 @@ export async function registerRoutes(
         description: "잔액 충전",
         paymentMethod: paymentMethod || "card",
       });
-      
+
       await storage.updateUserBalance(userId, newBalance.toString());
-      
+
       res.status(201).json(transaction);
     } catch (error) {
       console.error("Error processing charge:", error);
@@ -699,9 +1020,24 @@ export async function registerRoutes(
         return res.status(400).json({ error: "계좌 정보를 모두 입력해주세요" });
       }
 
-      const currentBalance = Number(user.balance || 0);
-      if (numAmount > currentBalance) {
-        return res.status(400).json({ error: "환불 금액이 현재 잔액보다 많습니다" });
+      if (featureFlags.creditModeEnabled) {
+        const creditSummary = await storage.getCreditSummary(userId);
+        if (creditSummary.refundableCredits <= 0) {
+          return res.status(400).json({
+            error: "환불 가능한 크레딧이 없습니다. 예약 중이거나 이미 사용된 크레딧은 환불 신청에서 제외됩니다",
+          });
+        }
+
+        if (numAmount > creditSummary.refundableAmountKrw) {
+          return res.status(400).json({
+            error: `환불 가능 금액은 최대 ${creditSummary.refundableAmountKrw.toLocaleString("ko-KR")}원입니다. 예약·사용된 크레딧은 제외됩니다`,
+          });
+        }
+      } else {
+        const currentBalance = Number(user.balance || 0);
+        if (numAmount > currentBalance) {
+          return res.status(400).json({ error: "환불 금액이 현재 잔액보다 많습니다" });
+        }
       }
 
       const pendingRefund = await storage.getPendingRefundByUser(userId);
@@ -792,41 +1128,41 @@ export async function registerRoutes(
   app.post("/api/targeting/estimate", isAuthenticated, async (req, res) => {
     try {
       const { gender, ageMin: rawAgeMin, ageMax: rawAgeMax, regions } = req.body;
-      
+
       const ageMin = typeof rawAgeMin === 'number' ? rawAgeMin : 20;
       const ageMax = typeof rawAgeMax === 'number' ? rawAgeMax : 60;
-      
+
       if (ageMin < 0 || ageMax < 0 || ageMin > 100 || ageMax > 100) {
         return res.status(400).json({ error: "나이는 0~100 사이여야 합니다" });
       }
-      
+
       if (ageMin > ageMax) {
         return res.status(400).json({ error: "최소 나이가 최대 나이보다 클 수 없습니다" });
       }
-      
+
       if (gender && !["all", "male", "female"].includes(gender)) {
         return res.status(400).json({ error: "성별은 all, male, female 중 하나여야 합니다" });
       }
-      
+
       let baseAudience = 500000;
-      
+
       if (gender === "male") {
         baseAudience = baseAudience * 0.52;
       } else if (gender === "female") {
         baseAudience = baseAudience * 0.48;
       }
-      
+
       const ageRange = ageMax - ageMin;
       const ageMultiplier = Math.max(0.1, ageRange / 60);
       baseAudience = baseAudience * ageMultiplier;
-      
+
       const regionPopulationShare: Record<string, number> = {
         "서울": 0.19, "경기": 0.26, "인천": 0.06, "부산": 0.07, "대구": 0.05,
         "광주": 0.03, "대전": 0.03, "울산": 0.02, "세종": 0.01,
         "강원": 0.03, "충북": 0.03, "충남": 0.04, "전북": 0.04, "전남": 0.04,
         "경북": 0.05, "경남": 0.07, "제주": 0.01
       };
-      
+
       if (regions && Array.isArray(regions) && regions.length > 0) {
         let regionMultiplier = 0;
         for (const region of regions) {
@@ -834,11 +1170,11 @@ export async function registerRoutes(
         }
         baseAudience = baseAudience * regionMultiplier;
       }
-      
+
       const estimatedCount = Math.round(baseAudience);
       const minCount = Math.round(estimatedCount * 0.85);
       const maxCount = Math.round(estimatedCount * 1.15);
-      
+
       res.json({
         estimatedCount: Math.max(1000, estimatedCount),
         minCount: Math.max(850, minCount),
@@ -854,20 +1190,20 @@ export async function registerRoutes(
   // ============================================================
   // ATS Meta API - BizChat API 연동용 메타데이터 조회
   // ============================================================
-  
+
   // ATS 메타데이터 조회 (11st, webapp, call, loc, filter)
   app.get("/api/ats/meta/:metaType", isAuthenticated, async (req, res) => {
     try {
       const { metaType } = req.params;
       const validTypes = ["11st", "webapp", "call", "loc", "filter"];
-      
+
       if (!validTypes.includes(metaType)) {
         return res.status(400).json({ error: "Invalid meta type" });
       }
-      
+
       // 캐시된 메타데이터 조회
       const cachedMeta = await storage.getAtsMetaByType(metaType);
-      
+
       // 캐시가 없으면 시뮬레이션 데이터 반환
       if (cachedMeta.length === 0) {
         const simulatedMeta = getSimulatedAtsMeta(metaType);
@@ -884,23 +1220,23 @@ export async function registerRoutes(
   // ATS 발송 모수 조회 (고도화된 타겟팅 기반)
   app.post("/api/ats/mosu", isAuthenticated, async (req, res) => {
     try {
-      const { 
+      const {
         gender, ageMin, ageMax, regions, districts,
         carrierTypes, deviceTypes,
         shopping11stCategories, webappCategories, callUsageTypes,
         locationTypes, mobilityPatterns, geofenceIds
       } = req.body;
-      
+
       let baseAudience = 16000000; // SK 광고 동의 고객 1,600만
-      
+
       // 성별 필터
       if (gender === "male") baseAudience *= 0.52;
       else if (gender === "female") baseAudience *= 0.48;
-      
+
       // 나이 필터
       const ageRange = (ageMax || 60) - (ageMin || 20);
       baseAudience *= Math.max(0.1, ageRange / 60);
-      
+
       // 지역 필터
       if (regions?.length > 0) {
         const regionShare: Record<string, number> = {
@@ -912,28 +1248,28 @@ export async function registerRoutes(
         const regionMultiplier = regions.reduce((sum: number, r: string) => sum + (regionShare[r] || 0.03), 0);
         baseAudience *= regionMultiplier;
       }
-      
+
       // 시/군/구 필터 (추가 감소)
       if (districts?.length > 0) {
         baseAudience *= 0.3 * (districts.length / 5);
       }
-      
+
       // 회선/기기 필터
       if (carrierTypes?.length > 0) baseAudience *= 0.6;
       if (deviceTypes?.length > 0) baseAudience *= 0.5;
-      
+
       // 행동 데이터 필터 (각각 적용시 감소)
       if (shopping11stCategories?.length > 0) baseAudience *= 0.15;
       if (webappCategories?.length > 0) baseAudience *= 0.2;
       if (callUsageTypes?.length > 0) baseAudience *= 0.25;
       if (locationTypes?.length > 0) baseAudience *= 0.3;
       if (mobilityPatterns?.length > 0) baseAudience *= 0.35;
-      
+
       // 지오펜스 필터 (가장 specific)
       if (geofenceIds?.length > 0) baseAudience *= 0.05 * geofenceIds.length;
-      
+
       const estimatedCount = Math.round(Math.max(100, baseAudience));
-      
+
       res.json({
         estimatedCount,
         minCount: Math.round(estimatedCount * 0.85),
@@ -954,12 +1290,12 @@ export async function registerRoutes(
   // ============================================================
   // Maptics API - 지오펜스 관리
   // ============================================================
-  
+
   // POI 검색 (시뮬레이션)
   app.post("/api/maptics/poi", isAuthenticated, async (req, res) => {
     try {
       const { keyword, latitude, longitude, radius } = req.body;
-      
+
       // 시뮬레이션 POI 데이터
       const simulatedPois = [
         { id: "poi_001", name: `${keyword} 강남점`, category: "매장", lat: 37.4979, lng: 127.0276, distance: 120 },
@@ -968,7 +1304,7 @@ export async function registerRoutes(
         { id: "poi_004", name: `${keyword} 판교점`, category: "매장", lat: 37.3947, lng: 127.1114, distance: 890 },
         { id: "poi_005", name: `${keyword} 잠실점`, category: "매장", lat: 37.5133, lng: 127.1001, distance: 1200 },
       ];
-      
+
       res.json({
         pois: simulatedPois,
         totalCount: simulatedPois.length,
@@ -1007,7 +1343,7 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const data = geofenceSchema.parse(req.body);
-      
+
       const geofence = await storage.createGeofence({
         userId,
         name: data.name,
@@ -1020,7 +1356,7 @@ export async function registerRoutes(
         poiCategory: data.poiCategory,
         bizchatGeofenceId: `GF${Date.now()}`,
       });
-      
+
       res.json(geofence);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1036,24 +1372,24 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const geofence = await storage.getGeofence(req.params.id);
-      
+
       if (!geofence) {
         return res.status(404).json({ error: "Geofence not found" });
       }
-      
+
       if (geofence.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       const updateSchema = geofenceSchema.partial();
       const data = updateSchema.parse(req.body);
-      
+
       const updated = await storage.updateGeofence(req.params.id, {
         ...data,
         latitude: data.latitude ? String(data.latitude) : undefined,
         longitude: data.longitude ? String(data.longitude) : undefined,
       });
-      
+
       res.json(updated);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1069,15 +1405,15 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const geofence = await storage.getGeofence(req.params.id);
-      
+
       if (!geofence) {
         return res.status(404).json({ error: "Geofence not found" });
       }
-      
+
       if (geofence.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       await storage.deleteGeofence(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -1095,24 +1431,30 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const data = testSendSchema.parse(req.body);
-      
+
+      const cleanPhone = data.phoneNumber.replace(/-/g, '');
+      if (!/^01[0-9]{8,9}$/.test(cleanPhone)) {
+        return res.status(400).json({ error: "올바른 휴대폰 번호 형식이 아니에요 (예: 010-1234-5678)" });
+      }
+
       const template = await storage.getTemplate(data.templateId);
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
-      
-      if (template.userId !== userId) {
+
+      const SYSTEM_USER_ID = 'system';
+      if (template.userId !== userId && template.userId !== SYSTEM_USER_ID) {
         return res.status(403).json({ error: "Access denied to template" });
       }
-      
+
       if (template.status !== "approved") {
         return res.status(400).json({ error: "Template must be approved before sending test message" });
       }
-      
+
       console.log(`Test send requested: Template ${template.name} to ${data.phoneNumber}`);
-      
-      res.json({ 
-        success: true, 
+
+      res.json({
+        success: true,
         message: "테스트 메시지를 발송했어요",
         templateId: data.templateId,
         phoneNumber: data.phoneNumber,
@@ -1130,27 +1472,97 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const campaign = await storage.getCampaign(req.params.id);
-      
+
       if (!campaign) {
         return res.status(404).json({ error: "Campaign not found" });
       }
-      
+
       if (campaign.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
-      if (campaign.statusCode !== CAMPAIGN_STATUS.DRAFT.code) {
-        return res.status(400).json({ error: "Only draft campaigns can be submitted" });
+
+      if (!campaign.sndNum) {
+        return res.status(400).json({ error: "발신번호를 선택한 캠페인만 검수 요청할 수 있어요" });
       }
-      
+
+      if (campaign.statusCode === CAMPAIGN_STATUS.APPROVAL_REQUESTED.code) {
+        if (featureFlags.creditModeEnabled) {
+          const creditEstimate = calculateCampaignCredits({
+            targetCount: campaign.targetCount || 0,
+            templateCount: 1,
+          });
+
+          if (creditEstimate.isBelowMinimum) {
+            return res.status(400).json({
+              error: `템플릿 1개는 최소 ${creditEstimate.minTargetCount.toLocaleString("ko-KR")}건부터 검수 요청할 수 있어요`,
+            });
+          }
+
+          const reserveResult = await storage.reserveCampaignCreditsAtomically({
+            userId,
+            campaignId: req.params.id,
+            neededCredits: creditEstimate.neededCredits,
+            description: `캠페인 승인요청 예약: ${campaign.name}`,
+          });
+
+          if (!reserveResult.success) {
+            return res.status(400).json({
+              error: reserveResult.error || "크레딧 예약 중 문제가 생겼어요. 보유 크레딧을 확인해주세요.",
+            });
+          }
+        }
+
+        return res.json(campaign);
+      }
+
+      if (campaign.statusCode !== CAMPAIGN_STATUS.DRAFT.code) {
+        return res.status(400).json({ error: "임시 저장 또는 반려 상태의 캠페인만 검수 요청할 수 있어요" });
+      }
+
+      let creditEstimate: ReturnType<typeof calculateCampaignCredits> | null = null;
+
+      if (featureFlags.creditModeEnabled) {
+        creditEstimate = calculateCampaignCredits({
+          targetCount: campaign.targetCount || 0,
+          templateCount: 1,
+        });
+
+        if (creditEstimate.isBelowMinimum) {
+          return res.status(400).json({
+            error: `템플릿 1개는 최소 ${creditEstimate.minTargetCount.toLocaleString("ko-KR")}건부터 검수 요청할 수 있어요`,
+          });
+        }
+      }
+
       const bizchatCampaignId = `BZ${Date.now()}${Math.random().toString(36).substring(7).toUpperCase()}`;
-      
+
       const updatedCampaign = await storage.updateCampaign(req.params.id, {
         statusCode: CAMPAIGN_STATUS.APPROVAL_REQUESTED.code,
         status: CAMPAIGN_STATUS.APPROVAL_REQUESTED.status,
         bizchatCampaignId,
+        scheduledAt: req.body?.scheduledAt ? new Date(req.body.scheduledAt) : campaign.scheduledAt,
       });
-      
+
+      if (featureFlags.creditModeEnabled && creditEstimate) {
+        const reserveResult = await storage.reserveCampaignCreditsAtomically({
+          userId,
+          campaignId: req.params.id,
+          neededCredits: creditEstimate.neededCredits,
+          description: `캠페인 승인요청 예약: ${campaign.name}`,
+        });
+
+        if (!reserveResult.success) {
+          await storage.updateCampaign(req.params.id, {
+            statusCode: CAMPAIGN_STATUS.DRAFT.code,
+            status: CAMPAIGN_STATUS.DRAFT.status,
+          });
+
+          return res.status(400).json({
+            error: reserveResult.error || "크레딧 예약 중 문제가 생겼어요. 보유 크레딧을 확인해주세요.",
+          });
+        }
+      }
+
       res.json(updatedCampaign);
     } catch (error) {
       console.error("Error submitting campaign:", error);
@@ -1162,31 +1574,79 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const campaign = await storage.getCampaign(req.params.id);
-      
+
       if (!campaign) {
         return res.status(404).json({ error: "Campaign not found" });
       }
-      
+
       if (campaign.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       const statusCode = campaign.statusCode;
-      if (statusCode === CAMPAIGN_STATUS.APPROVED.code || 
-          statusCode === CAMPAIGN_STATUS.RUNNING.code || 
+      if (statusCode === CAMPAIGN_STATUS.APPROVED.code ||
+          statusCode === CAMPAIGN_STATUS.RUNNING.code ||
           statusCode === CAMPAIGN_STATUS.COMPLETED.code) {
         return res.json(campaign);
       }
-      
+
       if (statusCode !== CAMPAIGN_STATUS.APPROVAL_REQUESTED.code) {
         return res.status(400).json({ error: "Only pending campaigns can be approved" });
       }
-      
+
+      let creditEstimate: ReturnType<typeof calculateCampaignCredits> | null = null;
+
+      if (featureFlags.creditModeEnabled) {
+        creditEstimate = calculateCampaignCredits({
+          targetCount: campaign.targetCount || 0,
+          templateCount: 1,
+        });
+
+        if (creditEstimate.isBelowMinimum) {
+          return res.status(400).json({
+            error: `템플릿 1개는 최소 ${creditEstimate.minTargetCount.toLocaleString("ko-KR")}건부터 예약할 수 있습니다`,
+          });
+        }
+
+        if (campaign.scheduledAt) {
+          const creditSummary = await storage.getCreditSummary(userId);
+          const effectiveAvailableCredits = creditSummary.hasLedger
+            ? creditSummary.availableCredits
+            : creditSummary.legacyBalance;
+
+          if (effectiveAvailableCredits < creditEstimate.neededCredits) {
+            return res.status(400).json({
+              error: `크레딧이 부족합니다. ${creditEstimate.neededCredits.toLocaleString("ko-KR")}C가 필요합니다`,
+            });
+          }
+        }
+      }
+
       const updatedCampaign = await storage.updateCampaign(req.params.id, {
         statusCode: CAMPAIGN_STATUS.APPROVED.code,
         status: CAMPAIGN_STATUS.APPROVED.status,
       });
-      
+
+      if (featureFlags.creditModeEnabled && updatedCampaign?.scheduledAt && creditEstimate) {
+        const reserveResult = await storage.reserveCampaignCreditsAtomically({
+          userId,
+          campaignId: req.params.id,
+          neededCredits: creditEstimate.neededCredits,
+          description: `캠페인 예약: ${updatedCampaign.name}`,
+        });
+
+        if (!reserveResult.success) {
+          await storage.updateCampaign(req.params.id, {
+            statusCode: CAMPAIGN_STATUS.APPROVAL_REQUESTED.code,
+            status: CAMPAIGN_STATUS.APPROVAL_REQUESTED.status,
+          });
+
+          return res.status(400).json({
+            error: reserveResult.error || "예약 크레딧 처리 중 오류가 발생했습니다",
+          });
+        }
+      }
+
       res.json(updatedCampaign);
     } catch (error) {
       console.error("Error approving campaign:", error);
@@ -1194,57 +1654,157 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/campaigns/:id/cancel", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const campaign = await storage.getCampaign(req.params.id);
+
+      if (!campaign) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      if (campaign.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      if (
+        campaign.statusCode === CAMPAIGN_STATUS.RUNNING.code ||
+        campaign.statusCode === CAMPAIGN_STATUS.COMPLETED.code
+      ) {
+        return res.status(400).json({ error: "이미 발송이 시작된 캠페인은 취소할 수 없습니다" });
+      }
+
+      if (featureFlags.creditModeEnabled) {
+        const releaseResult = await storage.releaseCampaignReservedCreditsAtomically({
+          userId,
+          campaignId: req.params.id,
+          description: `캠페인 예약 취소: ${campaign.name}`,
+        });
+
+        if (!releaseResult.success || !releaseResult.campaign) {
+          return res.status(400).json({
+            error: releaseResult.error || "예약 크레딧 해제 중 오류가 발생했습니다",
+          });
+        }
+
+        return res.json(releaseResult.campaign);
+      }
+
+      const updatedCampaign = await storage.updateCampaign(req.params.id, {
+        statusCode: CAMPAIGN_STATUS.CANCELLED.code,
+        status: CAMPAIGN_STATUS.CANCELLED.status,
+      });
+
+      res.json(updatedCampaign);
+    } catch (error) {
+      console.error("Error cancelling campaign:", error);
+      res.status(500).json({ error: "Failed to cancel campaign" });
+    }
+  });
+
   app.post("/api/campaigns/:id/start", isAuthenticated, async (req, res) => {
     try {
       const userId = (req as any).userId;
       const user = await storage.getUser(userId);
-      const campaign = await storage.getCampaign(req.params.id);
-      
+      let campaign = await storage.getCampaign(req.params.id);
+
       if (!campaign || !user) {
         return res.status(404).json({ error: "Campaign or user not found" });
       }
-      
+
       if (campaign.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       const statusCode = campaign.statusCode;
       if (statusCode === CAMPAIGN_STATUS.RUNNING.code || statusCode === CAMPAIGN_STATUS.COMPLETED.code) {
         return res.json(campaign);
       }
-      
-      if (statusCode !== CAMPAIGN_STATUS.APPROVED.code) {
-        return res.status(400).json({ error: "Only approved campaigns can be started" });
+
+      const autoStartableStatusCodes = new Set<number>([
+        CAMPAIGN_STATUS.DRAFT.code,
+        CAMPAIGN_STATUS.APPROVAL_REQUESTED.code,
+        CAMPAIGN_STATUS.APPROVED.code,
+      ]);
+      if (!autoStartableStatusCodes.has(statusCode ?? CAMPAIGN_STATUS.DRAFT.code)) {
+        return res.status(400).json({ error: "발송 가능한 상태의 캠페인만 시작할 수 있어요" });
       }
-      
+
+      if (!campaign.sndNum) {
+        return res.status(400).json({ error: "발신번호를 선택하면 발송할 수 있어요" });
+      }
+
+      if (statusCode !== CAMPAIGN_STATUS.APPROVED.code) {
+        const approvedCampaign = await storage.updateCampaign(req.params.id, {
+          statusCode: CAMPAIGN_STATUS.APPROVED.code,
+          status: CAMPAIGN_STATUS.APPROVED.status,
+        });
+        if (!approvedCampaign) {
+          return res.status(400).json({ error: "캠페인 상태를 다시 확인해요" });
+        }
+        campaign = approvedCampaign;
+      }
+
+      const creditEstimate = calculateCampaignCredits({
+        targetCount: campaign.targetCount || 0,
+        templateCount: 1,
+      });
       const estimatedCost = campaign.targetCount * parseFloat(campaign.costPerMessage || "50");
       const userBalance = parseFloat(user.balance as string || "0");
-      
-      if (userBalance < estimatedCost) {
+
+      if (featureFlags.creditModeEnabled) {
+        if (creditEstimate.isBelowMinimum) {
+          return res.status(400).json({
+            error: `템플릿 1개는 최소 ${creditEstimate.minTargetCount.toLocaleString("ko-KR")}건부터 발송할 수 있어요`,
+          });
+        }
+
+      } else if (userBalance < estimatedCost) {
         return res.status(400).json({ error: "잔액이 부족합니다" });
       }
-      
+
       const sentCount = campaign.targetCount;
       const successCount = Math.floor(sentCount * (0.85 + Math.random() * 0.12));
-      
-      const updatedCampaign = await storage.updateCampaign(req.params.id, {
-        statusCode: CAMPAIGN_STATUS.RUNNING.code,
-        status: CAMPAIGN_STATUS.RUNNING.status,
-        sentCount,
-        successCount,
-        scheduledAt: new Date(),
-      });
-      
-      await storage.updateUserBalance(userId, (userBalance - estimatedCost).toString());
-      
-      await storage.createTransaction({
-        userId,
-        type: "usage",
-        amount: (-estimatedCost).toString(),
-        balanceAfter: (userBalance - estimatedCost).toString(),
-        description: `캠페인 발송: ${campaign.name}`,
-      });
-      
+
+      let updatedCampaign;
+
+      if (featureFlags.creditModeEnabled) {
+        const creditUseResult = await storage.startCampaignWithCreditUseAtomically({
+          userId,
+          campaignId: req.params.id,
+          neededCredits: creditEstimate.neededCredits,
+          sentCount,
+          successCount,
+          description: `캠페인 발송: ${campaign.name}`,
+        });
+
+        if (!creditUseResult.success || !creditUseResult.campaign) {
+          return res.status(400).json({
+            error: creditUseResult.error || "크레딧 차감 중 오류가 발생했습니다",
+          });
+        }
+
+        updatedCampaign = creditUseResult.campaign;
+      } else {
+        updatedCampaign = await storage.updateCampaign(req.params.id, {
+          statusCode: CAMPAIGN_STATUS.RUNNING.code,
+          status: CAMPAIGN_STATUS.RUNNING.status,
+          sentCount,
+          successCount,
+          scheduledAt: new Date(),
+        });
+
+        await storage.updateUserBalance(userId, (userBalance - estimatedCost).toString());
+
+        await storage.createTransaction({
+          userId,
+          type: "usage",
+          amount: (-estimatedCost).toString(),
+          balanceAfter: (userBalance - estimatedCost).toString(),
+          description: `캠페인 발송: ${campaign.name}`,
+        });
+      }
+
       await storage.createReport({
         campaignId: req.params.id,
         sentCount,
@@ -1253,7 +1813,7 @@ export async function registerRoutes(
         clickCount: Math.floor(successCount * (0.02 + Math.random() * 0.05)),
         optOutCount: Math.floor(successCount * Math.random() * 0.005),
       });
-      
+
       setTimeout(async () => {
         try {
           const currentCampaign = await storage.getCampaign(req.params.id);
@@ -1268,11 +1828,137 @@ export async function registerRoutes(
           console.error("Failed to complete campaign:", err);
         }
       }, 10000);
-      
+
       res.json(updatedCampaign);
     } catch (error) {
       console.error("Error starting campaign:", error);
       res.status(500).json({ error: "Failed to start campaign" });
+    }
+  });
+
+  app.post("/api/campaigns/:id/stop", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const campaign = await storage.getCampaign(req.params.id);
+
+      if (!campaign) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      if (campaign.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      if (campaign.statusCode === CAMPAIGN_STATUS.COMPLETED.code) {
+        return res.status(400).json({ error: "이미 완료된 캠페인은 중단할 수 없습니다" });
+      }
+
+      const updatedCampaign = await storage.updateCampaign(req.params.id, {
+        statusCode: CAMPAIGN_STATUS.STOPPED.code,
+        status: CAMPAIGN_STATUS.STOPPED.status,
+      });
+
+      res.json(updatedCampaign);
+    } catch (error) {
+      console.error("Error stopping campaign:", error);
+      res.status(500).json({ error: "Failed to stop campaign" });
+    }
+  });
+
+  app.post("/api/campaigns/:id/fail", isAuthenticated, async (req, res) => {
+    try {
+      const internalSecret = req.headers["x-internal-secret"];
+      const isAllowedInternalCall =
+        process.env.NODE_ENV !== "production" ||
+        (
+          typeof internalSecret === "string" &&
+          Boolean(process.env.CRON_SECRET) &&
+          internalSecret === process.env.CRON_SECRET
+        );
+
+      if (!isAllowedInternalCall) {
+        return res.status(403).json({ error: "Internal recovery endpoint only" });
+      }
+
+      const userId = (req as any).userId;
+      const campaign = await storage.getCampaign(req.params.id);
+
+      if (!campaign) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      if (campaign.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const reason = typeof req.body?.reason === "string"
+        ? req.body.reason
+        : "internal_failure";
+      const allowedReasons = new Set(["internal_failure", "skt_receipt_failure", "partial_delivery_failure"]);
+
+      if (!allowedReasons.has(reason)) {
+        return res.status(400).json({ error: "지원하지 않는 실패 사유입니다" });
+      }
+      const chargeableCount =
+        req.body?.chargeableCount ??
+        req.body?.acceptedCount ??
+        req.body?.processedCount;
+      const restoreCredits =
+        reason === "partial_delivery_failure"
+          ? calculateCampaignCredits({
+              targetCount: Math.max(0, (campaign.targetCount || 0) - Number(chargeableCount || 0)),
+              templateCount: 1,
+            }).neededCredits
+          : undefined;
+
+      if (reason === "partial_delivery_failure") {
+        const numericChargeableCount = Number(chargeableCount);
+        if (
+          !Number.isFinite(numericChargeableCount) ||
+          numericChargeableCount < 0 ||
+          numericChargeableCount > (campaign.targetCount || 0)
+        ) {
+          return res.status(400).json({
+            error: "부분 복구에는 0 이상 발송 목표 이하의 chargeableCount가 필요합니다",
+          });
+        }
+      }
+
+      if (!featureFlags.creditModeEnabled) {
+        const updatedCampaign = await storage.updateCampaign(req.params.id, {
+          statusCode: CAMPAIGN_STATUS.STOPPED.code,
+          status: CAMPAIGN_STATUS.STOPPED.status,
+        });
+        return res.json(updatedCampaign);
+      }
+
+      const restoreResult = await storage.restoreCampaignUsedCreditsAtomically({
+        userId,
+        campaignId: req.params.id,
+        reason,
+        description: reason === "skt_receipt_failure"
+          ? `SKT 접수 실패 복구: ${campaign.name}`
+          : reason === "partial_delivery_failure"
+            ? `잔여 발송분 복구: ${campaign.name}`
+            : `내부 오류 발송 복구: ${campaign.name}`,
+        restoreCredits,
+        statusCode: CAMPAIGN_STATUS.STOPPED.code,
+        status: CAMPAIGN_STATUS.STOPPED.status,
+      });
+
+      if (!restoreResult.success || !restoreResult.campaign) {
+        return res.status(400).json({
+          error: restoreResult.error || "크레딧 복구 중 오류가 발생했습니다",
+        });
+      }
+
+      res.json({
+        ...restoreResult.campaign,
+        restoredCredits: restoreResult.restoredCredits || 0,
+      });
+    } catch (error) {
+      console.error("Error failing campaign:", error);
+      res.status(500).json({ error: "Failed to restore failed campaign" });
     }
   });
 
@@ -1281,19 +1967,19 @@ export async function registerRoutes(
       const userId = (req as any).userId;
       const { phoneNumber } = req.body;
       const campaign = await storage.getCampaign(req.params.id);
-      
+
       if (!campaign) {
         return res.status(404).json({ error: "Campaign not found" });
       }
-      
+
       if (campaign.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       if (!phoneNumber) {
         return res.status(400).json({ error: "휴대폰 번호를 입력해주세요" });
       }
-      
+
       res.json({
         success: true,
         message: `${phoneNumber}로 테스트 메시지를 발송했어요`,
@@ -1310,35 +1996,36 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const { templateId, phoneNumber } = req.body;
-      
+
       if (!templateId) {
         return res.status(400).json({ error: "템플릿을 선택해주세요" });
       }
-      
+
       if (!phoneNumber) {
         return res.status(400).json({ error: "휴대폰 번호를 입력해주세요" });
       }
-      
+
       // Validate phone number format (Korean mobile: 010-XXXX-XXXX or 01XXXXXXXXX)
       const cleanPhone = phoneNumber.replace(/-/g, '');
       if (!/^01[0-9]{8,9}$/.test(cleanPhone)) {
         return res.status(400).json({ error: "올바른 휴대폰 번호 형식이 아니에요 (예: 010-1234-5678)" });
       }
-      
+
       const template = await storage.getTemplate(templateId);
-      
+
       if (!template) {
         return res.status(404).json({ error: "템플릿을 찾을 수 없어요" });
       }
-      
-      if (template.userId !== userId) {
+
+      const SYSTEM_USER_ID = 'system';
+      if (template.userId !== userId && template.userId !== SYSTEM_USER_ID) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       if (template.status !== "approved") {
         return res.status(400).json({ error: "승인된 템플릿만 테스트 발송이 가능해요" });
       }
-      
+
       // Mock test send - in production, this would call BizChat API
       res.json({
         success: true,
@@ -1359,19 +2046,22 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const campaigns = await storage.getCampaigns(userId);
-      
-      const completedCampaigns = campaigns.filter(c => 
+
+      const completedCampaigns = campaigns.filter(c =>
         c.status === 'completed' || c.status === 'running'
       );
-      
+
       if (completedCampaigns.length === 0) {
         return res.status(404).json({ error: "내보낼 리포트 데이터가 없습니다" });
       }
-      
-      let csvContent = "캠페인ID,캠페인명,상태,메시지유형,발송대상수,발송수,성공수,실패수,클릭수,예산,생성일,완료일\n";
-      
+
+      let csvContent = "캠페인ID,캠페인명,상태,메시지유형,발송대상수,발송수,성공수,실패수,클릭수,필요크레딧,생성일,완료일\n";
+
       for (const campaign of completedCampaigns) {
         const report = await storage.getReport(campaign.id);
+        const neededCredits = calculateCampaignCredits({
+          targetCount: campaign.targetCount || 0,
+        }).neededCredits;
         csvContent += [
           campaign.id,
           `"${campaign.name.replace(/"/g, '""')}"`,
@@ -1382,14 +2072,14 @@ export async function registerRoutes(
           campaign.successCount || 0,
           report?.failedCount || 0,
           report?.clickCount || 0,
-          campaign.budget,
+          neededCredits,
           campaign.createdAt?.toISOString() || '',
           campaign.completedAt?.toISOString() || '',
         ].join(",") + "\n";
       }
-      
+
       const bom = '\ufeff';
-      
+
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=campaign-report-${new Date().toISOString().split('T')[0]}.csv`);
       res.send(bom + csvContent);
@@ -1408,7 +2098,7 @@ export async function registerRoutes(
     fileFilter: (req, file, cb) => {
       const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
       const allowedDocTypes = ['text/csv', 'text/plain', 'application/vnd.ms-excel'];
-      
+
       if (allowedImageTypes.includes(file.mimetype) || allowedDocTypes.includes(file.mimetype)) {
         cb(null, true);
       } else {
@@ -1422,29 +2112,29 @@ export async function registerRoutes(
       const userId = (req as any).userId;
       const file = req.file;
       const fileType = req.body.fileType || 'image';
-      
+
       if (!file) {
         return res.status(400).json({ error: "파일이 없습니다" });
       }
-      
+
       const privateDir = process.env.PRIVATE_OBJECT_DIR;
       const publicPaths = process.env.PUBLIC_OBJECT_SEARCH_PATHS?.split(',') || [];
       const publicDir = publicPaths[0];
-      
+
       if (!privateDir || !publicDir) {
         return res.status(500).json({ error: "Object Storage가 설정되지 않았습니다" });
       }
-      
+
       const ext = path.extname(file.originalname);
       const filename = `${Date.now()}-${Math.random().toString(36).substring(7)}${ext}`;
-      
+
       const isImage = fileType === 'image';
       const targetDir = isImage ? publicDir : privateDir;
       const storagePath = path.join(targetDir, filename);
-      
+
       await fs.mkdir(path.dirname(storagePath), { recursive: true });
       await fs.writeFile(storagePath, file.buffer);
-      
+
       const fileRecord = await storage.createFile({
         userId,
         fileType,
@@ -1453,7 +2143,7 @@ export async function registerRoutes(
         fileSize: file.size,
         mimeType: file.mimetype,
       });
-      
+
       res.json(fileRecord);
     } catch (error) {
       console.error("Error uploading file:", error);
@@ -1476,15 +2166,15 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const file = await storage.getFile(req.params.id);
-      
+
       if (!file) {
         return res.status(404).json({ error: "File not found" });
       }
-      
+
       if (file.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       res.json(file);
     } catch (error) {
       console.error("Error fetching file:", error);
@@ -1496,23 +2186,23 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const file = await storage.getFile(req.params.id);
-      
+
       if (!file) {
         return res.status(404).json({ error: "File not found" });
       }
-      
+
       if (file.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      
+
       try {
         await fs.unlink(file.storagePath);
       } catch (fsError) {
         console.warn("Failed to delete file from storage:", fsError);
       }
-      
+
       await storage.deleteFile(file.id);
-      
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting file:", error);
@@ -1534,18 +2224,40 @@ export async function registerRoutes(
     try {
       const userId = (req as any).userId;
       const user = await storage.getUser(userId);
-      const { amount } = req.body;
-      
+      const { amount, productType } = req.body;
+
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      
+
       if (!amount || amount < 10000) {
         return res.status(400).json({ error: "최소 충전 금액은 10,000원입니다" });
       }
-      
+
+      const creditProduct = typeof productType === "string" && isCreditProductType(productType)
+        ? getCreditProductForCheckout(productType)
+        : null;
+
+      if (featureFlags.creditModeEnabled && !creditProduct) {
+        return res.status(400).json({ error: "크레딧 상품을 선택해주세요" });
+      }
+
+      if (creditProduct && creditProduct.priceKrw !== amount) {
+        return res.status(400).json({ error: "상품 금액이 올바르지 않습니다" });
+      }
+
+      if (
+        featureFlags.creditModeEnabled &&
+        creditProduct?.productType === "light" &&
+        await storage.hasPurchasedCreditProductInCurrentKstMonth(userId, "light")
+      ) {
+        return res.status(400).json({
+          error: "라이트 충전은 매월 1회만 구매할 수 있습니다",
+        });
+      }
+
       const stripe = await getUncachableStripeClient();
-      
+
       let customerId = user.stripeCustomerId;
       if (!customerId) {
         const customer = await stripe.customers.create({
@@ -1555,9 +2267,9 @@ export async function registerRoutes(
         customerId = customer.id;
         await storage.updateUserStripeCustomerId(userId, customerId);
       }
-      
+
       const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-      
+
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card'],
@@ -1566,8 +2278,10 @@ export async function registerRoutes(
             price_data: {
               currency: 'krw',
               product_data: {
-                name: 'BizChat 잔액 충전',
-                description: `${amount.toLocaleString()}원 충전`,
+                name: creditProduct ? `BizChat ${creditProduct.name}` : 'BizChat 잔액 충전',
+                description: creditProduct
+                  ? `${creditProduct.credits.toLocaleString()}C · ${amount.toLocaleString()}원`
+                  : `${amount.toLocaleString()}원 충전`,
               },
               unit_amount: amount,
             },
@@ -1581,9 +2295,13 @@ export async function registerRoutes(
           userId,
           amount: amount.toString(),
           type: 'balance_charge',
+          ...(creditProduct ? {
+            productType: creditProduct.productType,
+            credits: creditProduct.credits.toString(),
+          } : {}),
         },
       });
-      
+
       res.json({ url: session.url });
     } catch (error) {
       console.error("Error creating checkout session:", error);
@@ -1602,7 +2320,7 @@ export async function registerRoutes(
       const baseUrl = useProduction
         ? (process.env.BIZCHAT_PROD_API_URL || "https://gw.bizchat1.co.kr")
         : (process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443");
-      
+
       const apiKey = useProduction
         ? process.env.BIZCHAT_PROD_API_KEY
         : process.env.BIZCHAT_DEV_API_KEY;
@@ -1629,7 +2347,7 @@ export async function registerRoutes(
       if (action === "list") {
         const tid = Date.now().toString();
         const url = `${baseUrl}/api/v1/sndnum/list?tid=${tid}`;
-        
+
         console.log(`[BizChat Sender] POST ${url}`);
 
         try {
@@ -1701,11 +2419,11 @@ export async function registerRoutes(
     try {
       const { action, campaignId, ...params } = req.body;
       const useProduction = req.body.env === "prod" || req.query.env === "prod";
-      
+
       const baseUrl = useProduction
         ? (process.env.BIZCHAT_PROD_API_URL || "https://gw.bizchat1.co.kr")
         : (process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443");
-      
+
       const apiKey = useProduction
         ? process.env.BIZCHAT_PROD_API_KEY
         : process.env.BIZCHAT_DEV_API_KEY;
@@ -1745,17 +2463,17 @@ export async function registerRoutes(
           try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
-            
+
             const response = await fetch(url, {
               method: "GET",
               headers: { Authorization: apiKey },
               signal: controller.signal,
             });
             clearTimeout(timeoutId);
-            
+
             const data = await response.json();
             console.log(`[BizChat Stats] Response:`, JSON.stringify(data).substring(0, 300));
-            
+
             return res.json({
               success: data.code === "S000001",
               result: data,
@@ -1784,11 +2502,11 @@ export async function registerRoutes(
           // BizChat 캠페인 생성 - 실제 API 호출
           const url = `${baseUrl}/api/v1/cmpn/cud?tid=${tid}`;
           console.log(`[BizChat Create] POST ${url}`);
-          
+
           try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
-            
+
             const response = await fetch(url, {
               method: "POST",
               headers: {
@@ -1799,10 +2517,10 @@ export async function registerRoutes(
               signal: controller.signal,
             });
             clearTimeout(timeoutId);
-            
+
             const data = await response.json();
             console.log(`[BizChat Create] Response:`, JSON.stringify(data).substring(0, 300));
-            
+
             return res.json({
               success: data.code === "S000001",
               bizchatCampaignId: data.data?.id,
@@ -1823,21 +2541,21 @@ export async function registerRoutes(
 
           const url = `${baseUrl}/api/v1/cmpn/approve?id=${campaign.bizchatCampaignId}&tid=${tid}`;
           console.log(`[BizChat Approve] POST ${url}`);
-          
+
           try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
-            
+
             const response = await fetch(url, {
               method: "POST",
               headers: { Authorization: apiKey },
               signal: controller.signal,
             });
             clearTimeout(timeoutId);
-            
+
             const data = await response.json();
             console.log(`[BizChat Approve] Response:`, JSON.stringify(data).substring(0, 300));
-            
+
             return res.json({
               success: data.code === "S000001",
               result: data,
@@ -1858,21 +2576,21 @@ export async function registerRoutes(
 
           const url = `${baseUrl}/api/v1/cmpn/${action}?id=${campaign.bizchatCampaignId}&tid=${tid}`;
           console.log(`[BizChat ${action}] POST ${url}`);
-          
+
           try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
-            
+
             const response = await fetch(url, {
               method: "POST",
               headers: { Authorization: apiKey },
               signal: controller.signal,
             });
             clearTimeout(timeoutId);
-            
+
             const data = await response.json();
             console.log(`[BizChat ${action}] Response:`, JSON.stringify(data).substring(0, 300));
-            
+
             return res.json({
               success: data.code === "S000001",
               result: data,
@@ -1895,7 +2613,7 @@ export async function registerRoutes(
   // ============================================
   // Agency Portal Routes (Development)
   // ============================================
-  
+
   // Get list of active agencies (for signup dropdown)
   app.get("/api/agencies/list", async (req, res) => {
     try {
@@ -1911,7 +2629,7 @@ export async function registerRoutes(
   app.post("/api/agency/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      
+
       if (!email || !password) {
         return res.status(400).json({ error: "이메일과 비밀번호를 입력해주세요" });
       }

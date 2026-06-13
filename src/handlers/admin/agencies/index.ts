@@ -50,7 +50,7 @@ function verifyToken(token: string): { adminId: string } | null {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -83,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     try {
       const agencyList = await db.select().from(agencies).orderBy(desc(agencies.createdAt));
-      
+
       const agenciesWithUsers = await Promise.all(
         agencyList.map(async (agency) => {
           const [user] = await db.select().from(users).where(eq(users.id, agency.userId));
@@ -95,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           };
         })
       );
-      
+
       return res.status(200).json(agenciesWithUsers);
     } catch (error) {
       console.error('[Admin Agencies] Error:', error);
@@ -106,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     try {
       const { userId, name, contactName, contactPhone, contactEmail } = req.body || {};
-      
+
       if (!userId || !name) {
         return res.status(400).json({ error: '사용자 ID와 대행사명은 필수입니다' });
       }

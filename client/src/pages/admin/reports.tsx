@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, TrendingUp, TrendingDown, DollarSign, Send, CreditCard, RefreshCcw } from "lucide-react";
+import { Calendar, DollarSign, Send, CreditCard, RefreshCcw } from "lucide-react";
+import { calculateCampaignCredits } from "@shared/credit-policy";
 import { format, subMonths } from "date-fns";
 
 export default function AdminReports() {
@@ -24,13 +25,16 @@ export default function AdminReports() {
   });
 
   const summary = data?.summary || {};
+  const totalNeededCredits = calculateCampaignCredits({
+    targetCount: Number(summary.totalSentMessages || 0),
+  }).neededCredits;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">정산 리포트</h1>
-          <p className="text-muted-foreground">기간별 매출 및 정산 현황</p>
+          <p className="text-muted-foreground">기간별 결제 금액과 캠페인 크레딧 사용 현황</p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -75,7 +79,7 @@ export default function AdminReports() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-                <CardTitle className="text-sm font-medium">사용 금액</CardTitle>
+                <CardTitle className="text-sm font-medium">레거시 사용 금액</CardTitle>
                 <Send className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -125,7 +129,11 @@ export default function AdminReports() {
                     <span className="font-bold">{(summary.totalSentMessages || 0).toLocaleString()}건</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">캠페인 예산 합계</span>
+                    <span className="text-muted-foreground">필요 크레딧 합계</span>
+                    <span className="font-bold">{totalNeededCredits.toLocaleString("ko-KR")}C</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">레거시 예산 합계</span>
                     <span className="font-bold">₩{(summary.totalCampaignBudget || 0).toLocaleString()}</span>
                   </div>
                 </div>
@@ -171,7 +179,7 @@ export default function AdminReports() {
                       <tr className="border-b">
                         <th className="text-left py-3 px-2">날짜</th>
                         <th className="text-right py-3 px-2">충전</th>
-                        <th className="text-right py-3 px-2">사용</th>
+                        <th className="text-right py-3 px-2">레거시 사용</th>
                         <th className="text-right py-3 px-2">환불</th>
                         <th className="text-right py-3 px-2">거래 건수</th>
                       </tr>

@@ -17,7 +17,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -59,8 +59,8 @@ async function callBizChatAPI(
   useProduction: boolean = false
 ) {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -70,7 +70,7 @@ async function callBizChatAPI(
   const tid = generateTid();
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
-  
+
   console.log(`[BizChat AI] ${method} ${url}`);
 
   const options: RequestInit = {
@@ -88,7 +88,7 @@ async function callBizChatAPI(
 
   const response = await fetch(url, options);
   const responseText = await response.text();
-  
+
   console.log(`[BizChat AI] Response: ${response.status} - ${responseText.substring(0, 500)}`);
 
   let data;
@@ -166,16 +166,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'generate': {
         // AI 문구 생성
         const { guideline } = req.body;
-        
+
         if (!guideline || guideline.length < 10) {
-          return res.status(400).json({ 
+          return res.status(400).json({
             error: '가이드라인은 최소 10자 이상이어야 합니다',
             example: '광고주(또는 브랜드명): 위픽\n이벤트 내용: 신규 가입 이벤트\n이벤트 기간: 2024년 12월 1일~12월 31일\nURL: https://example.com',
           });
         }
 
         const result = await generateCampaignMessage(guideline, useProduction);
-        
+
         if (result.data.code !== 'S000001') {
           return res.status(400).json({
             success: false,
@@ -197,15 +197,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'check': {
         // AI 문구 검증
         const { title, body } = req.body;
-        
+
         if (!title || !body) {
-          return res.status(400).json({ 
+          return res.status(400).json({
             error: '제목(title)과 본문(body)이 필요합니다',
           });
         }
 
         const result = await checkCampaignMessage(title, body, useProduction);
-        
+
         if (result.data.code !== 'S000001') {
           return res.status(400).json({
             success: false,
@@ -227,13 +227,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'gounInspect': {
         // 고언연 검수 요청
         const { campaignId } = req.body;
-        
+
         if (!campaignId) {
           return res.status(400).json({ error: 'campaignId is required' });
         }
 
         const result = await requestGounInspection(campaignId, useProduction);
-        
+
         if (result.data.code !== 'S000001') {
           return res.status(400).json({
             success: false,
@@ -256,13 +256,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'gounResult': {
         // 고언연 검수 결과 확인
         const { campaignId } = req.body;
-        
+
         if (!campaignId) {
           return res.status(400).json({ error: 'campaignId is required' });
         }
 
         const result = await getGounInspectionResult(campaignId, useProduction);
-        
+
         if (result.data.code !== 'S000001') {
           return res.status(400).json({
             success: false,
@@ -282,7 +282,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       default:
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'Invalid action',
           validActions: ['generate', 'check', 'gounInspect', 'gounResult'],
           description: {

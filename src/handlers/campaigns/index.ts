@@ -2,10 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, desc } from 'drizzle-orm';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
 import { pgTable, text, integer, timestamp, numeric, jsonb } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { randomUUID, createHmac } from 'crypto';
+import { calculateCampaignCredits } from '../../../shared/credit-policy';
 
 // BizChat API Configuration
 const BIZCHAT_DEV_URL = process.env.BIZCHAT_DEV_API_URL || 'https://gw-dev.bizchat1.co.kr:8443';
@@ -22,8 +23,8 @@ async function callATSMosuAPI(
   useProduction: boolean = false
 ): Promise<{ success: boolean; query: string; filterStr: string; count: number; error?: string }> {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -32,7 +33,7 @@ async function callATSMosuAPI(
 
   const tid = generateTid();
   const url = `${baseUrl}/api/v1/ats/mosu?tid=${tid}`;
-  
+
   console.log(`[ATS Mosu] POST ${url}`);
   console.log(`[ATS Mosu] Payload:`, JSON.stringify(filterPayload, null, 2));
 
@@ -50,7 +51,7 @@ async function callATSMosuAPI(
     console.log(`[ATS Mosu] Response: ${response.status} - ${responseText.substring(0, 500)}`);
 
     const data = JSON.parse(responseText);
-    
+
     if (data.code === 'S000001' && data.data?.query) {
       console.log(`[ATS Mosu] Success - query: ${data.data.query.substring(0, 200)}...`);
       return {
@@ -60,30 +61,30 @@ async function callATSMosuAPI(
         count: data.data.cnt || 0,
       };
     }
-    
+
     console.error(`[ATS Mosu] Failed - code: ${data.code}, msg: ${data.msg}`);
-    return { 
-      success: false, 
-      query: '', 
-      filterStr: '', 
-      count: 0, 
-      error: `ATS API failed: ${data.code} - ${data.msg}` 
+    return {
+      success: false,
+      query: '',
+      filterStr: '',
+      count: 0,
+      error: `ATS API failed: ${data.code} - ${data.msg}`
     };
   } catch (error) {
     console.error(`[ATS Mosu] Error:`, error);
-    return { 
-      success: false, 
-      query: '', 
-      filterStr: '', 
-      count: 0, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      query: '',
+      filterStr: '',
+      count: 0,
+      error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
 }
 
 // Callback URL (Vercel 배포 도메인)
-const CALLBACK_BASE_URL = process.env.VERCEL_URL 
-  ? `https://${process.env.VERCEL_URL}` 
+const CALLBACK_BASE_URL = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
   : 'https://wepickbizchat-new.vercel.app';
 
 const users = pgTable('users', {
@@ -117,6 +118,9 @@ const campaigns = pgTable('campaigns', {
   budget: numeric('budget'),
   costPerMessage: numeric('cost_per_message'),
   scheduledAt: timestamp('scheduled_at'),
+  creationMode: text('creation_mode'),
+  recommendedTemplateId: text('recommended_template_id'),
+  variableValues: jsonb('variable_values'),
   // Maptics 지오펜스 발송 관련 필드
   atsSndStartDate: timestamp('ats_snd_start_date'),
   collStartDate: timestamp('coll_start_date'),
@@ -183,15 +187,112 @@ const templates = pgTable('templates', {
   buttons: jsonb('buttons'), // { list: [{ type, name, val1, val2? }] }
   status: text('status').default('draft'),
   lmsContent: text('lms_content'),
+  variableSchema: jsonb('variable_schema'),
   lmsImageUrl: text('lms_image_url'),
   lmsImageFileId: text('lms_image_file_id'),
   lmsUrlLinks: jsonb('lms_url_links'), // { list: string[], reward?: number }
 });
 
+function replaceTemplateVariables(template: string | null | undefined, variables: Record<string, any>) {
+  if (!template) return template || null;
+  return Object.entries(variables || {}).reduce((result, [key, value]) => {
+    let displayValue = value;
+    if (value && typeof value === 'object' && 'start' in value && 'end' in value) {
+      displayValue = `${value.start} ~ ${value.end}`;
+    }
+    return result
+      .split(`{{${key}}}`)
+      .join(displayValue == null ? '' : String(displayValue))
+      .split(`{${key}}`)
+      .join(displayValue == null ? '' : String(displayValue));
+  }, template);
+}
+
+function isTemplateVariableMissing(value: any) {
+  if (value && typeof value === 'object' && ('start' in value || 'end' in value)) {
+    return !value.start || !value.end;
+  }
+  return value === undefined || value === null || String(value).trim() === '';
+}
+
+function getMissingRequiredTemplateVariables(variableSchema: unknown, variables: Record<string, any>) {
+  if (!Array.isArray(variableSchema)) return [];
+  return variableSchema.filter((variable: any) => {
+    const key = typeof variable?.key === 'string' ? variable.key : '';
+    return Boolean(variable?.required && key && isTemplateVariableMissing(variables[key]));
+  });
+}
+
+function hasUnresolvedTemplateVariables(...templates: Array<string | null | undefined>) {
+  return templates.some((template) => /\{[^}]+\}/.test(template || ''));
+}
+
+function serializeSelectedLocations(locations?: SelectedLocation[], legacyLocationTypes?: string[]) {
+  const serializedLocations = (locations || []).map((location) => JSON.stringify(location));
+  return serializedLocations.length > 0 ? serializedLocations : (legacyLocationTypes || []);
+}
+
+function buildTargetingSummaryLabel(campaign: typeof campaigns.$inferSelect, campaignTargeting?: typeof targeting.$inferSelect) {
+  const locationCount = campaignTargeting?.locationTypes?.length || 0;
+  const regionCount = campaignTargeting?.regions?.length || 0;
+  const interestCount =
+    (campaignTargeting?.shopping11stCategories?.length || 0) +
+    (campaignTargeting?.webappCategories?.length || 0) +
+    (campaignTargeting?.callUsageTypes?.length || 0);
+  const geofenceCount = campaignTargeting?.geofenceIds?.length || 0;
+
+  const modeLabel =
+    campaign.rcvType === 1
+      ? '방문 위치 · 바로'
+      : campaign.rcvType === 2
+        ? '방문 위치 · 모아서'
+        : locationCount > 0
+          ? `위치 ${locationCount}개`
+          : interestCount > 0
+            ? `관심사 ${interestCount}개`
+            : regionCount > 0
+              ? `${regionCount}개 지역`
+              : geofenceCount > 0
+                ? `방문 위치 ${geofenceCount}개`
+                : '기본 조건';
+
+  return {
+    modeLabel,
+    locationCount,
+    regionCount,
+    interestCount,
+    geofenceCount,
+  };
+}
+
 function getDb() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL is not set');
   return drizzle(neon(dbUrl));
+}
+
+function isCreditModeEnabled() {
+  return process.env.CREDIT_MODE_ENABLED === 'true';
+}
+
+async function getEffectiveAvailableCredits(db: ReturnType<typeof getDb>, userId: string, legacyBalance: number) {
+  const result = await db.execute(sql`
+    SELECT
+      COALESCE((
+        SELECT SUM(remaining_credits)::integer
+        FROM credit_grants
+        WHERE user_id = ${userId}
+          AND remaining_credits > 0
+          AND expires_at > NOW()
+      ), 0) AS available_credits,
+      EXISTS(
+        SELECT 1 FROM credit_grants WHERE user_id = ${userId}
+        UNION
+        SELECT 1 FROM credit_ledger WHERE user_id = ${userId}
+      ) AS has_ledger
+  `);
+  const row = result.rows?.[0] || {};
+  return Boolean(row.has_ledger) ? Number(row.available_credits || 0) : legacyBalance;
 }
 
 function getSupabaseAdmin() {
@@ -206,7 +307,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -219,7 +320,7 @@ async function verifyAuth(req: VercelRequest) {
   // 대리 로그인 토큰 확인
   const impersonateToken = req.headers['x-impersonate-token'] as string;
   const impersonateUserId = req.headers['x-impersonate-user-id'] as string;
-  
+
   if (impersonateToken && impersonateUserId) {
     const verified = verifyImpersonateToken(impersonateToken);
     if (verified && verified.userId === impersonateUserId) {
@@ -227,7 +328,7 @@ async function verifyAuth(req: VercelRequest) {
     }
     return null;
   }
-  
+
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {
@@ -246,7 +347,7 @@ function detectProductionEnvironment(req: VercelRequest): boolean {
     console.log('[BizChat] Force DEV mode: BIZCHAT_USE_PROD is not set to "true"');
     return false;
   }
-  
+
   if (req.query.env === 'prod' || req.body?.env === 'prod') return true;
   if (req.query.env === 'dev' || req.body?.env === 'dev') return false;
   if (process.env.VERCEL_ENV === 'production') return true;
@@ -263,8 +364,8 @@ async function callBizChatAPI(
 ): Promise<{ status: number; data: Record<string, unknown> }> {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
   const envKeyName = useProduction ? 'BIZCHAT_PROD_API_KEY' : 'BIZCHAT_DEV_API_KEY';
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   console.log(`[BizChat] Environment: ${useProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
@@ -282,7 +383,7 @@ async function callBizChatAPI(
   const tid = generateTid();
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
-  
+
   console.log(`[BizChat] ${method} ${url}`);
 
   const options: RequestInit = {
@@ -301,7 +402,7 @@ async function callBizChatAPI(
 
   const response = await fetch(url, options);
   const responseText = await response.text();
-  
+
   console.log(`[BizChat] Response: ${response.status} - ${responseText.substring(0, 500)}`);
 
   let data;
@@ -442,7 +543,7 @@ function buildAtsQuery(targetingData: {
       ...(cat.cat2 && { cat2: cat.cat2Name || cat.cat2 }),  // 카테고리 이름 (예: "침대/소파")
       ...(cat.cat3 && { cat3: cat.cat3Name || cat.cat3 }),  // 카테고리 이름 (예: "펠트")
     }));
-    
+
     // 설명에는 표시명 사용
     const categoryDesc = targetingData.shopping11stCategories.map(cat => {
       const cat1Display = cat.cat1Name || cat.cat1;
@@ -450,7 +551,7 @@ function buildAtsQuery(targetingData: {
       const cat3Display = cat.cat3 ? (cat.cat3Name || cat.cat3) : '';
       return `${cat1Display}${cat2Display ? ' > ' + cat2Display : ''}${cat3Display ? ' > ' + cat3Display : ''}`;
     }).join(', ');
-    
+
     conditions.push({
       data: categoryData,
       dataType: 'cate',
@@ -471,7 +572,7 @@ function buildAtsQuery(targetingData: {
       ...(cat.cat2 && { cat2: cat.cat2Name || cat.cat2 }),  // 카테고리 이름 (예: "VR/AR게임")
       ...(cat.cat3 && { cat3: cat.cat3Name || cat.cat3 }),  // 카테고리 이름 (예: "포켓몬 고")
     }));
-    
+
     // 설명에는 표시명 사용
     const categoryDesc = targetingData.webappCategories.map(cat => {
       const cat1Display = cat.cat1Name || cat.cat1;
@@ -479,7 +580,7 @@ function buildAtsQuery(targetingData: {
       const cat3Display = cat.cat3 ? (cat.cat3Name || cat.cat3) : '';
       return `${cat1Display}${cat2Display ? ' > ' + cat2Display : ''}${cat3Display ? ' > ' + cat3Display : ''}`;
     }).join(', ');
-    
+
     conditions.push({
       data: categoryData,
       dataType: 'cate',
@@ -500,7 +601,7 @@ function buildAtsQuery(targetingData: {
       ...(cat.cat2 && { cat2: cat.cat2Name || cat.cat2 }),
       ...(cat.cat3 && { cat3: cat.cat3Name || cat.cat3 }),
     }));
-    
+
     // 설명에는 표시명 사용
     const categoryDesc = targetingData.callCategories.map(cat => {
       const cat1Display = cat.cat1Name || cat.cat1;
@@ -508,7 +609,7 @@ function buildAtsQuery(targetingData: {
       const cat3Display = cat.cat3 ? (cat.cat3Name || cat.cat3) : '';
       return `${cat1Display}${cat2Display ? ' > ' + cat2Display : ''}${cat3Display ? ' > ' + cat3Display : ''}`;
     }).join(', ');
-    
+
     conditions.push({
       data: categoryData,
       dataType: 'cate',
@@ -524,7 +625,7 @@ function buildAtsQuery(targetingData: {
   if (targetingData.locations && targetingData.locations.length > 0) {
     const homeLocations = targetingData.locations.filter(l => l.type === 'home');
     const workLocations = targetingData.locations.filter(l => l.type === 'work');
-    
+
     if (homeLocations.length > 0) {
       const hcodes = homeLocations.map(l => l.code);
       const names = homeLocations.map(l => l.name);
@@ -538,7 +639,7 @@ function buildAtsQuery(targetingData: {
       });
       descParts.push(`집주소: ${names.join(', ')}`);
     }
-    
+
     if (workLocations.length > 0) {
       const hcodes = workLocations.map(l => l.code);
       const names = workLocations.map(l => l.name);
@@ -561,7 +662,7 @@ function buildAtsQuery(targetingData: {
       // 값 처리: 문자열 gt/lt를 숫자로 변환
       let processedValue: unknown = pro.value;
       let dataType: 'number' | 'boolean' | 'code' = 'number';
-      
+
       if (typeof pro.value === 'object' && pro.value !== null && 'gt' in pro.value) {
         // 범위 값 - 숫자로 변환
         const rangeValue = pro.value as { gt?: string | number; lt?: string | number };
@@ -579,7 +680,7 @@ function buildAtsQuery(targetingData: {
       } else if (typeof pro.value === 'number') {
         dataType = 'number';
       }
-      
+
       conditions.push({
         data: processedValue,
         dataType: dataType,
@@ -610,34 +711,34 @@ function validateSendTime(sendDate: Date | string | null): { valid: boolean; err
   if (!sendDate) {
     return { valid: true };
   }
-  
+
   const targetDate = typeof sendDate === 'string' ? new Date(sendDate) : new Date(sendDate);
   const now = new Date();
-  
+
   // 1. 발송 시간대 체크 (09:00~19:00, 19시 미포함)
   const targetHour = targetDate.getHours();
   if (targetHour < 9 || targetHour >= 19) {
-    return { 
-      valid: false, 
-      error: '발송 시간은 09:00~19:00 사이여야 합니다 (19시 이전)' 
+    return {
+      valid: false,
+      error: '발송 시간은 09:00~19:00 사이여야 합니다 (19시 이전)'
     };
   }
-  
+
   // 2. 최소 1시간 여유 체크
   const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
   if (targetDate < oneHourFromNow) {
-    return { 
-      valid: false, 
-      error: '발송 시간은 현재 시간으로부터 최소 1시간 이후여야 합니다' 
+    return {
+      valid: false,
+      error: '발송 시간은 현재 시간으로부터 최소 1시간 이후여야 합니다'
     };
   }
-  
+
   // 3. 10분 단위 체크 (BizChat 규격: 10분 단위로만 시작 가능)
   // 10분 단위가 아니면 올림 처리
   const adjustedDate = new Date(targetDate);
   adjustedDate.setSeconds(0);
   adjustedDate.setMilliseconds(0);
-  
+
   const targetMinutes = adjustedDate.getMinutes();
   const remainder = targetMinutes % 10;
   if (remainder !== 0) {
@@ -647,15 +748,15 @@ function validateSendTime(sendDate: Date | string | null): { valid: boolean; err
       // 이미 setMinutes에서 자동으로 시간이 증가됨
     }
   }
-  
+
   // 조정된 시간이 19시 이상이면 에러
   if (adjustedDate.getHours() >= 19) {
-    return { 
-      valid: false, 
-      error: '발송 시간은 19:00 이전이어야 합니다' 
+    return {
+      valid: false,
+      error: '발송 시간은 19:00 이전이어야 합니다'
     };
   }
-  
+
   return { valid: true, adjustedDate };
 }
 
@@ -670,22 +771,22 @@ function validateStringLengths(data: {
   if (data.name && data.name.length > 40) {
     return { valid: false, error: `캠페인명은 최대 40자까지 입력 가능합니다 (현재: ${data.name.length}자)` };
   }
-  
+
   // 고객사명: 최대 100자
   if (data.tgtCompanyName && data.tgtCompanyName.length > 100) {
     return { valid: false, error: `고객사명은 최대 100자까지 입력 가능합니다 (현재: ${data.tgtCompanyName.length}자)` };
   }
-  
+
   // 메시지 제목: 최대 30자
   if (data.title && data.title.length > 30) {
     return { valid: false, error: `메시지 제목은 최대 30자까지 입력 가능합니다 (현재: ${data.title.length}자)` };
   }
-  
+
   // 메시지 본문: 최대 1000자
   if (data.msg && data.msg.length > 1000) {
     return { valid: false, error: `메시지 본문은 최대 1000자까지 입력 가능합니다 (현재: ${data.msg.length}자)` };
   }
-  
+
   return { valid: true };
 }
 
@@ -739,24 +840,24 @@ async function createCampaignInBizChat(
   const calculateValidSendDate = (requestedDate: Date | null | undefined): number => {
     const now = new Date();
     const minStartTime = new Date(now.getTime() + 60 * 60 * 1000); // 현재 + 1시간
-    
+
     // 요청된 시간이 없거나 최소 시작 시간보다 이전이면 최소 시작 시간 사용
     let targetDate = requestedDate ? new Date(requestedDate) : minStartTime;
     if (targetDate < minStartTime) {
       targetDate = minStartTime;
     }
-    
+
     // 항상 초/밀리초를 0으로 초기화
     targetDate.setSeconds(0);
     targetDate.setMilliseconds(0);
-    
+
     // 10분 단위로 올림 (예: 11:13 → 11:20, 11:20 → 11:20)
     const minutes = targetDate.getMinutes();
     const remainder = minutes % 10;
     if (remainder > 0) {
       targetDate.setMinutes(minutes + (10 - remainder));
     }
-    
+
     // 올림 후 다시 최소 시작 시간 확인 (경계 케이스)
     if (targetDate < minStartTime) {
       targetDate = new Date(minStartTime.getTime());
@@ -768,7 +869,7 @@ async function createCampaignInBizChat(
         targetDate.setMinutes(mins + (10 - rem));
       }
     }
-    
+
     return Math.floor(targetDate.getTime() / 1000);
   };
 
@@ -844,7 +945,7 @@ async function createCampaignInBizChat(
     if (campaignData.sndGeofenceId) {
       payload.sndGeofenceId = campaignData.sndGeofenceId;
     }
-    
+
     // 수집 시작/종료 일시 (필수)
     if (campaignData.collStartDate) {
       payload.collStartDate = Math.floor(new Date(campaignData.collStartDate).getTime() / 1000);
@@ -852,12 +953,12 @@ async function createCampaignInBizChat(
     if (campaignData.collEndDate) {
       payload.collEndDate = Math.floor(new Date(campaignData.collEndDate).getTime() / 1000);
     }
-    
+
     // rcvType=2 (모아서 보내기)일 때 발송 시작 일시
     if (rcvType === 2 && campaignData.collSndDate) {
       payload.collSndDate = Math.floor(new Date(campaignData.collSndDate).getTime() / 1000);
     }
-    
+
     // rcvType=1 (실시간 보내기)일 때 발송 시간대 및 일 균등 분할
     if (rcvType === 1) {
       if (campaignData.rtStartHhmm) {
@@ -869,7 +970,7 @@ async function createCampaignInBizChat(
       // sndDayDiv: 0=미분할 (기본), 1=분할
       payload.sndDayDiv = campaignData.sndDayDiv ?? 0;
     }
-    
+
     // Maptics는 ATS mosu가 아닌 지오펜스로 타겟팅하므로, atsSndStartDate 제거
     delete payload.atsSndStartDate;
     delete payload.sndMosu;
@@ -954,9 +1055,12 @@ const createCampaignSchema = z.object({
   rtEndHhmm: z.string().regex(/^((0[9]|1[0-9])([0-5][0])|2000)$/).optional(), // 0910~2000
   // Maptics 일 균등 분할 (rcvType=1, 0: 미분할, 1: 분할)
   sndDayDiv: z.number().min(0).max(1).optional(),
-  targetCount: z.number().min(100).default(1000),
+  targetCount: z.number().min(1000).default(1000),
   budget: z.number().min(10000),
   scheduledAt: z.string().datetime().optional().or(z.literal('')).transform(val => val === '' ? undefined : val),
+  creationMode: z.enum(['recommended', 'self']).optional(),
+  recommendedTemplateId: z.string().optional(),
+  variableValues: z.record(z.any()).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -978,7 +1082,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     try {
       const result = await db.select().from(campaigns).where(eq(campaigns.userId, userId)).orderBy(desc(campaigns.createdAt));
-      return res.status(200).json(result);
+      const campaignIds = result.map((campaign) => campaign.id);
+      const targetingRows = campaignIds.length > 0
+        ? await db.select().from(targeting).where(inArray(targeting.campaignId, campaignIds))
+        : [];
+      const targetingByCampaignId = new Map(targetingRows.map((row) => [row.campaignId, row]));
+      const campaignsWithTargetingSummary = result.map((campaign) => ({
+        ...campaign,
+        targetingSummary: buildTargetingSummaryLabel(campaign, targetingByCampaignId.get(campaign.id)),
+      }));
+
+      return res.status(200).json(campaignsWithTargetingSummary);
     } catch (error) {
       console.error('Error fetching campaigns:', error);
       return res.status(500).json({ error: 'Failed to fetch campaigns' });
@@ -1001,30 +1115,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (template.userId !== userId && template.userId !== SYSTEM_USER_ID) {
         return res.status(403).json({ error: 'Access denied to template' });
       }
+      if (template.status !== 'approved') {
+        return res.status(400).json({ error: 'Template must be approved before creating campaign' });
+      }
+
+      const resolvedVariableValues = data.variableValues || {};
+      const missingVariables = getMissingRequiredTemplateVariables(template.variableSchema, resolvedVariableValues);
+      if (missingVariables.length > 0) {
+        return res.status(400).json({
+          error: `${missingVariables.map((variable: any) => variable.label || variable.key).join(', ')} 항목을 입력해주세요`,
+          code: 'TEMPLATE_VARIABLES_REQUIRED',
+        });
+      }
+
+      const resolvedTitle = replaceTemplateVariables(template.title, resolvedVariableValues);
+      const resolvedLmsTitle = replaceTemplateVariables(template.lmsTitle, resolvedVariableValues);
+      const resolvedContent = replaceTemplateVariables(template.content, resolvedVariableValues) || template.content;
+      const resolvedLmsContent = replaceTemplateVariables(template.lmsContent, resolvedVariableValues);
+      if (hasUnresolvedTemplateVariables(resolvedTitle, resolvedLmsTitle, resolvedContent, resolvedLmsContent)) {
+        return res.status(400).json({
+          error: '템플릿에 아직 입력되지 않은 정보가 남아 있습니다',
+          code: 'TEMPLATE_VARIABLES_UNRESOLVED',
+        });
+      }
 
       // 메시지 유형별 단가 (RCS: ₩130으로 변경됨)
       const MESSAGE_PRICES: Record<string, number> = { LMS: 100, MMS: 120, RCS: 130 };
       const costPerMessage = MESSAGE_PRICES[template.messageType] || 100;
-      
+
       const userBalance = parseFloat(user.balance || '0');
       const estimatedCost = data.targetCount * costPerMessage;
-      if (userBalance < estimatedCost) return res.status(400).json({ error: '잔액이 부족합니다' });
+      const creditEstimate = calculateCampaignCredits(
+        { targetCount: data.targetCount, templateCount: 1 },
+        userBalance,
+      );
+
+      if (isCreditModeEnabled()) {
+        if (creditEstimate.isBelowMinimum) {
+          return res.status(400).json({
+            error: `템플릿 1개는 최소 ${creditEstimate.minTargetCount.toLocaleString('ko-KR')}건부터 발송할 수 있습니다`,
+          });
+        }
+
+        const effectiveAvailableCredits = await getEffectiveAvailableCredits(db, userId, userBalance);
+        if (effectiveAvailableCredits < creditEstimate.neededCredits) {
+          return res.status(400).json({
+            error: `크레딧이 부족합니다. ${creditEstimate.neededCredits.toLocaleString('ko-KR')}C가 필요합니다`,
+          });
+        }
+      } else if (userBalance < estimatedCost) {
+        return res.status(400).json({ error: '잔액이 부족합니다' });
+      }
 
       // 지오펜스 선택 여부 먼저 확인 (ATS vs Maptics 분기)
       const geofenceIds = data.geofenceIds || (data.geofences?.map(g => String(g.id)) ?? []);
       const hasGeofence = geofenceIds.length > 0;
-      
+
       // rcvType 결정: 지오펜스가 있으면 Maptics (1=실시간, 2=모아서), 없으면 ATS (0)
       // mapticsSendType: 'realtime' → rcvType=1, 'batch' (기본) → rcvType=2
       let rcvType = 0; // 기본: ATS 일반
       if (hasGeofence) {
         rcvType = data.mapticsSendType === 'realtime' ? 1 : 2;
       }
-      
+
       // 실시간 보내기(rcvType=1) 검증
       if (rcvType === 1) {
         if (!data.rtStartHhmm || !data.rtEndHhmm) {
-          return res.status(400).json({ 
+          return res.status(400).json({
             error: '실시간 보내기는 발송 시작/종료 시간이 필요합니다',
             code: 'MAPTICS_REALTIME_TIME_REQUIRED',
           });
@@ -1033,7 +1190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const startTime = parseInt(data.rtStartHhmm, 10);
         const endTime = parseInt(data.rtEndHhmm, 10);
         if (startTime >= endTime) {
-          return res.status(400).json({ 
+          return res.status(400).json({
             error: '발송 시작 시간은 종료 시간보다 이전이어야 합니다',
             code: 'MAPTICS_REALTIME_INVALID_TIME_RANGE',
           });
@@ -1074,7 +1231,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         console.log('[Campaign] Calling ATS mosu API to get SQL query...');
         const atsMosuResult = await callATSMosuAPI(atsResult.query, useProduction);
-        
+
         if (atsMosuResult.success) {
           sndMosuQuerySQL = atsMosuResult.query;
           atsMosuCount = atsMosuResult.count;
@@ -1084,7 +1241,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log(`[Campaign] ATS mosu API success - SQL query obtained, count: ${atsMosuCount}`);
         } else {
           console.error('[Campaign] ATS mosu API failed:', atsMosuResult.error);
-          return res.status(503).json({ 
+          return res.status(503).json({
             error: 'ATS 타겟팅 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.',
             code: 'ATS_MOSU_UNAVAILABLE',
             details: atsMosuResult.error,
@@ -1110,17 +1267,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         return result;
       };
-      
+
       const now = new Date();
       now.setSeconds(0);
       now.setMilliseconds(0);
       const minCollStartTime = roundUpTo10Min(new Date(now.getTime() + 60 * 60 * 1000));
-      
+
       // Maptics 필드 미리 계산 (hasGeofence일 때만 사용)
       let preCalcCollStartDate: Date | null = null;
       let preCalcCollEndDate: Date | null = null;
       let preCalcCollSndDate: Date | null = null;
-      
+
       // KST 09:00-19:00 윈도우로 발송 시간 제한 (BizChat 규격)
       const clampToKSTWindow = (date: Date): Date => {
         // KST로 변환해서 시간 판단 (UTC + 9시간)
@@ -1128,17 +1285,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const kstTime = new Date(date.getTime() + kstOffset);
         const kstHours = kstTime.getUTCHours();
         const kstMinutes = kstTime.getUTCMinutes();
-        
+
         // KST 기준으로 09:00~19:00 내라면 그대로 반환
         if (kstHours >= 9 && kstHours < 19) {
           return new Date(date);
         }
-        
+
         // KST 기준 날짜 계산
         const kstYear = kstTime.getUTCFullYear();
         const kstMonth = kstTime.getUTCMonth();
         const kstDay = kstTime.getUTCDate();
-        
+
         let resultKST: Date;
         if (kstHours < 9) {
           // 09:00 KST 이전 → 같은 KST 날짜의 09:00으로 설정
@@ -1147,11 +1304,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // 19:00 KST 이후 → 다음 KST 날짜의 09:00으로 설정
           resultKST = new Date(Date.UTC(kstYear, kstMonth, kstDay + 1, 9, 0, 0, 0));
         }
-        
+
         // KST를 UTC로 변환 (KST - 9시간 = UTC)
         return new Date(resultKST.getTime() - kstOffset);
       };
-      
+
       if (hasGeofence) {
         // collSndDate 계산 (발송 시간)
         const minCollSndTime = new Date(minCollStartTime.getTime() + 2 * 60 * 60 * 1000);
@@ -1161,20 +1318,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // KST 09:00-19:00 윈도우 적용
         preCalcCollSndDate = clampToKSTWindow(preCalcCollSndDate);
         preCalcCollSndDate = roundUpTo10Min(preCalcCollSndDate);
-        
+
         // collStartDate 계산
         preCalcCollStartDate = new Date(preCalcCollSndDate.getTime() - 2 * 60 * 60 * 1000);
         if (preCalcCollStartDate < minCollStartTime) {
           preCalcCollStartDate = new Date(minCollStartTime);
         }
         preCalcCollStartDate = roundUpTo10Min(preCalcCollStartDate);
-        
+
         // collEndDate 계산
         const endFromStart = new Date(preCalcCollStartDate.getTime() + 30 * 60 * 1000);
         const endFromSnd = new Date(preCalcCollSndDate.getTime() - 30 * 60 * 1000);
         preCalcCollEndDate = endFromStart > endFromSnd ? endFromStart : endFromSnd;
         preCalcCollEndDate = roundUpTo10Min(preCalcCollEndDate);
-        
+
         // 검증: collStartDate < collEndDate < collSndDate
         if (preCalcCollEndDate <= preCalcCollStartDate) {
           preCalcCollEndDate = roundUpTo10Min(new Date(preCalcCollStartDate.getTime() + 30 * 60 * 1000));
@@ -1185,7 +1342,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           preCalcCollSndDate = clampToKSTWindow(preCalcCollSndDate);
           preCalcCollSndDate = roundUpTo10Min(preCalcCollSndDate);
         }
-        
+
         console.log(`[Campaign] Pre-calc Maptics dates - collStartDate: ${preCalcCollStartDate.toISOString()}, collEndDate: ${preCalcCollEndDate.toISOString()}, collSndDate: ${preCalcCollSndDate.toISOString()}`);
       }
 
@@ -1194,7 +1351,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // RCS 타입은 템플릿에서 복사 (사용자가 메시지 생성 시 선택한 값)
       const templateRcsType = template.rcsType ?? null;
       console.log(`[Campaign] Template rcsType: ${templateRcsType} (messageType: ${data.messageType})`);
-      
+
       const campaignResult = await db.insert(campaigns).values({
         id: campaignId,
         userId,
@@ -1218,6 +1375,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         budget: data.budget.toString(),
         costPerMessage: '50',
         scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+        creationMode: data.creationMode || null,
+        recommendedTemplateId: data.recommendedTemplateId || null,
+        variableValues: data.variableValues || null,
         // Maptics 지오펜스 필드 저장 (rcvType=1,2) - 초기 INSERT 시점에 저장
         ...(hasGeofence ? {
           sndGeofenceId: Number(geofenceIds[0]),
@@ -1237,14 +1397,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await db.insert(messages).values({
         id: randomUUID(),
         campaignId,
-        title: template.title,
-        lmsTitle: template.lmsTitle || null,
-        content: template.content,
+        title: resolvedTitle,
+        lmsTitle: resolvedLmsTitle,
+        content: resolvedContent,
         imageUrl: template.imageUrl,
         imageFileId: template.imageFileId || null,
         urlLinks: template.urlLinks || null,
         buttons: template.buttons || null,
-        lmsContent: template.lmsContent || null,
+        lmsContent: resolvedLmsContent,
         lmsImageUrl: template.lmsImageUrl || null,
         lmsImageFileId: template.lmsImageFileId || null,
         lmsUrlLinks: template.lmsUrlLinks || null,
@@ -1264,10 +1424,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         shopping11stCategories: [],
         webappCategories: [],
         callUsageTypes: data.callUsageTypes || [],
-        locationTypes: data.locationTypes || [],
+        locationTypes: serializeSelectedLocations(data.locations, data.locationTypes),
         mobilityPatterns: data.mobilityPatterns || [],
         geofenceIds: geofenceIds,
-        atsQuery: hasGeofence 
+        atsQuery: hasGeofence
           ? JSON.stringify({ geofenceIds, rcvType: 2 })  // Maptics 메타데이터
           : JSON.stringify({
               jsonQuery: atsResult?.query,
@@ -1281,21 +1441,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const calculateValidSendDateForCampaign = (requestedDate: Date | null | undefined): Date => {
         const now = new Date();
         const minStartTime = new Date(now.getTime() + 60 * 60 * 1000); // 현재 + 1시간
-        
+
         let targetDate = requestedDate ? new Date(requestedDate) : minStartTime;
         if (targetDate < minStartTime) {
           targetDate = minStartTime;
         }
-        
+
         targetDate.setSeconds(0);
         targetDate.setMilliseconds(0);
-        
+
         const minutes = targetDate.getMinutes();
         const remainder = minutes % 10;
         if (remainder > 0) {
           targetDate.setMinutes(minutes + (10 - remainder));
         }
-        
+
         return targetDate;
       };
 
@@ -1352,11 +1512,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (bizchatResult.data.code === 'S000001') {
           const responseData = bizchatResult.data.data as { id?: string } | undefined;
           const bizchatCampaignId = responseData?.id;
-          
+
           if (bizchatCampaignId) {
             // BizChat 캠페인 ID 저장 (Maptics 필드는 이미 INSERT 시 저장됨)
             await db.update(campaigns)
-              .set({ 
+              .set({
                 bizchatCampaignId,
                 statusCode: 0, // 임시등록
                 status: 'temp_registered',
@@ -1382,7 +1542,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // BizChat 등록 실패 시에도 로컬 캠페인은 유지 (임시등록 상태로)
         console.error('[Campaign] BizChat registration failed:', bizchatResult.data);
-        
+
         return res.status(201).json({
           ...campaignResult[0],
           statusCode: 0,
@@ -1397,7 +1557,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       } catch (bizchatError) {
         console.error('[Campaign] BizChat API error:', bizchatError);
-        
+
         return res.status(201).json({
           ...campaignResult[0],
           statusCode: 0,

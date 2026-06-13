@@ -127,8 +127,8 @@ function AgencyDashboard() {
   };
 
   const tierInfo = stats ? getCommissionTierInfo(stats.totalSpendThisMonth) : { rate: 10, tier: "실버", nextTarget: 50000000, color: "text-gray-400" };
-  const progressToNextTier = stats && tierInfo.nextTarget 
-    ? (stats.totalSpendThisMonth / tierInfo.nextTarget) * 100 
+  const progressToNextTier = stats && tierInfo.nextTarget
+    ? (stats.totalSpendThisMonth / tierInfo.nextTarget) * 100
     : 100;
 
   return (

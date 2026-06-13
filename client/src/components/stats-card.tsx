@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
+import { AppIconTile } from "@/components/app-icon-tile";
 
 interface StatsCardProps {
   title: string;
@@ -25,12 +26,12 @@ export function StatsCard({
   className,
 }: StatsCardProps) {
   return (
-    <Card className={cn("hover-elevate", className)}>
-      <CardContent className="p-6">
+    <Card className={cn("hover-elevate transition-shadow", className)}>
+      <CardContent className="p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <p className="text-small text-muted-foreground mb-1">{title}</p>
-            <p className="text-h1 font-bold tracking-tight truncate" data-testid={`text-stat-${title.replace(/\s/g, '-')}`}>
+            <p className="text-small font-medium text-muted-foreground mb-1">{title}</p>
+            <p className="text-h1 font-bold truncate" data-testid={`text-stat-${title.replace(/\s/g, '-')}`}>
               {value}
             </p>
             {description && (
@@ -45,15 +46,7 @@ export function StatsCard({
               </p>
             )}
           </div>
-          <div className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-lg shrink-0",
-            iconClassName || "bg-primary/10"
-          )}>
-            <Icon className={cn(
-              "h-5 w-5",
-              iconClassName ? "" : "text-primary"
-            )} />
-          </div>
+          <AppIconTile icon={Icon} className={iconClassName} />
         </div>
       </CardContent>
     </Card>

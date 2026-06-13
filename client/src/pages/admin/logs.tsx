@@ -17,16 +17,100 @@ import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 
 const ACTION_LABELS: Record<string, string> = {
   login: "로그인",
-  balance_adjust: "잔액 조정",
+  balance_adjust: "레거시 잔액 조정",
+  credit_adjust: "크레딧 수동 조정",
+  credit_restore: "크레딧 복구",
+  credit_partial_restore: "잔여분 복구",
+  refund_approve: "환불 승인",
+  refund_reject: "환불 거절",
+  refund_complete: "환불 완료",
   user_status_change: "계정 상태 변경",
   master_toggle: "마스터 권한 변경",
   view_user: "유저 조회",
   view_campaign: "캠페인 조회",
 };
 
+function toNumber(value: unknown) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function formatCredits(value: unknown) {
+  return `${toNumber(value).toLocaleString("ko-KR")}C`;
+}
+
+function formatWon(value: unknown) {
+  return `₩${toNumber(value).toLocaleString("ko-KR")}`;
+}
+
+function getLogDetails(log: any) {
+  const details = log.details || {};
+
+  if (log.action === "credit_adjust") {
+    const amountCredits = toNumber(details.amountCredits);
+    const direction = amountCredits >= 0 ? "지급" : "차감";
+
+    return {
+      primary: `${direction} ${formatCredits(Math.abs(amountCredits))}`,
+      secondary: [
+        details.userEmail,
+        `${formatCredits(details.previousBalanceCredits)} → ${formatCredits(details.newBalanceCredits)}`,
+        details.reason,
+      ].filter(Boolean).join(" · "),
+    };
+  }
+
+  if (log.action === "credit_restore" || log.action === "credit_partial_restore") {
+    return {
+      primary: `${log.action === "credit_partial_restore" ? "잔여분" : "전액"} 복구 ${formatCredits(details.restoredCredits)}`,
+      secondary: [
+        details.campaignName,
+        details.reason,
+        details.chargeableCount != null && details.targetCount != null
+          ? `처리 ${Number(details.chargeableCount).toLocaleString("ko-KR")} / 목표 ${Number(details.targetCount).toLocaleString("ko-KR")}건`
+          : "",
+        details.balanceAfterCredits != null ? `잔액 ${formatCredits(details.balanceAfterCredits)}` : "",
+      ].filter(Boolean).join(" · "),
+    };
+  }
+
+  if (log.action === "balance_adjust") {
+    const amount = toNumber(details.amount);
+    const direction = amount >= 0 ? "증액" : "차감";
+
+    return {
+      primary: `${direction} ${formatWon(Math.abs(amount))}`,
+      secondary: [
+        details.userEmail,
+        `${formatWon(details.previousBalance)} → ${formatWon(details.newBalance)}`,
+        details.reason,
+      ].filter(Boolean).join(" · "),
+    };
+  }
+
+  if (log.action?.startsWith("refund_")) {
+    return {
+      primary: details.newStatus ? `상태: ${details.newStatus}` : "환불 처리",
+      secondary: [
+        details.amount ? `금액 ${formatWon(details.amount)}` : "",
+        details.adminNote,
+      ].filter(Boolean).join(" · "),
+    };
+  }
+
+  if (!log.details) {
+    return { primary: "-", secondary: "" };
+  }
+
+  return {
+    primary: JSON.stringify(log.details),
+    secondary: "",
+  };
+}
+
 export default function AdminLogs() {
   const adminToken = localStorage.getItem("adminToken");
-  
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
@@ -109,12 +193,20 @@ export default function AdminLogs() {
                             </span>
                           ) : "-"}
                         </TableCell>
-                        <TableCell className="max-w-[200px]">
-                          {log.details ? (
-                            <span className="text-xs text-muted-foreground truncate block">
-                              {JSON.stringify(log.details).slice(0, 50)}...
-                            </span>
-                          ) : "-"}
+                        <TableCell className="max-w-[280px]">
+                          {(() => {
+                            const detail = getLogDetails(log);
+                            return (
+                              <div className="space-y-1">
+                                <div className="text-sm font-medium">{detail.primary}</div>
+                                {detail.secondary ? (
+                                  <div className="truncate text-xs text-muted-foreground" title={detail.secondary}>
+                                    {detail.secondary}
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {log.ipAddress || "-"}

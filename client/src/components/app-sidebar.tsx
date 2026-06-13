@@ -1,21 +1,19 @@
 import {
+  Archive,
   LayoutDashboard,
   Megaphone,
   PlusCircle,
-  Wallet,
+  Coins,
   BarChart3,
-  FileText,
-  FilePlus,
   History,
   Phone,
   Receipt,
   Bell,
   MapPin,
+  ChevronRight,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { formatCurrency } from "@/lib/authUtils";
-import logoImage from "@assets/logo_optimized.png";
 import {
   Sidebar,
   SidebarContent,
@@ -27,6 +25,14 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useQuery } from "@tanstack/react-query";
+import { BrandLogo } from "@/components/brand-logo";
+import { AppNavIcon } from "@/components/app-icon-tile";
+
+interface CreditSummary {
+  enabled: boolean;
+  effectiveAvailableCredits: number;
+}
 
 function navigate(href: string) {
   window.history.pushState({}, "", href);
@@ -39,18 +45,33 @@ const mainNavItems = [
     url: "/dashboard",
     icon: LayoutDashboard,
   },
+  {
+    title: "캠페인",
+    url: "/campaigns",
+    icon: Megaphone,
+  },
+  {
+    title: "크레딧",
+    url: "/billing",
+    icon: Coins,
+  },
+  {
+    title: "리포트",
+    url: "/reports",
+    icon: BarChart3,
+  },
 ];
 
 const campaignNavItems = [
   {
-    title: "캠페인 만들기",
+    title: "문자 보내기",
     url: "/campaigns/new",
     icon: PlusCircle,
   },
   {
-    title: "캠페인 목록",
-    url: "/campaigns",
-    icon: Megaphone,
+    title: "발송 목록",
+    url: "/campaigns/history",
+    icon: History,
   },
   {
     title: "발송 내역",
@@ -60,16 +81,6 @@ const campaignNavItems = [
 ];
 
 const preparationNavItems = [
-  {
-    title: "메세지 만들기",
-    url: "/templates/new",
-    icon: FilePlus,
-  },
-  {
-    title: "메세지 목록",
-    url: "/templates",
-    icon: FileText,
-  },
   {
     title: "발신번호",
     url: "/sender-numbers",
@@ -83,11 +94,6 @@ const preparationNavItems = [
 ];
 
 const subNavItems = [
-  {
-    title: "잔액 관리",
-    url: "/billing",
-    icon: Wallet,
-  },
   {
     title: "세금계산서",
     url: "/tax-invoices",
@@ -108,125 +114,161 @@ const subNavItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const { user } = useAuth();
+  const { data: creditSummary } = useQuery<CreditSummary>({
+    queryKey: ["/api/credits/summary"],
+  });
 
-  const balance = user?.balance ? parseFloat(user.balance as string) : 0;
+  const legacyBalance = user?.balance ? parseFloat(user.balance as string) : 0;
+  const balance = creditSummary?.enabled
+    ? Number(creditSummary.effectiveAvailableCredits ?? 0)
+    : legacyBalance;
+  const sendableMessages = Math.floor(balance / 2);
+  const isNavActive = (url: string) => {
+    if (url === "/dashboard") return location === url || location === "/";
+    if (url === "/campaigns") return location.startsWith("/campaigns");
+    return location === url || location.startsWith(`${url}/`);
+  };
+  const primaryActionLabel = balance < 2000 ? "크레딧 충전" : "문자 보내기";
+  const primaryActionHref = balance < 2000 ? "/billing" : "/campaigns/new";
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4 border-b border-sidebar-border">
-        <button 
-          onClick={() => navigate("/dashboard")} 
-          className="flex items-center gap-3 w-full text-left" 
+      <SidebarHeader className="border-b border-sidebar-border bg-card p-4">
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="flex min-h-11 w-full items-center gap-3 rounded-lg text-left transition-colors hover:bg-muted/60"
           data-testid="link-logo"
         >
-          <img src={logoImage} alt="wepick x SKT 로고" className="h-9 w-auto" />
-          <div className="flex flex-col">
-            <span className="font-bold text-sm text-sidebar-foreground">wepickbizchat</span>
-            <span className="text-tiny text-muted-foreground">광고관리</span>
-          </div>
+          <BrandLogo compact />
         </button>
       </SidebarHeader>
-      <SidebarContent className="custom-scrollbar">
+      <SidebarContent className="custom-scrollbar bg-card">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-muted-foreground">홈</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-muted-foreground">주요 메뉴</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => (
+              {mainNavItems.map((item) => {
+                const active = isNavActive(item.url);
+                return (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     onClick={() => navigate(item.url)}
-                    isActive={location === item.url || location === '/'}
-                    className="data-[active=true]:bg-sidebar-accent cursor-pointer"
+                    isActive={active}
+                    className="min-h-11 cursor-pointer rounded-lg px-3 data-[active=true]:bg-primary/10 data-[active=true]:font-semibold data-[active=true]:text-primary"
                     data-testid={`link-nav-${item.url.replace(/\//g, '-')}`}
                   >
-                    <item.icon className="h-4 w-4" />
+                    <AppNavIcon icon={item.icon} active={active} />
                     <span>{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
+              )})}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-muted-foreground">캠페인 관리</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-muted-foreground">빠른 작업</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {campaignNavItems.map((item) => (
+              {campaignNavItems.map((item) => {
+                const active = location === item.url || (item.url !== '/' && location.startsWith(item.url));
+                return (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     onClick={() => navigate(item.url)}
-                    isActive={location === item.url || (item.url !== '/' && location.startsWith(item.url))}
-                    className="data-[active=true]:bg-sidebar-accent cursor-pointer"
+                    isActive={active}
+                    className="min-h-11 cursor-pointer rounded-lg px-3 data-[active=true]:bg-primary/10 data-[active=true]:font-semibold data-[active=true]:text-primary"
                     data-testid={`link-nav-${item.url.replace(/\//g, '-')}`}
                   >
-                    <item.icon className="h-4 w-4" />
+                    <AppNavIcon icon={item.icon} active={active} />
                     <span>{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
+              )})}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-muted-foreground">발송준비</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-muted-foreground">발송 준비</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {preparationNavItems.map((item) => (
+              {preparationNavItems.map((item) => {
+                const active = location === item.url || (item.url !== '/' && location.startsWith(item.url));
+                return (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     onClick={() => navigate(item.url)}
-                    isActive={location === item.url || (item.url !== '/' && location.startsWith(item.url))}
-                    className="data-[active=true]:bg-sidebar-accent cursor-pointer"
+                    isActive={active}
+                    className="min-h-11 cursor-pointer rounded-lg px-3 data-[active=true]:bg-primary/10 data-[active=true]:font-semibold data-[active=true]:text-primary"
                     data-testid={`link-nav-${item.url.replace(/\//g, '-')}`}
                   >
-                    <item.icon className="h-4 w-4" />
+                    <AppNavIcon icon={item.icon} active={active} />
                     <span>{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
+              )})}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-muted-foreground">설정</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-muted-foreground">운영</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {subNavItems.map((item) => (
+              {subNavItems.map((item) => {
+                const active = location === item.url;
+                return (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     onClick={() => navigate(item.url)}
-                    isActive={location === item.url}
-                    className="data-[active=true]:bg-sidebar-accent cursor-pointer"
+                    isActive={active}
+                    className="min-h-11 cursor-pointer rounded-lg px-3 data-[active=true]:bg-primary/10 data-[active=true]:font-semibold data-[active=true]:text-primary"
                     data-testid={`link-nav-${item.url.replace(/\//g, '-')}`}
                   >
-                    <item.icon className="h-4 w-4" />
+                    <AppNavIcon icon={item.icon} active={active} />
                     <span>{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
+              )})}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-muted-foreground">광고 잔액</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-muted-foreground">크레딧</SidebarGroupLabel>
           <SidebarGroupContent>
             <div className="px-3 py-2">
-              <div className="rounded-lg bg-accent p-3">
-                <div className="text-tiny text-muted-foreground mb-1">사용 가능 잔액</div>
-                <div className="text-h2 font-bold text-foreground" data-testid="text-balance">
-                  {formatCurrency(balance)}
+              <div className="rounded-lg border border-primary/15 bg-primary/5 p-4">
+                <div className="mb-1 flex items-center gap-1.5 text-tiny font-medium text-primary">
+                  <Coins className="h-3.5 w-3.5" />
+                  보유 크레딧
                 </div>
-                <button 
-                  onClick={() => navigate("/billing")}
-                  className="text-tiny text-primary hover:underline cursor-pointer" 
+                <div className="text-h2 font-bold text-foreground" data-testid="text-balance">
+                  {balance.toLocaleString("ko-KR")}C
+                </div>
+                <div className="mb-3 text-tiny text-muted-foreground">
+                  최대 {sendableMessages.toLocaleString("ko-KR")}건 발송 가능
+                </div>
+                <button
+                  onClick={() => navigate(primaryActionHref)}
+                  className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-tiny font-semibold text-primary-foreground hover-elevate active-elevate-2"
                   data-testid="link-charge"
                 >
-                  충전하기
+                  {primaryActionLabel}
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </button>
+              </div>
+            </div>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <div className="px-3 pb-4">
+              <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-3 text-tiny text-muted-foreground">
+                <Archive className="h-3.5 w-3.5" />
+                기존 기능은 그대로 보존돼요.
               </div>
             </div>
           </SidebarGroupContent>

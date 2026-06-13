@@ -32,7 +32,7 @@ const TYPE_LABELS: Record<string, { label: string; icon: any; color: string }> =
 
 export default function AdminTransactions() {
   const adminToken = localStorage.getItem("adminToken");
-  
+
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -57,7 +57,7 @@ export default function AdminTransactions() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">결제 내역</h1>
-        <p className="text-muted-foreground">모든 거래 내역을 조회합니다</p>
+        <p className="text-muted-foreground">결제 금액과 레거시 잔액 거래를 조회합니다. 크레딧 사용/환불은 크레딧 장부 기준으로 함께 확인해주세요.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -73,7 +73,7 @@ export default function AdminTransactions() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">오늘 사용액</CardTitle>
+            <CardTitle className="text-sm font-medium">오늘 레거시 사용액</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
@@ -139,8 +139,8 @@ export default function AdminTransactions() {
                     <TableRow>
                       <TableHead>유형</TableHead>
                       <TableHead>광고주</TableHead>
-                      <TableHead>금액</TableHead>
-                      <TableHead>잔액</TableHead>
+                      <TableHead>거래 금액</TableHead>
+                      <TableHead>레거시 잔액</TableHead>
                       <TableHead>설명</TableHead>
                       <TableHead>결제수단</TableHead>
                       <TableHead>일시</TableHead>

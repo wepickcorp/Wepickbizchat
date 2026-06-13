@@ -5,10 +5,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
-import { 
-  ArrowLeft, 
-  MessageSquare, 
-  Image as ImageIcon, 
+import {
+  ArrowLeft,
+  MessageSquare,
+  Image as ImageIcon,
   Smartphone,
   Eye,
   Save,
@@ -209,22 +209,22 @@ const resizeImageToRcsSpec = (
       const img = new Image();
       img.onload = () => {
         const originalSize = `${img.width}x${img.height}`;
-        
+
         const canvas = document.createElement('canvas');
         canvas.width = targetWidth;
         canvas.height = targetHeight;
         const ctx = canvas.getContext('2d');
-        
+
         if (!ctx) {
           reject(new Error('Canvas context not available'));
           return;
         }
-        
+
         const sourceAspect = img.width / img.height;
         const targetAspect = targetWidth / targetHeight;
-        
+
         let sx = 0, sy = 0, sw = img.width, sh = img.height;
-        
+
         if (sourceAspect > targetAspect) {
           sw = img.height * targetAspect;
           sx = (img.width - sw) / 2;
@@ -232,17 +232,17 @@ const resizeImageToRcsSpec = (
           sh = img.width / targetAspect;
           sy = (img.height - sh) / 2;
         }
-        
+
         ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
-        
+
         let quality = 0.92;
         let base64 = canvas.toDataURL('image/jpeg', quality);
-        
+
         while (base64.length > maxSizeKB * 1024 * 1.37 && quality > 0.1) {
           quality -= 0.05;
           base64 = canvas.toDataURL('image/jpeg', quality);
         }
-        
+
         const resized = img.width !== targetWidth || img.height !== targetHeight;
         resolve({
           base64,
@@ -277,7 +277,7 @@ export default function TemplatesNew() {
   const [isLmsUploading, setIsLmsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lmsFileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [, viewParams] = useRoute("/templates/:id");
   const [, editParams] = useRoute("/templates/:id/edit");
   const rawTemplateId = viewParams?.id || editParams?.id || null;
@@ -297,7 +297,7 @@ export default function TemplatesNew() {
     enabled: !!templateId && templateId !== "new",
   });
 
-  // 추천 템플릿 조회 (새 메세지 만들기 모드일 때만)
+  // 추천 템플릿 조회 (새 메시지 만들기 모드일 때만)
   const { data: allTemplates } = useQuery<TemplateWithSystem[]>({
     queryKey: ["/api/templates"],
     enabled: !templateId,
@@ -313,18 +313,18 @@ export default function TemplatesNew() {
     const templateUrlLinks = template.urlLinks as UrlLinkConfig | null;
     const templateLmsUrlLinks = (template as any).lmsUrlLinks as UrlLinkConfig | null;
     const templateButtons = template.buttons as RcsButtonsConfig | null;
-    
+
     // RCS 유형일 때 lmsContent가 없으면 content를 기본값으로 사용
-    const lmsContentValue = (template as any).lmsContent || 
+    const lmsContentValue = (template as any).lmsContent ||
       (template.messageType === "RCS" ? template.content : "");
-    
+
     // LMS URL 링크가 없거나 빈 배열이면 RCS URL 링크를 기본값으로 사용
     const lmsUrlLinksValue = (templateLmsUrlLinks?.list && templateLmsUrlLinks.list.length > 0)
       ? templateLmsUrlLinks
       : (template.messageType === "RCS" && templateUrlLinks?.list && templateUrlLinks.list.length > 0)
         ? templateUrlLinks
         : null;
-    
+
     form.reset({
       name: `${template.name} (복사본)`,
       messageType: template.messageType as "LMS" | "MMS" | "RCS",
@@ -339,7 +339,7 @@ export default function TemplatesNew() {
       lmsUrlLinks: lmsUrlLinksValue || { list: [], reward: undefined },
       buttons: templateButtons || { list: [] },
     });
-    
+
     if (template.imageUrl) {
       setImagePreview(template.imageUrl);
     }
@@ -359,7 +359,7 @@ export default function TemplatesNew() {
     if (templateButtons?.list) {
       setButtons(templateButtons.list);
     }
-    
+
     toast({
       title: "추천 템플릿 불러오기 완료",
       description: "템플릿 내용을 수정해서 사용하세요.",
@@ -387,14 +387,14 @@ export default function TemplatesNew() {
       buttons: { list: [] },
     },
   });
-  
+
   // RCS 메시지 내용 탭 상태
   const [rcsContentTab, setRcsContentTab] = useState<"lms" | "rcs">("lms");
 
   // URL Links 상태 관리 (RCS용)
   const [urlLinks, setUrlLinks] = useState<string[]>([]);
   const [urlRewardIndex, setUrlRewardIndex] = useState<number | undefined>(undefined);
-  
+
   // LMS URL Links 상태 관리
   const [lmsUrlLinks, setLmsUrlLinks] = useState<string[]>([]);
   const [lmsUrlRewardIndex, setLmsUrlRewardIndex] = useState<number | undefined>(undefined);
@@ -407,18 +407,18 @@ export default function TemplatesNew() {
       const templateUrlLinks = existingTemplate.urlLinks as UrlLinkConfig | null;
       const templateLmsUrlLinks = (existingTemplate as any).lmsUrlLinks as UrlLinkConfig | null;
       const templateButtons = existingTemplate.buttons as RcsButtonsConfig | null;
-      
+
       // RCS 유형일 때 lmsContent가 없으면 content를 기본값으로 사용
-      const lmsContentValue = (existingTemplate as any).lmsContent || 
+      const lmsContentValue = (existingTemplate as any).lmsContent ||
         (existingTemplate.messageType === "RCS" ? existingTemplate.content : "");
-      
+
       // LMS URL 링크가 없거나 빈 배열이면 RCS URL 링크를 기본값으로 사용
       const lmsUrlLinksValue = (templateLmsUrlLinks?.list && templateLmsUrlLinks.list.length > 0)
         ? templateLmsUrlLinks
         : (existingTemplate.messageType === "RCS" && templateUrlLinks?.list && templateUrlLinks.list.length > 0)
           ? templateUrlLinks
           : null;
-      
+
       form.reset({
         name: existingTemplate.name,
         messageType: existingTemplate.messageType as "LMS" | "MMS" | "RCS",
@@ -481,10 +481,10 @@ export default function TemplatesNew() {
     const messageType = watchedValues.messageType;
     const rcsType = watchedValues.rcsType;
 
-    const validTypes = messageType === "MMS" 
-      ? ["image/jpeg"] 
+    const validTypes = messageType === "MMS"
+      ? ["image/jpeg"]
       : ["image/jpeg", "image/png"];
-    
+
     if (!validTypes.includes(file.type)) {
       toast({
         title: "지원하지 않는 파일 형식",
@@ -499,7 +499,7 @@ export default function TemplatesNew() {
     try {
       let base64Data: string;
       let resizeInfo: { resized: boolean; originalSize: string; newSize: string } | null = null;
-      
+
       if (messageType === "RCS" && rcsType !== undefined && rcsType !== 1) {
         const rcsSpec = RCS_TYPES.find(t => t.value === rcsType);
         if (rcsSpec && rcsSpec.targetWidth && rcsSpec.targetHeight) {
@@ -507,7 +507,7 @@ export default function TemplatesNew() {
           const result = await resizeImageToRcsSpec(file, rcsSpec.targetWidth, rcsSpec.targetHeight, maxSizeKB);
           base64Data = result.base64;
           resizeInfo = { resized: result.resized, originalSize: result.originalSize, newSize: result.newSize };
-          
+
           if (result.resized) {
             toast({
               title: "이미지 크기 자동 조정됨",
@@ -526,7 +526,7 @@ export default function TemplatesNew() {
         const result = await resizeImageToRcsSpec(file, 640, 480, 300);
         base64Data = result.base64;
         resizeInfo = { resized: result.resized, originalSize: result.originalSize, newSize: result.newSize };
-        
+
         if (result.resized) {
           toast({
             title: "이미지 크기 자동 조정됨",
@@ -541,7 +541,7 @@ export default function TemplatesNew() {
           reader.readAsDataURL(file);
         });
       }
-      
+
       setImagePreview(base64Data);
       form.setValue("imageUrl", base64Data);
 
@@ -570,7 +570,7 @@ export default function TemplatesNew() {
           form.setValue("imageFileId", result.fileId);
           toast({
             title: "이미지 업로드 완료",
-            description: resizeInfo?.resized 
+            description: resizeInfo?.resized
               ? `${resizeInfo.newSize} 크기로 변환되어 업로드되었어요`
               : "BizChat 서버에 이미지가 업로드되었어요",
           });
@@ -632,14 +632,14 @@ export default function TemplatesNew() {
       // MMS 규격으로 리사이즈 (640x480, 300KB)
       const result = await resizeImageToRcsSpec(file, 640, 480, 300);
       const base64Data = result.base64;
-      
+
       if (result.resized) {
         toast({
           title: "이미지 크기 자동 조정됨",
           description: `${result.originalSize} → ${result.newSize} (LMS/MMS 규격)`,
         });
       }
-      
+
       setLmsImagePreview(base64Data);
       form.setValue("lmsImageUrl", base64Data);
 
@@ -659,9 +659,9 @@ export default function TemplatesNew() {
             fileUseType: "image",
           }),
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success && result.fileId) {
           setLmsImageFileId(result.fileId);
           form.setValue("lmsImageFileId", result.fileId);
@@ -727,14 +727,14 @@ export default function TemplatesNew() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
       toast({
-        title: "메세지 생성 완료",
-        description: "새 메세지가 저장되었어요. 이제 캠페인에서 사용할 수 있어요.",
+        title: "메시지 저장 완료",
+        description: "새 메시지가 저장되었어요. 이제 캠페인에서 사용할 수 있어요.",
       });
       navigate("/templates");
     },
     onError: (error: any) => {
       toast({
-        title: "메세지 생성 실패",
+        title: "메시지 저장 실패",
         description: error.message || "다시 시도해주세요.",
         variant: "destructive",
       });
@@ -763,14 +763,14 @@ export default function TemplatesNew() {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates", templateId] });
       toast({
-        title: "메세지 수정 완료",
-        description: "메세지가 수정되었어요.",
+        title: "메시지 수정 완료",
+        description: "메시지가 수정되었어요.",
       });
       navigate("/templates");
     },
     onError: (error: any) => {
       toast({
-        title: "메세지 수정 실패",
+        title: "메시지 수정 실패",
         description: error.message || "다시 시도해주세요.",
         variant: "destructive",
       });
@@ -784,7 +784,7 @@ export default function TemplatesNew() {
       lmsUrlLinksData: lmsUrlLinks.length > 0 ? { list: lmsUrlLinks, reward: lmsUrlRewardIndex } : undefined,
       buttonsData: buttons.length > 0 ? { list: buttons } : undefined,
     };
-    
+
     if (isEditMode && templateId) {
       updateMutation.mutate(submitData);
     } else {
@@ -858,26 +858,26 @@ export default function TemplatesNew() {
     }
     if (watchedValues.messageType === "RCS") {
       const rcsSpec = RCS_TYPES.find(t => t.value === watchedValues.rcsType);
-      return rcsSpec ? { 
-        format: "JPG/PNG", 
+      return rcsSpec ? {
+        format: "JPG/PNG",
         maxSize: rcsSpec.imageSpec.includes("MB") ? rcsSpec.imageSpec.split(",")[1]?.trim() || "1MB" : "1MB",
-        resolution: rcsSpec.imageSpec 
+        resolution: rcsSpec.imageSpec
       } : null;
     }
     return null;
   };
 
-  const pageTitle = isViewMode 
-    ? "메세지 상세" 
-    : isEditMode 
-    ? "메세지 수정" 
-    : "새 메세지 만들기";
-  
-  const pageDescription = isViewMode
-    ? "메세지 상세 정보를 확인하세요"
+  const pageTitle = isViewMode
+    ? "메시지 상세"
     : isEditMode
-    ? "메세지 정보를 수정하세요"
-    : "메시지 템플릿을 작성하고 캠페인에 활용해보세요";
+    ? "메시지 수정"
+    : "새 메시지 만들기";
+
+  const pageDescription = isViewMode
+    ? "메시지 내용을 확인해요"
+    : isEditMode
+    ? "캠페인에 쓰일 메시지를 다시 다듬어요"
+    : "캠페인에 바로 쓸 문구를 만들어요";
 
   const canEdit = !!existingTemplate;
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -886,30 +886,31 @@ export default function TemplatesNew() {
 
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
+            className="shrink-0"
             onClick={() => navigate("/templates")}
             data-testid="button-back"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-display font-bold">{pageTitle}</h1>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-3">
+              <h1 className="truncate text-title-lg font-bold md:text-display">{pageTitle}</h1>
             </div>
-            <p className="text-muted-foreground mt-1">
+            <p className="mt-1 text-body-md text-muted-foreground">
               {pageDescription}
             </p>
           </div>
         </div>
-        
+
         {isViewMode && canEdit && (
           <Button
             onClick={() => navigate(`/templates/${templateId}/edit`)}
-            className="gap-2"
+            className="min-h-11 gap-2"
             data-testid="button-edit-template"
           >
             <Edit className="h-4 w-4" />
@@ -918,16 +919,37 @@ export default function TemplatesNew() {
         )}
       </div>
 
-      {/* 추천 템플릿 섹션 - 새 메세지 만들기 모드에서만 표시 */}
+      {!isViewMode && (
+        <Card className="border-primary/15 bg-primary/5">
+          <CardContent className="p-4 md:p-5">
+            <div className="grid gap-3 text-caption md:grid-cols-3">
+              <div className="flex items-center gap-2 font-semibold text-primary">
+                <CheckCircle className="h-4 w-4" />
+                이름과 유형 선택
+              </div>
+              <div className="flex items-center gap-2 font-semibold text-primary">
+                <Edit className="h-4 w-4" />
+                본문 작성
+              </div>
+              <div className="flex items-center gap-2 font-semibold text-primary">
+                <Eye className="h-4 w-4" />
+                미리보기 후 저장
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 추천 템플릿 섹션 - 새 메시지 만들기 모드에서만 표시 */}
       {!templateId && recommendedTemplates.length > 0 && (
-        <Card>
+        <Card className="border-primary/10">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-amber-500" />
-              <CardTitle className="text-h3">추천 템플릿</CardTitle>
+              <Sparkles className="h-5 w-5 text-primary" />
+              <CardTitle className="text-title-sm">바로 시작할 문구</CardTitle>
             </div>
             <CardDescription>
-              자주 사용되는 템플릿을 불러와서 빠르게 시작해보세요
+              자주 쓰는 문구를 불러온 뒤 우리 브랜드에 맞게 고쳐요.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -937,12 +959,12 @@ export default function TemplatesNew() {
                   key={template.id}
                   type="button"
                   onClick={() => loadRecommendedTemplate(template)}
-                  className="flex flex-col items-start p-4 rounded-lg border border-border hover-elevate text-left transition-all"
+                  className="flex min-h-[116px] flex-col items-start rounded-lg border border-border p-4 text-left transition-all hover-elevate"
                   data-testid={`button-load-recommended-${template.id}`}
                 >
                   <div className="flex items-center gap-2 mb-2 w-full">
                     <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="font-medium text-small truncate">{template.name}</span>
+                    <span className="truncate text-caption font-medium">{template.name}</span>
                     <Badge variant="outline" className="text-tiny shrink-0 ml-auto">
                       {getMessageTypeLabel(template.messageType)}
                     </Badge>
@@ -957,12 +979,12 @@ export default function TemplatesNew() {
         </Card>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-h2">메세지 정보</CardTitle>
+            <CardTitle className="text-title-md">메시지를 작성해요</CardTitle>
             <CardDescription>
-              메시지 유형을 선택하고 내용을 입력해주세요
+              이름, 유형, 본문만 순서대로 채우면 돼요.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -973,7 +995,7 @@ export default function TemplatesNew() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>메세지 이름</FormLabel>
+                      <FormLabel>메시지 이름</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="예: 12월 할인 이벤트 안내"
@@ -984,7 +1006,7 @@ export default function TemplatesNew() {
                       </FormControl>
                       {!isViewMode && (
                         <FormDescription>
-                          나중에 쉽게 찾을 수 있도록 명확한 이름을 지어주세요
+                          캠페인에서 찾기 쉬운 이름으로 적어주세요.
                         </FormDescription>
                       )}
                       <FormMessage />
@@ -998,7 +1020,7 @@ export default function TemplatesNew() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>메시지 유형</FormLabel>
-                      <Select 
+                      <Select
                         onValueChange={(value) => {
                           field.onChange(value);
                           if (value !== "RCS") {
@@ -1027,8 +1049,8 @@ export default function TemplatesNew() {
                             }
                           }
                           removeImage();
-                        }} 
-                        defaultValue={field.value} 
+                        }}
+                        defaultValue={field.value}
                         disabled={isViewMode}
                       >
                         <FormControl>
@@ -1076,12 +1098,12 @@ export default function TemplatesNew() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>RCS 메시지 타입</FormLabel>
-                        <Select 
+                        <Select
                           onValueChange={(value) => {
                             field.onChange(parseInt(value));
                             removeImage();
-                          }} 
-                          value={field.value?.toString()} 
+                          }}
+                          value={field.value?.toString()}
                           disabled={isViewMode}
                         >
                           <FormControl>
@@ -1219,7 +1241,7 @@ export default function TemplatesNew() {
                             </FormItem>
                           )}
                         />
-                        
+
                         {/* LMS 이미지 업로드 */}
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
@@ -1228,7 +1250,7 @@ export default function TemplatesNew() {
                               이미지 (선택)
                             </FormLabel>
                           </div>
-                          
+
                           <input
                             ref={lmsFileInputRef}
                             type="file"
@@ -1238,7 +1260,7 @@ export default function TemplatesNew() {
                             data-testid="input-lms-image-upload"
                             disabled={isViewMode}
                           />
-                          
+
                           {lmsImagePreview ? (
                             <div className="relative">
                               <img
@@ -1308,7 +1330,7 @@ export default function TemplatesNew() {
                               </Button>
                             )}
                           </div>
-                          
+
                           {lmsUrlLinks.length > 0 ? (
                             <div className="space-y-2">
                               {lmsUrlLinks.map((url, index) => (
@@ -1439,7 +1461,7 @@ export default function TemplatesNew() {
                         </Badge>
                       )}
                     </div>
-                    
+
                     {imageSpec && (
                       <Alert className="bg-muted/50">
                         <Info className="h-4 w-4" />
@@ -1465,7 +1487,7 @@ export default function TemplatesNew() {
                           className="hidden"
                           data-testid="input-image-file"
                         />
-                        
+
                         {!imagePreview ? (
                           <div
                             onClick={() => fileInputRef.current?.click()}
@@ -1537,7 +1559,7 @@ export default function TemplatesNew() {
                 )}
 
                 {/* URL 링크 관리 (MMS/RCS) - RCS 유형일 때는 RCS 탭에서만 표시 */}
-                {((watchedValues.messageType === "MMS") || 
+                {((watchedValues.messageType === "MMS") ||
                   (watchedValues.messageType === "RCS" && rcsContentTab === "rcs")) && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -1551,7 +1573,7 @@ export default function TemplatesNew() {
                         </Badge>
                       )}
                     </div>
-                    
+
                     <Alert className="bg-muted/50">
                       <Info className="h-4 w-4" />
                       <AlertDescription className="text-xs">
@@ -1600,7 +1622,7 @@ export default function TemplatesNew() {
                             </Button>
                           </div>
                         ))}
-                        
+
                         {(() => {
                           const rcsSpec = RCS_TYPES.find(t => t.value === watchedValues.rcsType);
                           const maxUrls = watchedValues.messageType === "RCS" && rcsSpec ? rcsSpec.maxUrlCount : 3;
@@ -1648,7 +1670,7 @@ export default function TemplatesNew() {
                         </Badge>
                       )}
                     </div>
-                    
+
                     <Alert className="bg-muted/50">
                       <Info className="h-4 w-4" />
                       <AlertDescription className="text-xs">
@@ -1667,7 +1689,7 @@ export default function TemplatesNew() {
                           const ButtonIcon = buttonType?.icon || ExternalLink;
                           const rcsSpec = RCS_TYPES.find(t => t.value === watchedValues.rcsType);
                           const maxTextLen = rcsSpec?.maxButtonTextLen || 17;
-                          
+
                           return (
                             <div key={index} className="p-3 border rounded-lg space-y-2 bg-muted/30">
                               <div className="flex items-center justify-between">
@@ -1686,7 +1708,7 @@ export default function TemplatesNew() {
                                   <Trash2 className="h-3 w-3 text-destructive" />
                                 </Button>
                               </div>
-                              
+
                               <div className="grid grid-cols-2 gap-2">
                                 <Select
                                   value={button.type}
@@ -1713,7 +1735,7 @@ export default function TemplatesNew() {
                                     })}
                                   </SelectContent>
                                 </Select>
-                                
+
                                 <Input
                                   placeholder="버튼 텍스트"
                                   value={button.name}
@@ -1726,7 +1748,7 @@ export default function TemplatesNew() {
                                   data-testid={`input-btn-name-${index}`}
                                 />
                               </div>
-                              
+
                               <Input
                                 placeholder={buttonType?.placeholder || "값 입력"}
                                 value={button.val1}
@@ -1737,7 +1759,7 @@ export default function TemplatesNew() {
                                 }}
                                 data-testid={`input-btn-val1-${index}`}
                               />
-                              
+
                               {button.type === "2" && (
                                 <Input
                                   placeholder="대체 URL (지도 미지원 시)"
@@ -1753,7 +1775,7 @@ export default function TemplatesNew() {
                             </div>
                           );
                         })}
-                        
+
                         {buttons.length < 2 && (
                           <Button
                             type="button"
@@ -1796,11 +1818,11 @@ export default function TemplatesNew() {
                     <Button
                       type="submit"
                       disabled={isPending || isUploading}
-                      className="gap-2 flex-1"
+                      className="min-h-12 flex-1 gap-2 text-base"
                       data-testid="button-save-template"
                     >
                       <Save className="h-4 w-4" />
-                      {isPending ? "저장 중..." : isEditMode ? "메세지 수정" : "메세지 저장"}
+                      {isPending ? "저장 중..." : isEditMode ? "수정 저장하기" : "저장하고 검수 준비하기"}
                     </Button>
                   </div>
                 )}
@@ -1809,23 +1831,23 @@ export default function TemplatesNew() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="xl:sticky xl:top-6 xl:self-start">
           <CardHeader>
             <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-h2">미리보기</CardTitle>
+            <CardTitle className="text-title-md">받는 사람 화면</CardTitle>
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-2"
+                className="min-h-10 gap-2"
                 onClick={() => setShowPreview(!showPreview)}
                 data-testid="button-toggle-preview"
               >
                 <Eye className="h-4 w-4" />
-                {showPreview ? "숨기기" : "미리보기"}
+                {showPreview ? "접기" : "보기"}
               </Button>
             </div>
             <CardDescription>
-              수신자에게 전송될 메시지 형태를 확인해보세요
+              실제 발송 전에 보이는 모습을 확인해요.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1838,8 +1860,8 @@ export default function TemplatesNew() {
                       type="button"
                       onClick={() => setRcsContentTab("lms")}
                       className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                        rcsContentTab === "lms" 
-                          ? "bg-background shadow text-foreground" 
+                        rcsContentTab === "lms"
+                          ? "bg-background shadow text-foreground"
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
@@ -1849,8 +1871,8 @@ export default function TemplatesNew() {
                       type="button"
                       onClick={() => setRcsContentTab("rcs")}
                       className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                        rcsContentTab === "rcs" 
-                          ? "bg-background shadow text-foreground" 
+                        rcsContentTab === "rcs"
+                          ? "bg-background shadow text-foreground"
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
@@ -1858,13 +1880,13 @@ export default function TemplatesNew() {
                     </button>
                   </div>
                 )}
-                
+
                 <div className="bg-background rounded-xl p-4 shadow-sm space-y-3">
                   <div className="flex items-center gap-2 text-small text-muted-foreground">
                     {getMessageTypeIcon(watchedValues.messageType === "RCS" && rcsContentTab === "lms" ? "LMS" : watchedValues.messageType)}
                     <span>
-                      {watchedValues.messageType === "RCS" && rcsContentTab === "lms" 
-                        ? "LMS (RCS 미지원 시)" 
+                      {watchedValues.messageType === "RCS" && rcsContentTab === "lms"
+                        ? "LMS (RCS 미지원 시)"
                         : getMessageTypeLabel(watchedValues.messageType)}
                     </span>
                     {watchedValues.messageType === "RCS" && rcsContentTab === "rcs" && (
@@ -1873,7 +1895,7 @@ export default function TemplatesNew() {
                       </Badge>
                     )}
                   </div>
-                  
+
                   {/* 타이틀 표시: LMS탭에서는 lmsTitle, RCS탭/비RCS에서는 title */}
                   {watchedValues.messageType === "RCS" && rcsContentTab === "lms" ? (
                     watchedValues.lmsTitle && (
@@ -1888,47 +1910,47 @@ export default function TemplatesNew() {
                       </div>
                     )
                   )}
-                  
+
                   {/* 이미지 미리보기 - 탭에 따라 다른 이미지 표시 */}
                   {watchedValues.messageType === "RCS" && rcsContentTab === "lms" ? (
                     lmsImagePreview && (
-                      <div 
+                      <div
                         className="rounded-lg overflow-hidden bg-muted flex items-center justify-center"
                         style={{ aspectRatio: "4/3" }}
                       >
-                        <img 
-                          src={lmsImagePreview} 
-                          alt="LMS 이미지 미리보기" 
+                        <img
+                          src={lmsImagePreview}
+                          alt="LMS 이미지 미리보기"
                           className="w-full h-full object-cover"
                         />
                       </div>
                     )
                   ) : (
                     imagePreview && (
-                      <div 
+                      <div
                         className="rounded-lg overflow-hidden bg-muted flex items-center justify-center"
                         style={{
-                          aspectRatio: watchedValues.messageType === "RCS" 
+                          aspectRatio: watchedValues.messageType === "RCS"
                             ? (RCS_TYPES.find(t => t.value === watchedValues.rcsType)?.aspectRatio || "16/9")
                             : "4/3"
                         }}
                       >
-                        <img 
-                          src={imagePreview} 
-                          alt="미리보기" 
+                        <img
+                          src={imagePreview}
+                          alt="미리보기"
                           className="w-full h-full object-cover"
                         />
                       </div>
                     )
                   )}
-                  
+
                   {/* 메시지 내용 - 탭에 따라 다른 내용 표시 */}
                   <div className="text-small whitespace-pre-wrap">
                     {watchedValues.messageType === "RCS" && rcsContentTab === "lms"
                       ? (watchedValues.lmsContent || "LMS 메시지 내용이 여기에 표시됩니다...")
                       : (watchedValues.content || "메시지 내용이 여기에 표시됩니다...")}
                   </div>
-                  
+
                   {/* RCS 버튼 미리보기 - RCS 탭에서만 표시 */}
                   {watchedValues.messageType === "RCS" && rcsContentTab === "rcs" && buttons.length > 0 && (
                     <div className="space-y-2 pt-2">
@@ -1949,18 +1971,18 @@ export default function TemplatesNew() {
                       })}
                     </div>
                   )}
-                  
+
                   <div className="text-tiny text-muted-foreground pt-2 border-t">
                     SK코어타겟 비즈챗
                   </div>
                 </div>
               </div>
             )}
-            
+
             {!showPreview && (
               <div className="text-center py-12 text-muted-foreground">
                 <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>미리보기 버튼을 눌러 확인해보세요</p>
+                <p>보기 버튼을 누르면 받는 사람 화면을 확인할 수 있어요.</p>
               </div>
             )}
           </CardContent>

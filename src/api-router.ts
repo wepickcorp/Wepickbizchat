@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 import * as adminRefundsIdProcess from './handlers/admin/refunds/[id]/process';
+import * as adminMessageCopyRequestsIdProcess from './handlers/admin/message-copy-requests/[id]/process';
+import * as adminMessageCopyRequestsIdTemplates from './handlers/admin/message-copy-requests/[id]/templates';
 import * as adminUsersUserIdAgency from './handlers/admin/users/[userId]/agency';
 import * as adminUsersUserIdBalance from './handlers/admin/users/[userId]/balance';
+import * as adminUsersUserIdCredits from './handlers/admin/users/[userId]/credits';
 import * as adminUsersUserIdImpersonate from './handlers/admin/users/[userId]/impersonate';
 import * as adminUsersUserIdMaster from './handlers/admin/users/[userId]/master';
 import * as adminUsersUserIdResetPassword from './handlers/admin/users/[userId]/reset-password';
@@ -15,6 +18,8 @@ import * as bizchatReportsArea from './handlers/bizchat/reports/area';
 import * as bizchatReportsGenderAge from './handlers/bizchat/reports/gender-age';
 import * as bizchatReportsPeriod from './handlers/bizchat/reports/period';
 import * as campaignsIdCancel from './handlers/campaigns/[id]/cancel';
+import * as campaignsIdFail from './handlers/campaigns/[id]/fail';
+import * as campaignsIdStart from './handlers/campaigns/[id]/start';
 import * as campaignsIdStop from './handlers/campaigns/[id]/stop';
 import * as campaignsIdSubmit from './handlers/campaigns/[id]/submit';
 import * as internalMasterResetBalance from './handlers/internal/master/reset-balance';
@@ -27,6 +32,7 @@ import * as adminCampaigns from './handlers/admin/campaigns';
 import * as adminLogin from './handlers/admin/login';
 import * as adminLogs from './handlers/admin/logs';
 import * as adminMe from './handlers/admin/me';
+import * as adminMessageCopyRequests from './handlers/admin/message-copy-requests/index';
 import * as adminRefunds from './handlers/admin/refunds/index';
 import * as adminStats from './handlers/admin/stats';
 import * as adminTaxInvoices from './handlers/admin/tax-invoices';
@@ -47,11 +53,15 @@ import * as bizchatTemplate from './handlers/bizchat/template';
 import * as bizchatTest from './handlers/bizchat/test';
 import * as campaignsId from './handlers/campaigns/[id]';
 import * as campaignsTestCreate from './handlers/campaigns/test-create';
+import * as creditsEstimate from './handlers/credits/estimate';
+import * as creditsPolicy from './handlers/credits/policy';
+import * as creditsSummary from './handlers/credits/summary';
 import * as dashboardStats from './handlers/dashboard/stats';
 import * as kispgAuth from './handlers/kispg/auth';
 import * as kispgCallback from './handlers/kispg/callback';
 import * as mapticsGeofences from './handlers/maptics/geofences';
 import * as mapticsPoi from './handlers/maptics/poi';
+import * as messageCopyRequests from './handlers/message-copy-requests/index';
 import * as profilePassword from './handlers/profile/password';
 import * as recommendedTemplatesId from './handlers/recommended-templates/[id]';
 import * as recommendedTemplatesFilters from './handlers/recommended-templates/filters';
@@ -75,8 +85,11 @@ type RouteEntry = { segments: string[]; handler: any };
 
 const routes: RouteEntry[] = [
   { segments: ['admin', 'refunds', ':id', 'process'], handler: adminRefundsIdProcess },
+  { segments: ['admin', 'message-copy-requests', ':id', 'process'], handler: adminMessageCopyRequestsIdProcess },
+  { segments: ['admin', 'message-copy-requests', ':id', 'templates'], handler: adminMessageCopyRequestsIdTemplates },
   { segments: ['admin', 'users', ':userId', 'agency'], handler: adminUsersUserIdAgency },
   { segments: ['admin', 'users', ':userId', 'balance'], handler: adminUsersUserIdBalance },
+  { segments: ['admin', 'users', ':userId', 'credits'], handler: adminUsersUserIdCredits },
   { segments: ['admin', 'users', ':userId', 'impersonate'], handler: adminUsersUserIdImpersonate },
   { segments: ['admin', 'users', ':userId', 'master'], handler: adminUsersUserIdMaster },
   { segments: ['admin', 'users', ':userId', 'reset-password'], handler: adminUsersUserIdResetPassword },
@@ -89,6 +102,8 @@ const routes: RouteEntry[] = [
   { segments: ['bizchat', 'reports', 'gender-age'], handler: bizchatReportsGenderAge },
   { segments: ['bizchat', 'reports', 'period'], handler: bizchatReportsPeriod },
   { segments: ['campaigns', ':id', 'cancel'], handler: campaignsIdCancel },
+  { segments: ['campaigns', ':id', 'fail'], handler: campaignsIdFail },
+  { segments: ['campaigns', ':id', 'start'], handler: campaignsIdStart },
   { segments: ['campaigns', ':id', 'stop'], handler: campaignsIdStop },
   { segments: ['campaigns', ':id', 'submit'], handler: campaignsIdSubmit },
   { segments: ['internal', 'master', 'reset-balance'], handler: internalMasterResetBalance },
@@ -101,6 +116,7 @@ const routes: RouteEntry[] = [
   { segments: ['admin', 'login'], handler: adminLogin },
   { segments: ['admin', 'logs'], handler: adminLogs },
   { segments: ['admin', 'me'], handler: adminMe },
+  { segments: ['admin', 'message-copy-requests'], handler: adminMessageCopyRequests },
   { segments: ['admin', 'refunds'], handler: adminRefunds },
   { segments: ['admin', 'stats'], handler: adminStats },
   { segments: ['admin', 'tax-invoices'], handler: adminTaxInvoices },
@@ -121,11 +137,15 @@ const routes: RouteEntry[] = [
   { segments: ['bizchat', 'test'], handler: bizchatTest },
   { segments: ['campaigns', ':id'], handler: campaignsId },
   { segments: ['campaigns', 'test-create'], handler: campaignsTestCreate },
+  { segments: ['credits', 'estimate'], handler: creditsEstimate },
+  { segments: ['credits', 'policy'], handler: creditsPolicy },
+  { segments: ['credits', 'summary'], handler: creditsSummary },
   { segments: ['dashboard', 'stats'], handler: dashboardStats },
   { segments: ['kispg', 'auth'], handler: kispgAuth },
   { segments: ['kispg', 'callback'], handler: kispgCallback },
   { segments: ['maptics', 'geofences'], handler: mapticsGeofences },
   { segments: ['maptics', 'poi'], handler: mapticsPoi },
+  { segments: ['message-copy-requests'], handler: messageCopyRequests },
   { segments: ['profile', 'password'], handler: profilePassword },
   { segments: ['recommended-templates', ':id'], handler: recommendedTemplatesId },
   { segments: ['recommended-templates', 'filters'], handler: recommendedTemplatesFilters },
@@ -147,17 +167,21 @@ const routes: RouteEntry[] = [
 ];
 
 function matchRoute(ps: string[]): { route: RouteEntry; params: Record<string, string> } | null {
+  let best: { route: RouteEntry; params: Record<string, string>; staticCount: number } | null = null;
+
   for (const r of routes) {
     if (r.segments.length !== ps.length) continue;
     const params: Record<string, string> = {};
     let ok = true;
+    let staticCount = 0;
     for (let i = 0; i < r.segments.length; i++) {
       if (r.segments[i].startsWith(':')) params[r.segments[i].slice(1)] = ps[i];
-      else if (r.segments[i] !== ps[i]) { ok = false; break; }
+      else if (r.segments[i] === ps[i]) staticCount++;
+      else { ok = false; break; }
     }
-    if (ok) return { route: r, params };
+    if (ok && (!best || staticCount > best.staticCount)) best = { route: r, params, staticCount };
   }
-  return null;
+  return best ? { route: best.route, params: best.params } : null;
 }
 
 function getPath(req: VercelRequest): string[] {

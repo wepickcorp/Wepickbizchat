@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq, and, asc, desc } from 'drizzle-orm';
@@ -58,6 +59,26 @@ const recommendedTemplates = pgTable("recommended_templates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+const templates = pgTable('templates', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  messageType: text('message_type').notNull(),
+  rcsType: integer('rcs_type'),
+  title: text('title'),
+  lmsTitle: text('lms_title'),
+  content: text('content').notNull(),
+  lmsContent: text('lms_content'),
+  variableSchema: jsonb('variable_schema').$type<VariableSchemaItem[]>(),
+  imageUrl: text('image_url'),
+  urlLinks: jsonb('url_links'),
+  buttons: jsonb('buttons'),
+  status: text('status').default('draft'),
+  reviewedAt: timestamp('reviewed_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // 업종 분류
 const RECOMMENDED_CATEGORIES = [
   { value: 'commerce', label: '커머스/쇼핑' },
@@ -94,6 +115,58 @@ function getDb() {
   return drizzle(client);
 }
 
+function getSupabaseAdmin() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+}
+
+async function getOptionalUserId(req: VercelRequest) {
+  const impersonateUserId = req.headers['x-impersonate-user-id'];
+  if (typeof impersonateUserId === 'string' && impersonateUserId.trim()) {
+    return impersonateUserId.trim();
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return null;
+
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+    if (error || !user) return null;
+    return user.id;
+  } catch {
+    return null;
+  }
+}
+
+function mapPrivateTemplate(row: typeof templates.$inferSelect) {
+  return {
+    id: `private-${row.id}`,
+    name: row.name,
+    category: 'private',
+    purpose: 'private',
+    titleTemplate: row.title,
+    lmsTitleTemplate: row.lmsTitle,
+    contentTemplate: row.content,
+    lmsContentTemplate: row.lmsContent,
+    variableSchema: row.variableSchema || [],
+    defaultImageUrl: row.imageUrl,
+    messageType: row.messageType,
+    rcsType: row.rcsType,
+    urlLinks: row.urlLinks,
+    buttons: row.buttons,
+    isActive: true,
+    sortOrder: -1,
+    sourceTemplateId: row.id,
+    isPrivate: true,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -108,20 +181,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === 'GET') {
       const { category, purpose, active } = req.query;
+      const userId = await getOptionalUserId(req);
 
       let query = db.select().from(recommendedTemplates);
-      
+
       // 필터 조건 구성
       const conditions = [];
-      
+
       if (category && category !== 'all') {
         conditions.push(eq(recommendedTemplates.category, String(category)));
       }
-      
+
       if (purpose && purpose !== 'all') {
         conditions.push(eq(recommendedTemplates.purpose, String(purpose)));
       }
-      
+
       // 기본적으로 활성화된 템플릿만 조회
       if (active !== 'false') {
         conditions.push(eq(recommendedTemplates.isActive, true));
@@ -133,10 +207,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .orderBy(asc(recommendedTemplates.sortOrder), desc(recommendedTemplates.createdAt))
         : await db.select().from(recommendedTemplates)
             .orderBy(asc(recommendedTemplates.sortOrder), desc(recommendedTemplates.createdAt));
+      const privateTemplates = userId
+        ? await db.select().from(templates)
+            .where(and(eq(templates.userId, userId), eq(templates.status, 'approved')))
+            .orderBy(desc(templates.reviewedAt), desc(templates.createdAt))
+        : [];
 
       return res.status(200).json({
         success: true,
-        templates: results,
+        templates: [...privateTemplates.map(mapPrivateTemplate), ...results],
         categories: RECOMMENDED_CATEGORIES,
         purposes: RECOMMENDED_PURPOSES,
       });

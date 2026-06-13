@@ -6,6 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -42,8 +52,9 @@ export default function AdminRefunds() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedRefund, setSelectedRefund] = useState<Refund | null>(null);
   const [adminNote, setAdminNote] = useState("");
+  const [pendingAction, setPendingAction] = useState<"approve" | "reject" | "complete" | null>(null);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["/api/admin/refunds", search, statusFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -52,7 +63,10 @@ export default function AdminRefunds() {
       const res = await fetch(`/api/admin/refunds?${params}`, {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
-      if (!res.ok) throw new Error("Failed to fetch");
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => null);
+        throw new Error(errorBody?.error || "환불 요청을 불러오지 못했어요");
+      }
       return res.json();
     },
   });
@@ -61,13 +75,16 @@ export default function AdminRefunds() {
     mutationFn: async ({ id, action, adminNote }: { id: string; action: string; adminNote?: string }) => {
       const res = await fetch(`/api/admin/refunds/${id}/process`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${adminToken}` 
+          Authorization: `Bearer ${adminToken}`
         },
         body: JSON.stringify({ action, adminNote }),
       });
-      if (!res.ok) throw new Error("Failed to process");
+      if (!res.ok) {
+        const error = await res.json().catch(() => null);
+        throw new Error(error?.error || "Failed to process");
+      }
       return res.json();
     },
     onSuccess: (_, variables) => {
@@ -78,19 +95,38 @@ export default function AdminRefunds() {
       };
       toast({ title: `환불 요청이 ${actionLabels[variables.action]}되었습니다` });
       setSelectedRefund(null);
+      setPendingAction(null);
       setAdminNote("");
       refetch();
     },
-    onError: () => {
-      toast({ title: "처리 실패", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "처리 실패", description: error.message, variant: "destructive" });
     },
   });
 
-  const handleProcess = (action: string) => {
+  const handleProcess = (action: "approve" | "reject" | "complete") => {
     if (selectedRefund) {
       processMutation.mutate({ id: selectedRefund.id, action, adminNote });
     }
   };
+
+  const actionCopy = pendingAction ? {
+    approve: {
+      title: "환불 요청을 승인할까요?",
+      description: "승인 후에는 운영자가 실제 송금 여부를 확인한 뒤 완료 처리해야 해요.",
+      confirm: "승인하기",
+    },
+    reject: {
+      title: "환불 요청을 거절할까요?",
+      description: "거절 처리하면 고객에게 환불이 진행되지 않은 상태로 남아요. 필요한 경우 관리자 메모를 남겨주세요.",
+      confirm: "거절하기",
+    },
+    complete: {
+      title: "환불 완료 처리할까요?",
+      description: "완료 처리하면 요청 금액만큼 상품별 단가 기준으로 남은 크레딧이 차감돼요. 실제 송금 완료 후에만 진행해주세요.",
+      confirm: "완료 처리",
+    },
+  }[pendingAction] : null;
 
   return (
     <div className="space-y-6">
@@ -98,6 +134,15 @@ export default function AdminRefunds() {
         <h1 className="text-2xl font-bold">환불 관리</h1>
         <p className="text-muted-foreground">환불 요청을 검토하고 처리합니다</p>
       </div>
+
+      <Card className="border-amber-200 bg-amber-50">
+        <CardContent className="py-4">
+          <p className="text-sm text-amber-800">
+            크레딧 기반 환불은 요청 금액(원)을 결제 상품별 크레딧 단가로 환산해 남은 크레딧에서 차감해요.
+            완료 처리 전 예약 중인 캠페인과 이미 사용된 크레딧 여부를 확인해주세요.
+          </p>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -150,7 +195,11 @@ export default function AdminRefunds() {
           <CardTitle>환불 요청 목록</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {error ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+              환불 요청을 불러오지 못했어요. 관리자 로그인을 다시 확인해주세요.
+            </div>
+          ) : isLoading ? (
             <div className="space-y-4">
               {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
             </div>
@@ -160,8 +209,8 @@ export default function AdminRefunds() {
                 const config = statusConfig[r.status] || statusConfig.pending;
                 const StatusIcon = config.icon;
                 return (
-                  <div 
-                    key={r.id} 
+                  <div
+                    key={r.id}
                     className="flex items-start justify-between gap-4 p-4 border rounded-lg cursor-pointer hover-elevate"
                     onClick={() => setSelectedRefund(r)}
                     data-testid={`refund-item-${r.id}`}
@@ -212,6 +261,9 @@ export default function AdminRefunds() {
                 <div>
                   <Label className="text-muted-foreground">금액</Label>
                   <p className="font-medium">₩{Number(selectedRefund.amount).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    완료 시 상품별 단가 기준으로 남은 크레딧이 차감돼요
+                  </p>
                 </div>
               </div>
               <div>
@@ -261,16 +313,16 @@ export default function AdminRefunds() {
           <DialogFooter>
             {selectedRefund?.status === "pending" && (
               <>
-                <Button 
-                  variant="destructive" 
-                  onClick={() => handleProcess("reject")}
+                <Button
+                  variant="destructive"
+                  onClick={() => setPendingAction("reject")}
                   disabled={processMutation.isPending}
                   data-testid="button-reject-refund"
                 >
                   거절
                 </Button>
-                <Button 
-                  onClick={() => handleProcess("approve")}
+                <Button
+                  onClick={() => setPendingAction("approve")}
                   disabled={processMutation.isPending}
                   data-testid="button-approve-refund"
                 >
@@ -279,8 +331,8 @@ export default function AdminRefunds() {
               </>
             )}
             {selectedRefund?.status === "approved" && (
-              <Button 
-                onClick={() => handleProcess("complete")}
+              <Button
+                onClick={() => setPendingAction("complete")}
                 disabled={processMutation.isPending}
                 data-testid="button-complete-refund"
               >
@@ -291,6 +343,33 @@ export default function AdminRefunds() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!pendingAction} onOpenChange={(open) => !open && setPendingAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{actionCopy?.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedRefund && (
+                <>
+                  요청 금액은 ₩{Number(selectedRefund.amount).toLocaleString()}입니다.{" "}
+                </>
+              )}
+              {actionCopy?.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={processMutation.isPending}>돌아가기</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => pendingAction && handleProcess(pendingAction)}
+              disabled={processMutation.isPending}
+              className={pendingAction === "reject" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+              data-testid="button-confirm-refund-action"
+            >
+              {processMutation.isPending ? "처리 중..." : actionCopy?.confirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

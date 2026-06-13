@@ -37,7 +37,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -56,7 +56,7 @@ async function verifyAuth(req: VercelRequest) {
     }
     return null;
   }
-  
+
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {
@@ -146,7 +146,7 @@ function buildATSMosuPayload(params: {
 
   // BizChat API 규격: 루트 객체는 항상 $and 또는 $or 컨테이너여야 함
   // 조건이 없어도 {$and: []}로 반환
-  return { 
+  return {
     payload: { '$and': conditions },
     desc: descParts.join(', ')
   };
@@ -159,8 +159,8 @@ async function callBizChatAPI(
   useProduction: boolean = false
 ) {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -170,7 +170,7 @@ async function callBizChatAPI(
   const tid = generateTid();
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
-  
+
   console.log(`[BizChat ATS] ${method} ${url}`);
 
   const options: RequestInit = {
@@ -188,7 +188,7 @@ async function callBizChatAPI(
 
   const response = await fetch(url, options);
   const responseText = await response.text();
-  
+
   console.log(`[BizChat ATS] Response: ${response.status} - ${responseText.substring(0, 500)}`);
 
   let data;
@@ -253,7 +253,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'count': {
         // BizChat API 규격 v0.29.0: /api/v1/ats/mosu 엔드포인트 사용
         const { gender, ageMin, ageMax, regions } = req.body;
-        
+
         // 올바른 ATS mosu 페이로드 구성
         const { payload, desc } = buildATSMosuPayload({
           gender,
@@ -263,7 +263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
         const result = await callBizChatAPI('/api/v1/ats/mosu', 'POST', payload, useProduction);
-        
+
         if (result.data.code === 'S000001') {
           return res.status(200).json({
             success: true,
@@ -291,14 +291,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'filter': {
         // BizChat API 규격: /api/v1/ats/filter 사용
         const { gender, ageMin, ageMax, regions, pageNumber, pageSize } = req.body;
-        
+
         const { payload } = buildATSMosuPayload({
           gender,
           ageMin,
           ageMax,
           regions,
         });
-        
+
         // 페이지네이션 정보 추가
         const filterPayload = {
           ...payload,
@@ -307,7 +307,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
 
         const result = await callBizChatAPI('/api/v1/ats/filter', 'POST', filterPayload, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'filter',

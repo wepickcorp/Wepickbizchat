@@ -8,6 +8,7 @@ import {
   decimal,
   boolean,
   index,
+  uniqueIndex,
   jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -168,12 +169,12 @@ export interface SavedGeofence {
 // 3가지 모드: 'ats-general' (일반 ATS), 'ats-advanced' (고급 ATS), 'maptics' (지오펜스)
 export interface RecommendedTargetingConfig {
   mode: 'ats-general' | 'ats-advanced' | 'maptics';
-  
+
   // ATS 일반/고급 공통
   targetGender?: 'all' | 'male' | 'female';
   targetAgeStart?: number;
   targetAgeEnd?: number;
-  
+
   // ATS 고급 타겟팅 옵션
   advancedOptions?: {
     sndMosu?: number;
@@ -206,33 +207,33 @@ export const recommendedTemplates = pgTable("recommended_templates", {
   category: varchar("category", { length: 50 }).notNull(), // 업종
   purpose: varchar("purpose", { length: 50 }).notNull(), // 목적
   version: varchar("version", { length: 20 }), // 버전 (v1, v1.1 등)
-  
+
   // 메시지 내용 (변수 포함)
   titleTemplate: varchar("title_template", { length: 60 }),
   lmsTitleTemplate: varchar("lms_title_template", { length: 60 }),
   contentTemplate: text("content_template").notNull(),
   lmsContentTemplate: text("lms_content_template"), // RCS 메시지의 안드로이드용 LMS 대체 텍스트 템플릿
   variableSchema: jsonb("variable_schema").$type<VariableSchemaItem[]>(),
-  
+
   // 이미지 및 메시지 타입
   defaultImageUrl: text("default_image_url"),
   messageType: varchar("message_type", { length: 10 }).default("RCS"),
   rcsType: integer("rcs_type").default(4), // 이미지강조B가 기본
-  
+
   // URL 및 버튼
   urlLinks: jsonb("url_links").$type<UrlLinkConfig>(),
   buttons: jsonb("buttons").$type<RcsButtonsConfig>(),
-  
+
   // 상태
   isActive: boolean("is_active").default(true),
   sortOrder: integer("sort_order").default(0),
-  
+
   // 원본 템플릿 참조 (선택적)
   sourceTemplateId: varchar("source_template_id"),
-  
+
   // 타겟팅 설정 (추천 모드에서 자동 적용)
   targetingConfig: jsonb("targeting_config").$type<RecommendedTargetingConfig>(),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -248,6 +249,7 @@ export const templates = pgTable("templates", {
   lmsTitle: varchar("lms_title", { length: 60 }),
   content: text("content").notNull(), // RCS 메시지 내용
   lmsContent: text("lms_content"), // LMS fallback 메시지 내용
+  variableSchema: jsonb("variable_schema").$type<VariableSchemaItem[]>(), // 고객이 입력할 정보 필드
   imageUrl: text("image_url"), // RCS용 미리보기 이미지 URL
   imageFileId: varchar("image_file_id", { length: 100 }), // RCS용 BizChat 파일 업로드 ID
   lmsImageUrl: text("lms_image_url"), // LMS용 미리보기 이미지 URL
@@ -258,6 +260,22 @@ export const templates = pgTable("templates", {
   status: varchar("status", { length: 20 }).default("draft").notNull(), // draft, pending, approved, rejected
   rejectionReason: text("rejection_reason"),
   submittedAt: timestamp("submitted_at"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Message copy requests (고객 문구 요청)
+export const messageCopyRequests = pgTable("message_copy_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  content: text("content").notNull(),
+  status: varchar("status", { length: 30 }).default("reviewing").notNull(), // reviewing, approved_private, rejected, promoted
+  adminId: varchar("admin_id"),
+  adminNote: text("admin_note"),
+  rejectionReason: text("rejection_reason"),
+  templateId: varchar("template_id").references(() => templates.id),
+  promotedTemplateId: varchar("promoted_template_id").references(() => recommendedTemplates.id),
   reviewedAt: timestamp("reviewed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -292,14 +310,14 @@ export const campaigns = pgTable("campaigns", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
   templateId: varchar("template_id").references(() => templates.id),
-  
+
   // 기본 정보
   name: varchar("name", { length: 200 }).notNull(),
   tgtCompanyName: varchar("tgt_company_name", { length: 100 }), // 고객사명
   statusCode: integer("status_code").default(0).notNull(), // 0=temp_registered, 10=approval_requested, etc
   status: varchar("status", { length: 20 }).default("temp_registered").notNull(),
   messageType: varchar("message_type", { length: 10 }).notNull(), // LMS, MMS, RCS
-  
+
   // BizChat API 필수 필드
   rcvType: integer("rcv_type").default(0), // 0=ATS, 1=Maptics실시간, 2=Maptics모아서, 10=직접지정
   billingType: integer("billing_type").default(0), // 0=LMS, 1=RCS MMS, 2=MMS, 3=RCS LMS
@@ -311,39 +329,39 @@ export const campaigns = pgTable("campaigns", {
   sndMosuDesc: text("snd_mosu_desc"), // ATS 발송 모수 설명
   settleCnt: integer("settle_cnt").default(0), // 정산 건수
   mdnFileId: varchar("mdn_file_id", { length: 50 }), // MDN 파일 ID
-  
+
   // 발송 일정
   atsSndStartDate: timestamp("ats_snd_start_date"), // ATS 발송 시작 일시 (rcvType=0,10)
-  
+
   // Maptics 지오펜스 발송 일정 (rcvType=1,2)
   collStartDate: timestamp("coll_start_date"), // 수집 시작 일시
   collEndDate: timestamp("coll_end_date"), // 수집 종료 일시
   collSndDate: timestamp("coll_snd_date"), // 발송 시작 일시 (rcvType=2 모아서 보내기)
   sndGeofenceId: integer("snd_geofence_id"), // 지오펜스 ID
-  
+
   // Maptics 실시간 보내기 전용 (rcvType=1)
   rtStartHhmm: varchar("rt_start_hhmm", { length: 4 }), // 발송 시작 시간 (HHMM, 0900~1950)
   rtEndHhmm: varchar("rt_end_hhmm", { length: 4 }), // 발송 종료 시간 (HHMM, 0910~2000)
   sndDayDiv: integer("snd_day_div").default(0), // 일 균등 분할 (0: 미분할, 1: 분할)
-  
+
   // 통계
   targetCount: integer("target_count").default(0).notNull(),
   sentCount: integer("sent_count").default(0),
   successCount: integer("success_count").default(0),
   clickCount: integer("click_count").default(0),
-  
+
   // 예산
   budget: decimal("budget", { precision: 12, scale: 0 }).notNull(),
   costPerMessage: decimal("cost_per_message", { precision: 10, scale: 0 }).default("100"),
-  
+
   // BizChat 연동
   bizchatCampaignId: varchar("bizchat_campaign_id", { length: 100 }),
-  
+
   // 추천 메시지 관련
   creationMode: varchar("creation_mode", { length: 20 }), // 'recommended' | 'self'
   recommendedTemplateId: varchar("recommended_template_id"), // 추천 템플릿 ID
   variableValues: jsonb("variable_values"), // 변수 입력값 저장
-  
+
   // 기타
   rejectionReason: text("rejection_reason"),
   testSentAt: timestamp("test_sent_at"),
@@ -365,12 +383,12 @@ export const messages = pgTable("messages", {
   imageFileId: varchar("image_file_id", { length: 100 }), // RCS용 BizChat 파일 업로드 ID
   lmsImageUrl: text("lms_image_url"), // LMS용 이미지 URL
   lmsImageFileId: varchar("lms_image_file_id", { length: 100 }), // LMS용 BizChat 파일 업로드 ID
-  
+
   // RCS URL 링크 및 버튼 (템플릿에서 복사)
   urlLinks: jsonb("url_links"), // RCS용 { list: string[], reward?: number }
   lmsUrlLinks: jsonb("lms_url_links"), // LMS용 { list: string[], reward?: number }
   buttons: jsonb("buttons"), // RCS 버튼 { list: [{ type: '0'|'1'|'2', name: string, val1: string, val2?: string }] }
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -378,38 +396,38 @@ export const messages = pgTable("messages", {
 export const targeting = pgTable("targeting", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   campaignId: varchar("campaign_id").references(() => campaigns.id).notNull(),
-  
+
   // 기본 인구통계 필터 (/ats/meta/filter)
   gender: varchar("gender", { length: 10 }).default("all"), // all, male, female
   ageMin: integer("age_min"),
   ageMax: integer("age_max"),
   regions: text("regions").array(), // 시/도
   districts: text("districts").array(), // 시/군/구
-  
+
   // 회선 정보 필터 (/ats/meta/filter)
   carrierTypes: text("carrier_types").array(), // 통신사 유형: lte, 5g 등
   deviceTypes: text("device_types").array(), // 기기 유형: android, ios 등
-  
+
   // 11번가 쇼핑 행동 (/ats/meta/11st)
   shopping11stCategories: text("shopping_11st_categories").array(), // 11번가 카테고리 코드
-  
+
   // 웹앱 사용 행동 (/ats/meta/webapp)
   webappCategories: text("webapp_categories").array(), // 웹앱 카테고리 코드
-  
+
   // 통화 Usage 패턴 (/ats/meta/call)
   callUsageTypes: text("call_usage_types").array(), // 통화 사용 패턴 코드
-  
+
   // 위치/이동 특성 (/ats/meta/loc)
   locationTypes: text("location_types").array(), // 위치 특성 코드
   mobilityPatterns: text("mobility_patterns").array(), // 이동 패턴 코드
-  
+
   // Maptics 지오펜스 (/maptics/*)
   geofenceIds: text("geofence_ids").array(), // 지오펜스 ID 목록
-  
+
   // ATS 쿼리 결과 (발송 모수 조회 결과 저장)
   atsQuery: text("ats_query"), // ATS 쿼리 JSON
   estimatedCount: integer("estimated_count"), // 예상 타겟 수
-  
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -419,20 +437,20 @@ export const geofences = pgTable("geofences", {
   userId: varchar("user_id").references(() => users.id).notNull(),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
-  
+
   // 지오펜스 좌표 정보
   latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
   longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
   radius: integer("radius").default(500), // 반경 (미터)
-  
+
   // POI 정보
   poiId: varchar("poi_id", { length: 100 }), // Maptics POI ID
   poiName: varchar("poi_name", { length: 200 }),
   poiCategory: varchar("poi_category", { length: 100 }),
-  
+
   // BizChat 연동
   bizchatGeofenceId: varchar("bizchat_geofence_id", { length: 100 }),
-  
+
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -465,6 +483,54 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Credit grants table
+// 크레딧 지급 묶음. 유효기간과 잔여분을 추적하기 위한 원장 단위.
+export const creditGrants = pgTable(
+  "credit_grants",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").references(() => users.id).notNull(),
+    transactionId: varchar("transaction_id").references(() => transactions.id),
+    productType: varchar("product_type", { length: 30 }), // light, topup, booster, enterprise, adjustment
+    originalCredits: integer("original_credits").notNull(),
+    remainingCredits: integer("remaining_credits").notNull(),
+    purchasedAt: timestamp("purchased_at").defaultNow().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_credit_grants_user_expires").on(table.userId, table.expiresAt),
+    index("idx_credit_grants_user_remaining").on(table.userId, table.remainingCredits),
+  ],
+);
+
+// Credit ledger table
+// 크레딧 변동 내역. 실제 지급/사용/환불/만료/수동조정을 감사 가능하게 남긴다.
+export const creditLedger = pgTable(
+  "credit_ledger",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").references(() => users.id).notNull(),
+    creditGrantId: varchar("credit_grant_id").references(() => creditGrants.id),
+    transactionId: varchar("transaction_id").references(() => transactions.id),
+    campaignId: varchar("campaign_id").references(() => campaigns.id),
+    type: varchar("type", { length: 30 }).notNull(), // grant, reserve, use, release, refund, expire, adjustment
+    amountCredits: integer("amount_credits").notNull(),
+    balanceAfterCredits: integer("balance_after_credits"),
+    productType: varchar("product_type", { length: 30 }),
+    idempotencyKey: varchar("idempotency_key", { length: 120 }),
+    description: text("description"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_credit_ledger_user_created").on(table.userId, table.createdAt),
+    index("idx_credit_ledger_campaign").on(table.campaignId),
+    uniqueIndex("uidx_credit_ledger_idempotency").on(table.idempotencyKey),
+  ],
+);
+
 // Reports table
 export const reports = pgTable("reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -485,6 +551,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   campaigns: many(campaigns),
   templates: many(templates),
   transactions: many(transactions),
+  creditGrants: many(creditGrants),
+  creditLedger: many(creditLedger),
   files: many(files),
   geofences: many(geofences),
 }));
@@ -539,6 +607,37 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   }),
 }));
 
+export const creditGrantsRelations = relations(creditGrants, ({ one, many }) => ({
+  user: one(users, {
+    fields: [creditGrants.userId],
+    references: [users.id],
+  }),
+  transaction: one(transactions, {
+    fields: [creditGrants.transactionId],
+    references: [transactions.id],
+  }),
+  ledgerEntries: many(creditLedger),
+}));
+
+export const creditLedgerRelations = relations(creditLedger, ({ one }) => ({
+  user: one(users, {
+    fields: [creditLedger.userId],
+    references: [users.id],
+  }),
+  creditGrant: one(creditGrants, {
+    fields: [creditLedger.creditGrantId],
+    references: [creditGrants.id],
+  }),
+  transaction: one(transactions, {
+    fields: [creditLedger.transactionId],
+    references: [transactions.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [creditLedger.campaignId],
+    references: [campaigns.id],
+  }),
+}));
+
 export const reportsRelations = relations(reports, ({ one }) => ({
   campaign: one(campaigns, {
     fields: [reports.campaignId],
@@ -590,6 +689,13 @@ export const insertTemplateSchema = createInsertSchema(templates).omit({
   reviewedAt: true,
 });
 
+export const insertMessageCopyRequestSchema = createInsertSchema(messageCopyRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  reviewedAt: true,
+});
+
 export const insertRecommendedTemplateSchema = createInsertSchema(recommendedTemplates).omit({
   id: true,
   createdAt: true,
@@ -624,6 +730,17 @@ export const insertTargetingSchema = createInsertSchema(targeting).omit({
 });
 
 export const insertTransactionSchema = createInsertSchema(transactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCreditGrantSchema = createInsertSchema(creditGrants).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCreditLedgerSchema = createInsertSchema(creditLedger).omit({
   id: true,
   createdAt: true,
 });
@@ -666,6 +783,9 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Template = typeof templates.$inferSelect;
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
 
+export type MessageCopyRequest = typeof messageCopyRequests.$inferSelect;
+export type InsertMessageCopyRequest = z.infer<typeof insertMessageCopyRequestSchema>;
+
 export type RecommendedTemplate = typeof recommendedTemplates.$inferSelect;
 export type InsertRecommendedTemplate = z.infer<typeof insertRecommendedTemplateSchema>;
 
@@ -680,6 +800,12 @@ export type InsertTargeting = z.infer<typeof insertTargetingSchema>;
 
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+
+export type CreditGrant = typeof creditGrants.$inferSelect;
+export type InsertCreditGrant = z.infer<typeof insertCreditGrantSchema>;
+
+export type CreditLedger = typeof creditLedger.$inferSelect;
+export type InsertCreditLedger = z.infer<typeof insertCreditLedgerSchema>;
 
 export type Report = typeof reports.$inferSelect;
 export type InsertReport = z.infer<typeof insertReportSchema>;

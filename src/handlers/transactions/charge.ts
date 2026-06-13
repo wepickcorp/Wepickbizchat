@@ -42,7 +42,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -89,11 +89,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getDb();
     const userResult = await db.select().from(users).where(eq(users.id, auth.userId));
     const user = userResult[0];
-    
+
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const { amount, paymentMethod } = req.body;
-    
+
     if (!amount || amount < 10000) {
       return res.status(400).json({ error: 'Minimum charge amount is 10,000 KRW' });
     }

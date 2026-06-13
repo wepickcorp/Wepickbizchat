@@ -5,11 +5,11 @@ import crypto from 'crypto';
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
+
   if (!supabaseUrl || !supabaseServiceKey) {
     throw new Error('Supabase configuration is missing');
   }
-  
+
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
@@ -22,7 +22,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -36,7 +36,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
 async function verifyAuth(req: VercelRequest): Promise<{ userId: string; email: string; isImpersonating?: boolean } | null> {
   const impersonateToken = req.headers['x-impersonate-token'] as string;
   const impersonateUserId = req.headers['x-impersonate-user-id'] as string;
-  
+
   if (impersonateToken && impersonateUserId) {
     const verified = verifyImpersonateToken(impersonateToken);
     if (verified && verified.userId === impersonateUserId) {
@@ -44,9 +44,9 @@ async function verifyAuth(req: VercelRequest): Promise<{ userId: string; email: 
     }
     return null;
   }
-  
+
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const auth = await verifyAuth(req);
-    
+
     if (!auth) {
       return res.status(401).json({ error: 'Unauthorized' });
     }

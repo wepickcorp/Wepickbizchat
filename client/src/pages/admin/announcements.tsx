@@ -73,9 +73,9 @@ export default function AdminAnnouncements() {
     mutationFn: async (data: typeof formData) => {
       const res = await fetch("/api/admin/announcements", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${adminToken}` 
+          Authorization: `Bearer ${adminToken}`
         },
         body: JSON.stringify(data),
       });
@@ -97,9 +97,9 @@ export default function AdminAnnouncements() {
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
       const res = await fetch(`/api/admin/announcements/${id}`, {
         method: "PUT",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${adminToken}` 
+          Authorization: `Bearer ${adminToken}`
         },
         body: JSON.stringify(data),
       });
@@ -315,8 +315,8 @@ export default function AdminAnnouncements() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>취소</Button>
-            <Button 
-              onClick={handleSubmit} 
+            <Button
+              onClick={handleSubmit}
               disabled={createMutation.isPending || updateMutation.isPending}
               data-testid="button-submit-announcement"
             >

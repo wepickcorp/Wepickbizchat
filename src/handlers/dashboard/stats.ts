@@ -48,11 +48,11 @@ function getDb() {
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
+
   if (!supabaseUrl || !supabaseServiceKey) {
     throw new Error('Supabase configuration is missing');
   }
-  
+
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
@@ -66,7 +66,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -81,7 +81,7 @@ async function verifyAuth(req: VercelRequest): Promise<{ userId: string; email: 
   // 대리 로그인 토큰 확인
   const impersonateToken = req.headers['x-impersonate-token'] as string;
   const impersonateUserId = req.headers['x-impersonate-user-id'] as string;
-  
+
   if (impersonateToken && impersonateUserId) {
     const verified = verifyImpersonateToken(impersonateToken);
     if (verified && verified.userId === impersonateUserId) {
@@ -89,9 +89,9 @@ async function verifyAuth(req: VercelRequest): Promise<{ userId: string; email: 
     }
     return null;
   }
-  
+
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
@@ -127,14 +127,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const auth = await verifyAuth(req);
-    
+
     if (!auth) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const db = getDb();
     const userCampaigns = await db.select().from(campaigns).where(eq(campaigns.userId, auth.userId));
-    
+
     let totalSent = 0;
     let totalSuccess = 0;
     let totalClicks = 0;
@@ -147,7 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       totalSent += campaign.sentCount || 0;
       totalSuccess += campaign.successCount || 0;
       totalClicks += campaign.clickCount || 0;
-      
+
       const reportResult = await db.select().from(reports).where(eq(reports.campaignId, campaign.id));
       const report = reportResult[0];
       if (report) {

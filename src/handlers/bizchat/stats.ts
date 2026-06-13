@@ -37,7 +37,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -204,9 +204,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (!campaign.bizchatCampaignId) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'BizChat에 등록되지 않은 캠페인입니다' 
+        return res.status(400).json({
+          success: false,
+          error: 'BizChat에 등록되지 않은 캠페인입니다'
         });
       }
 
@@ -257,9 +257,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         if (!campaign.bizchatCampaignId) {
-          return res.status(400).json({ 
-            success: false, 
-            error: 'BizChat에 등록되지 않은 캠페인입니다' 
+          return res.status(400).json({
+            success: false,
+            error: 'BizChat에 등록되지 않은 캠페인입니다'
           });
         }
 

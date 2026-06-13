@@ -5,6 +5,8 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
 import { pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import Stripe from 'stripe';
+import { CREDIT_PRODUCTS, type CreditProductType } from '../../../shared/credit-policy';
+import { hasLightCreditGrantInCurrentKstMonthForServerless } from '../_shared/credit-ledger';
 
 neonConfig.fetchConnectionCache = true;
 
@@ -39,6 +41,10 @@ async function verifyAuth(req: VercelRequest) {
   } catch { return null; }
 }
 
+function isCreditProductType(value: unknown): value is CreditProductType {
+  return typeof value === 'string' && value in CREDIT_PRODUCTS;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -60,10 +66,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       user = insertResult[0];
     }
 
-    const { amount } = req.body;
+    const { amount, productType } = req.body;
 
     if (!amount || amount < 10000) {
       return res.status(400).json({ error: '최소 충전 금액은 10,000원입니다' });
+    }
+
+    const creditProduct = isCreditProductType(productType) ? CREDIT_PRODUCTS[productType] : null;
+
+    if (process.env.CREDIT_MODE_ENABLED === 'true' && !creditProduct) {
+      return res.status(400).json({ error: '크레딧 상품을 선택해주세요' });
+    }
+
+    if (creditProduct && creditProduct.priceKrw !== amount) {
+      return res.status(400).json({ error: '상품 금액이 올바르지 않습니다' });
+    }
+
+    if (process.env.CREDIT_MODE_ENABLED === 'true' && creditProduct?.productType === 'light') {
+      if (await hasLightCreditGrantInCurrentKstMonthForServerless(db, auth.userId)) {
+        return res.status(400).json({ error: '라이트 충전은 매월 1회만 구매할 수 있습니다' });
+      }
     }
 
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -86,7 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }).where(eq(users.id, user.id));
     }
 
-    const baseUrl = process.env.VERCEL_URL 
+    const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : process.env.REPLIT_DOMAINS?.split(',')[0]
         ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
@@ -100,8 +122,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           price_data: {
             currency: 'krw',
             product_data: {
-              name: 'BizChat 잔액 충전',
-              description: `${amount.toLocaleString()}원 충전`,
+              name: creditProduct ? `BizChat ${creditProduct.name}` : 'BizChat 잔액 충전',
+              description: creditProduct
+                ? `${creditProduct.credits.toLocaleString()}C · ${amount.toLocaleString()}원`
+                : `${amount.toLocaleString()}원 충전`,
             },
             unit_amount: amount,
           },
@@ -114,6 +138,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       metadata: {
         userId: user.id,
         amount: amount.toString(),
+        type: 'balance_charge',
+        ...(creditProduct ? {
+          productType: creditProduct.productType,
+          credits: creditProduct.credits.toString(),
+        } : {}),
       },
     });
 

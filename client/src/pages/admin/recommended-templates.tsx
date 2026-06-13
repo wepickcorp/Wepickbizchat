@@ -68,7 +68,7 @@ export default function AdminRecommendedTemplates() {
       if (categoryFilter !== 'all') params.append('category', categoryFilter);
       if (purposeFilter !== 'all') params.append('purpose', purposeFilter);
       params.append('active', 'false');
-      
+
       const res = await fetch(`/api/recommended-templates?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch templates");
       return res.json();
@@ -132,15 +132,15 @@ export default function AdminRecommendedTemplates() {
       });
   };
 
-  const filteredTemplates = data?.templates?.filter(t => 
+  const filteredTemplates = data?.templates?.filter(t =>
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.contentTemplate.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
-  const getCategoryLabel = (value: string) => 
+  const getCategoryLabel = (value: string) =>
     data?.categories?.find(c => c.value === value)?.label || value;
-  
-  const getPurposeLabel = (value: string) => 
+
+  const getPurposeLabel = (value: string) =>
     data?.purposes?.find(p => p.value === value)?.label || value;
 
   return (
@@ -238,32 +238,32 @@ export default function AdminRecommendedTemplates() {
                     <TableCell>{template.sortOrder}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
-                        <Button 
-                          size="icon" 
+                        <Button
+                          size="icon"
                           variant="ghost"
                           onClick={() => setPreviewTemplate(template)}
                           data-testid={`button-preview-${template.id}`}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          size="icon" 
+                        <Button
+                          size="icon"
                           variant="ghost"
                           onClick={() => duplicateTemplate(template)}
                           data-testid={`button-duplicate-${template.id}`}
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          size="icon" 
+                        <Button
+                          size="icon"
                           variant="ghost"
                           onClick={() => navigate(`/admin/recommended-templates/${template.id}/edit`)}
                           data-testid={`button-edit-${template.id}`}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          size="icon" 
+                        <Button
+                          size="icon"
                           variant="ghost"
                           className="text-destructive"
                           onClick={() => setDeleteTarget(template)}

@@ -47,7 +47,7 @@ function verifyToken(token: string): { adminId: string } | null {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -70,8 +70,8 @@ async function verifyAdminToken(req: VercelRequest) {
 }
 
 function getClientIp(req: VercelRequest): string {
-  return (req.headers['x-forwarded-for'] as string)?.split(',')[0] || 
-         req.headers['x-real-ip'] as string || 
+  return (req.headers['x-forwarded-for'] as string)?.split(',')[0] ||
+         req.headers['x-real-ip'] as string ||
          'unknown';
 }
 
@@ -113,8 +113,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       action: 'master_toggle',
       targetType: 'user',
       targetId: userId as string,
-      details: { 
-        previousValue: user.isMaster, 
+      details: {
+        previousValue: user.isMaster,
         newValue: isMaster,
         userEmail: user.email,
       },

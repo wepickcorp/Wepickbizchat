@@ -26,7 +26,7 @@ function isImpersonateTokenValid(token: string): boolean {
 function getInitialImpersonationState(): { isImpersonating: boolean; user: User | null } {
   const impersonateToken = localStorage.getItem("impersonateToken");
   const impersonateUserData = localStorage.getItem("impersonateUser");
-  
+
   if (impersonateToken && impersonateUserData) {
     if (isImpersonateTokenValid(impersonateToken)) {
       try {
@@ -43,20 +43,24 @@ function getInitialImpersonationState(): { isImpersonating: boolean; user: User 
       localStorage.removeItem("impersonateUser");
     }
   }
-  
+
   return { isImpersonating: false, user: null };
 }
 
 export function useAuth() {
   // 초기 상태를 동기적으로 설정 (hydration 문제 방지)
   const initialState = getInitialImpersonationState();
-  
+  const isLocalDev = import.meta.env.DEV;
+
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(!initialState.isImpersonating);
+  const [hasLocalDevAuth, setHasLocalDevAuth] = useState(
+    isLocalDev && localStorage.getItem("localDevAuth") === "1"
+  );
   const [impersonatedUser, setImpersonatedUser] = useState<User | null>(initialState.user);
   const [isImpersonating, setIsImpersonating] = useState(initialState.isImpersonating);
   const isImpersonatingRef = useRef(initialState.isImpersonating);
-  
+
   // ref 동기화
   useEffect(() => {
     isImpersonatingRef.current = isImpersonating;
@@ -74,7 +78,7 @@ export function useAuth() {
   // 대리 로그인 토큰 만료 체크 (별도 useEffect)
   useEffect(() => {
     if (!isImpersonating) return;
-    
+
     // 1분마다 토큰 만료 여부 확인
     const intervalId = setInterval(() => {
       const token = localStorage.getItem("impersonateToken");
@@ -93,7 +97,7 @@ export function useAuth() {
         }
       }
     }, 60000);
-    
+
     return () => clearInterval(intervalId);
   }, [isImpersonating, clearImpersonation]);
 
@@ -129,7 +133,7 @@ export function useAuth() {
     queryKey: ["/api/auth/user"],
     retry: 2,
     retryDelay: 1000,
-    enabled: !!session && !isImpersonating,
+    enabled: (!!session || hasLocalDevAuth) && !isImpersonating,
   });
 
   useEffect(() => {
@@ -152,6 +156,16 @@ export function useAuth() {
       }
       return;
     }
+    if (hasLocalDevAuth) {
+      await fetch("/api/dev/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      }).catch(() => undefined);
+      localStorage.removeItem("localDevAuth");
+      setHasLocalDevAuth(false);
+      window.location.href = "/auth";
+      return;
+    }
     await supabase.auth.signOut();
     window.location.href = "/auth";
   }, []);
@@ -170,17 +184,19 @@ export function useAuth() {
     }
   }, []);
 
-  const isLoading = isAuthLoading || (!isImpersonating && !!session && isUserLoading && !isError);
+  const isLoading = isAuthLoading || (!isImpersonating && (!!session || hasLocalDevAuth) && isUserLoading && !isError);
 
-  const effectiveUser = isImpersonating ? impersonatedUser : (session ? user : undefined);
-  const effectiveSession = isImpersonating ? { user: impersonatedUser } as any : session;
+  const effectiveUser = isImpersonating ? impersonatedUser : ((session || hasLocalDevAuth) ? user : undefined);
+  const effectiveSession = isImpersonating
+    ? { user: impersonatedUser } as any
+    : session || (hasLocalDevAuth && user ? { user } as any : null);
 
   return {
     user: effectiveUser,
     session: effectiveSession,
     isLoading,
     isError: isImpersonating ? false : isError,
-    isAuthenticated: isImpersonating ? true : (!!session && !!user),
+    isAuthenticated: isImpersonating ? true : (!!effectiveSession && !!effectiveUser),
     isImpersonating,
     refetchUser: refetch,
     signOut,

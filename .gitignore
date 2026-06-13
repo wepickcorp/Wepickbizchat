@@ -6,4 +6,5 @@ vite.config.ts.*
 *.tar.gz
 .env
 .env.*
+!.env.example
 local-dev-server*.log

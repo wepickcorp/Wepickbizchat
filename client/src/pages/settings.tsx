@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { User, Building2, Lock, Loader2 } from "lucide-react";
+import { User, Lock, Loader2 } from "lucide-react";
 
 interface UserProfile {
   id: string;
@@ -37,12 +37,6 @@ export default function Settings() {
     phone: "",
   });
 
-  const [businessData, setBusinessData] = useState({
-    companyName: "",
-    businessNumber: "",
-    representativeName: "",
-  });
-
   const [passwordData, setPasswordData] = useState({
     newPassword: "",
     confirmPassword: "",
@@ -55,11 +49,6 @@ export default function Settings() {
         lastName: profile.lastName || "",
         phone: profile.phone || "",
       });
-      setBusinessData({
-        companyName: profile.companyName || "",
-        businessNumber: profile.businessNumber || "",
-        representativeName: profile.representativeName || "",
-      });
     }
   }, [profile]);
 
@@ -69,27 +58,12 @@ export default function Settings() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "프로필이 저장되었습니다" });
+      toast({ title: "프로필을 저장했어요" });
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     },
     onError: () => {
-      toast({ title: "프로필 저장에 실패했습니다", variant: "destructive" });
-    },
-  });
-
-  const updateBusinessMutation = useMutation({
-    mutationFn: async (data: typeof businessData) => {
-      const res = await apiRequest("PUT", "/api/profile", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "사업자 정보가 저장되었습니다" });
-      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-    },
-    onError: () => {
-      toast({ title: "사업자 정보 저장에 실패했습니다", variant: "destructive" });
+      toast({ title: "프로필을 저장하지 못했어요", variant: "destructive" });
     },
   });
 
@@ -99,11 +73,11 @@ export default function Settings() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "비밀번호가 변경되었습니다" });
+      toast({ title: "비밀번호를 변경했어요" });
       setPasswordData({ newPassword: "", confirmPassword: "" });
     },
     onError: (error: any) => {
-      toast({ title: error.message || "비밀번호 변경에 실패했습니다", variant: "destructive" });
+      toast({ title: error.message || "비밀번호를 변경하지 못했어요", variant: "destructive" });
     },
   });
 
@@ -112,33 +86,28 @@ export default function Settings() {
     updateProfileMutation.mutate(profileData);
   };
 
-  const handleBusinessSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateBusinessMutation.mutate(businessData);
-  };
-
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (passwordData.newPassword.length < 6) {
-      toast({ title: "비밀번호는 최소 6자 이상이어야 합니다", variant: "destructive" });
+      toast({ title: "비밀번호는 6자 이상 입력해요", variant: "destructive" });
       return;
     }
-    
+
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast({ title: "비밀번호가 일치하지 않습니다", variant: "destructive" });
+      toast({ title: "두 비밀번호가 같아야 해요", variant: "destructive" });
       return;
     }
-    
+
     changePasswordMutation.mutate({ newPassword: passwordData.newPassword });
   };
 
   if (isLoading) {
     return (
-      <div className="container max-w-2xl py-8 space-y-6">
+      <div className="container max-w-5xl py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">계정 설정</h1>
-          <p className="text-muted-foreground">프로필 및 계정 정보를 관리합니다</p>
+          <h1 className="text-title-md font-bold">계정 설정</h1>
+          <p className="text-body-md text-muted-foreground">프로필과 계정 정보를 관리해요</p>
         </div>
         <Card>
           <CardHeader>
@@ -156,19 +125,15 @@ export default function Settings() {
   }
 
   return (
-    <div className="container max-w-2xl py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">계정 설정</h1>
-        <p className="text-muted-foreground">프로필 및 계정 정보를 관리합니다</p>
-      </div>
-
+    <div className="container max-w-5xl py-8 space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <User className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">프로필 정보</CardTitle>
           </div>
-          <CardDescription>이름과 연락처를 수정합니다</CardDescription>
+          <CardDescription>이름과 연락처를 관리해요</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleProfileSubmit} className="space-y-4">
@@ -194,7 +159,7 @@ export default function Settings() {
                 />
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="email">이메일</Label>
               <Input
@@ -204,9 +169,9 @@ export default function Settings() {
                 className="bg-muted"
                 data-testid="input-email"
               />
-              <p className="text-xs text-muted-foreground">이메일은 변경할 수 없습니다</p>
+              <p className="text-xs text-muted-foreground">이메일은 로그인 계정으로 사용해요</p>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="phone">연락처</Label>
               <Input
@@ -218,8 +183,9 @@ export default function Settings() {
               />
             </div>
 
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
+              className="min-h-11"
               disabled={updateProfileMutation.isPending}
               data-testid="button-save-profile"
             >
@@ -233,65 +199,10 @@ export default function Settings() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">사업자 정보</CardTitle>
-          </div>
-          <CardDescription>광고주 인증에 사용되는 사업자 정보입니다</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleBusinessSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="companyName">상호명</Label>
-              <Input
-                id="companyName"
-                value={businessData.companyName}
-                onChange={(e) => setBusinessData(prev => ({ ...prev, companyName: e.target.value }))}
-                placeholder="주식회사 위픽"
-                data-testid="input-company-name"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="businessNumber">사업자등록번호</Label>
-              <Input
-                id="businessNumber"
-                value={businessData.businessNumber}
-                onChange={(e) => setBusinessData(prev => ({ ...prev, businessNumber: e.target.value }))}
-                placeholder="123-45-67890"
-                data-testid="input-business-number"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="representativeName">대표자명</Label>
-              <Input
-                id="representativeName"
-                value={businessData.representativeName}
-                onChange={(e) => setBusinessData(prev => ({ ...prev, representativeName: e.target.value }))}
-                placeholder="홍길동"
-                data-testid="input-representative-name"
-              />
-            </div>
-
-            <Button 
-              type="submit" 
-              disabled={updateBusinessMutation.isPending}
-              data-testid="button-save-business"
-            >
-              {updateBusinessMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              저장
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
             <Lock className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">비밀번호 변경</CardTitle>
           </div>
-          <CardDescription>새로운 비밀번호를 설정합니다</CardDescription>
+          <CardDescription>새로운 비밀번호를 설정해요</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
@@ -314,13 +225,14 @@ export default function Settings() {
                 type="password"
                 value={passwordData.confirmPassword}
                 onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                placeholder="비밀번호를 다시 입력해주세요"
+                placeholder="비밀번호를 다시 입력해요"
                 data-testid="input-confirm-password"
               />
             </div>
 
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
+              className="min-h-11"
               disabled={changePasswordMutation.isPending}
               data-testid="button-change-password"
             >
@@ -330,6 +242,7 @@ export default function Settings() {
           </form>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

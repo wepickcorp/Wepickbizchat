@@ -13,8 +13,8 @@ const BIZCHAT_DEV_URL = process.env.BIZCHAT_DEV_API_URL || 'https://gw-dev.bizch
 const BIZCHAT_PROD_URL = process.env.BIZCHAT_PROD_API_URL || 'https://gw.bizchat1.co.kr';
 
 // Callback URL (Vercel 배포 도메인)
-const CALLBACK_BASE_URL = process.env.VERCEL_URL 
-  ? `https://${process.env.VERCEL_URL}` 
+const CALLBACK_BASE_URL = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
   : 'https://wepickbizchat-new.vercel.app';
 
 // Database tables
@@ -74,7 +74,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -109,16 +109,16 @@ function cleanEmptyFields(obj: Record<string, unknown>): Record<string, unknown>
   for (const [key, value] of Object.entries(obj)) {
     // null, undefined는 제외
     if (value === null || value === undefined) continue;
-    
+
     // 빈 문자열은 제외 (urlFile 등)
     if (typeof value === 'string' && value === '') continue;
-    
+
     // 빈 배열은 제외
     if (Array.isArray(value) && value.length === 0) continue;
-    
+
     // 빈 객체는 제외 (fileInfo: {}, urlLink: {} 등)
     if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 0) continue;
-    
+
     // 중첩 객체도 정리
     if (typeof value === 'object' && !Array.isArray(value)) {
       const cleanedNested = cleanEmptyFields(value as Record<string, unknown>);
@@ -128,8 +128,8 @@ function cleanEmptyFields(obj: Record<string, unknown>): Record<string, unknown>
       }
     } else if (Array.isArray(value)) {
       // 배열 내 객체도 정리
-      const cleanedArray = value.map(item => 
-        typeof item === 'object' && item !== null 
+      const cleanedArray = value.map(item =>
+        typeof item === 'object' && item !== null
           ? cleanEmptyFields(item as Record<string, unknown>)
           : item
       ).filter(item => {
@@ -178,30 +178,30 @@ function validateSendTime(sendDate: Date | string | null): { valid: boolean; err
   if (!sendDate) {
     return { valid: true };
   }
-  
+
   const targetDate = typeof sendDate === 'string' ? new Date(sendDate) : sendDate;
   const now = new Date();
-  
+
   // KST 기준 시간 추출
   const kstTarget = getKSTTimeComponents(targetDate);
-  
+
   // 1. 발송 시간대 체크 (09:00~20:00 KST)
   if (kstTarget.hours < 9 || kstTarget.hours >= 20) {
-    return { 
-      valid: false, 
-      error: `발송 시간은 09:00~19:00 사이여야 합니다 (현재: ${kstTarget.hours}:${kstTarget.minutes.toString().padStart(2, '0')} KST)` 
+    return {
+      valid: false,
+      error: `발송 시간은 09:00~19:00 사이여야 합니다 (현재: ${kstTarget.hours}:${kstTarget.minutes.toString().padStart(2, '0')} KST)`
     };
   }
-  
+
   // 2. 최소 1시간 여유 체크
   const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
   if (targetDate < oneHourFromNow) {
-    return { 
-      valid: false, 
-      error: '발송 시간은 현재 시간으로부터 최소 1시간 이후여야 합니다' 
+    return {
+      valid: false,
+      error: '발송 시간은 현재 시간으로부터 최소 1시간 이후여야 합니다'
     };
   }
-  
+
   // 3. 10분 단위 체크 (BizChat 규격: 10분 단위로만 시작 가능)
   // 예: 10:11에 11:15 시작 → 실패, 11:20 → 성공
   const targetMinutes = kstTarget.minutes;
@@ -214,12 +214,12 @@ function validateSendTime(sendDate: Date | string | null): { valid: boolean; err
     } else {
       suggestedTime.setMinutes(roundedUp);
     }
-    return { 
-      valid: false, 
-      error: `발송 시간은 10분 단위여야 합니다 (예: ${suggestedTime.getHours()}:${String(suggestedTime.getMinutes()).padStart(2, '0')})` 
+    return {
+      valid: false,
+      error: `발송 시간은 10분 단위여야 합니다 (예: ${suggestedTime.getHours()}:${String(suggestedTime.getMinutes()).padStart(2, '0')})`
     };
   }
-  
+
   return { valid: true };
 }
 
@@ -232,8 +232,8 @@ async function callBizChatAPI(
 ) {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
   const envKeyName = useProduction ? 'BIZCHAT_PROD_API_KEY' : 'BIZCHAT_DEV_API_KEY';
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   console.log(`[BizChat API] Environment: ${useProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
@@ -246,11 +246,11 @@ async function callBizChatAPI(
   }
 
   const tid = generateTid();
-  
+
   // tid는 항상 Query Parameter로 전달
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
-  
+
   console.log(`[BizChat] ${method} ${url}`);
 
   const options: RequestInit = {
@@ -269,7 +269,7 @@ async function callBizChatAPI(
 
   const response = await fetch(url, options);
   const responseText = await response.text();
-  
+
   console.log(`[BizChat] Response: ${response.status} - ${responseText.substring(0, 500)}`);
 
   let data;
@@ -383,7 +383,7 @@ function validateRcsMessage(
 ): RcsValidationResult {
   const result: RcsValidationResult = { valid: true, errors: [], warnings: [] };
   const limits = RCS_TYPE_LIMITS[rcsType];
-  
+
   if (!limits) {
     result.errors.push(`지원되지 않는 RCS 타입입니다: ${rcsType}`);
     result.valid = false;
@@ -397,7 +397,7 @@ function validateRcsMessage(
       result.errors.push(`슬라이드 개수는 1~6개여야 합니다 (현재: ${actualSlideCnt}개)`);
       result.valid = false;
     }
-    
+
     // 전체 메시지 길이 합산 (최대 1300자)
     const totalMsgLength = slides.reduce((sum, s) => sum + (s.msg?.length || 0), 0);
     if (totalMsgLength > 1300) {
@@ -409,7 +409,7 @@ function validateRcsMessage(
   // 각 슬라이드/메시지 검증
   slides.forEach((slide, idx) => {
     const slidePrefix = slides.length > 1 ? `슬라이드 ${idx + 1}: ` : '';
-    
+
     // 메시지 길이 검증
     const msgLength = slide.msg?.length || 0;
     if (msgLength > limits.maxMsgLength) {
@@ -474,7 +474,7 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
   // rcvType=0,10: ATS 일반 (sndMosu, sndMosuQuery, sndMosuDesc, atsSndStartDate 필요)
   // rcvType=1,2: Maptics 지오펜스 (collStartDate, collEndDate, collSndDate, sndGeofenceId 필요, ATS 필드 제외)
   const isMaptics = campaign.rcvType === 1 || campaign.rcvType === 2;
-  
+
   const payload: Record<string, unknown> = {
     // 필수 파라미터
     tgtCompanyName: campaign.tgtCompanyName || '위픽',
@@ -485,10 +485,10 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
     billingType: billingType,
     isTmp: campaign.isTmp ?? 0,
     settleCnt: campaign.settleCnt ?? sndGoalCnt,
-    
+
     // 무료 수신거부 번호
     adverDeny: campaign.adverDeny || '1504',
-    
+
     // Callback URL 등록
     cb: {
       state: `${CALLBACK_BASE_URL}/api/bizchat/callback/state`,
@@ -499,21 +499,21 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
   if (!isMaptics) {
     payload.sndMosu = sndMosu;
     payload.sndMosuFlag = campaign.sndMosuFlag ?? 0;
-    
+
     // 발송 시작일 (unix timestamp, 초단위)
     if (campaign.atsSndStartDate || campaign.scheduledAt) {
       payload.atsSndStartDate = toUnixTimestamp(campaign.atsSndStartDate || campaign.scheduledAt);
     }
-    
+
     // 발송 모수 필터 설명 (HTML 형식)
     if (campaign.sndMosuDesc) {
       const desc = campaign.sndMosuDesc;
       const isHtml = typeof desc === 'string' && (desc.startsWith('<html>') || desc.includes('<body>'));
-      payload.sndMosuDesc = isHtml 
-        ? desc 
+      payload.sndMosuDesc = isHtml
+        ? desc
         : `<html><body><p>${desc}</p></body></html>`;
     }
-    
+
     // 발송 모수 쿼리 (SQL 문자열)
     if (campaign.sndMosuQuery) {
       const query = campaign.sndMosuQuery;
@@ -590,11 +590,11 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
   // - RCS MMS(1): RCS에서 처리
   // - RCS LMS(3): RCS에서 처리
   const needsFileForBilling = payload.billingType === 2; // MMS만 mms.fileInfo 필요
-  
+
   // RCS 메시지의 경우: LMS fallback에 전용 필드 사용 (lmsUrlLinks, lmsImageUrl)
   // RCS가 아닌 경우: 일반 필드 사용 (urlLinks, imageUrl)
   const isRcsMessage = campaign.messageType === 'RCS';
-  
+
   // URL 링크 정규화 - 배열 또는 {list: []} 형식 모두 지원
   const normalizeUrlList = (urls: unknown): string[] => {
     if (!urls) return [];
@@ -605,22 +605,22 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
     }
     return [];
   };
-  
+
   const lmsUrlLinks = normalizeUrlList(message?.lmsUrlLinks);
   const rcsUrlLinks = normalizeUrlList(message?.urlLinks);
-  const mmsUrlList: string[] = isRcsMessage && lmsUrlLinks.length > 0 
-    ? lmsUrlLinks 
+  const mmsUrlList: string[] = isRcsMessage && lmsUrlLinks.length > 0
+    ? lmsUrlLinks
     : (rcsUrlLinks.length > 0 ? rcsUrlLinks : (message?.urls || []));
-  const mmsUrlLink = mmsUrlList.length > 0 
+  const mmsUrlLink = mmsUrlList.length > 0
     ? { list: mmsUrlList.slice(0, 3), reward: message?.urlLinkReward }
     : {}; // 링크가 없으면 빈 객체 {} (문서 규격)
-    
+
   // MMS 이미지 첨부 (MMS billingType=2일 때만)
   // RCS의 경우 LMS fallback 전용 이미지 사용
   const lmsImageUrl = message?.lmsImageUrl;
   const mmsImageUrl = isRcsMessage && lmsImageUrl ? lmsImageUrl : message?.imageUrl;
   const hasImage = !!mmsImageUrl;
-  
+
   // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
   // mms 객체 구성 - 조건부 필드 포함 (빈 객체 생략)
   // RCS 메시지의 경우 lmsContent가 있으면 fallback 메시지로 사용 (RCS 미지원 기기용)
@@ -632,7 +632,7 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
     ...(mmsUrlList.length > 0 && { urlLink: { list: mmsUrlList.slice(0, 3), reward: message?.urlLinkReward } }),
     ...(needsFileForBilling && hasImage && { fileInfo: { list: [{ origId: mmsImageUrl }] } }),
   };
-  
+
   payload.mms = mmsObj;
 
   // MMS 개별 URL 파일 리워드 (urlFile 사용 시)
@@ -649,7 +649,7 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
   // - rcs[].buttons: 버튼이 없으면 empty object
   // - buttons.list[].type: 문자열이어야 함 ('0', '1', '2')
   const isRcsBilling = payload.billingType === 1 || payload.billingType === 3;
-  
+
   // BizChat API 규격 v0.29.0: rcs 필드는 항상 포함 (문서 예제: "rcs": [])
   if (campaign.messageType === 'RCS' || isRcsBilling) {
     const rcsSlides = message?.rcsSlides || [{ slideNum: 1 }];
@@ -667,7 +667,7 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
       })),
       campaign.slideCnt
     );
-    
+
     if (rcsValidation.warnings.length > 0) {
       console.log('[BizChat RCS] Warnings:', rcsValidation.warnings.join(', '));
     }
@@ -677,14 +677,14 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
       // 클라이언트에서 미리 검증하도록 안내 필요
     }
     const rcsButtons: RcsButton[] = message?.rcsButtons || [];
-    
+
     payload.rcs = rcsSlides.map((slide: any, idx: number) => {
       // URL 링크 객체 구성 (없으면 빈 객체 {})
       const slideUrls = slide.urls || rcsUrlList.slice(0, 3);
-      const urlLink = slideUrls.length > 0 
+      const urlLink = slideUrls.length > 0
         ? { list: slideUrls, reward: slide.urlLinkReward || message?.rcsUrlLinkReward }
         : {}; // 링크가 없으면 빈 객체 {} (문서 규격)
-      
+
       // 버튼 객체 구성 (없으면 빈 객체 {})
       // BizChat API 규격: button.type은 문자열이어야 함 ('0'=URL, '1'=앱실행, '2'=전화)
       // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
@@ -692,7 +692,7 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
         ...btn,
         type: String(btn.type), // 숫자를 문자열로 변환
       }));
-      
+
       // RCS 슬라이드 객체 - 조건부 필드 포함 (빈 객체 생략)
       const rcsSlideObj: Record<string, unknown> = {
         slideNum: slide.slideNum || idx + 1,
@@ -705,7 +705,7 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
         ...(buttonList.length > 0 && { buttons: { list: buttonList } }),
         ...(slide.opts?.list?.length > 0 && { opts: slide.opts }),
       };
-        
+
       return rcsSlideObj;
     });
   }
@@ -715,7 +715,7 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
   console.log('[BizChat Create] Payload keys:', Object.keys(payload));
   console.log('[BizChat Create] Has rcs field:', 'rcs' in payload);
   console.log('[BizChat Create] Has fileInfo in mms:', 'fileInfo' in (payload.mms as Record<string, unknown> || {}));
-  
+
   return callBizChatAPI('/api/v1/cmpn/create', 'POST', payload, useProduction);
 }
 
@@ -723,11 +723,11 @@ async function createCampaignInBizChat(campaign: any, message: any, useProductio
 async function updateCampaignInBizChat(bizchatCampaignId: string, updateData: Record<string, unknown>, useProduction: boolean = false) {
   // BizChat API 규격: 빈 객체/배열은 완전히 생략해야 함 (E000002 에러 방지)
   const cleanedData = { ...updateData };
-  
+
   // mms 내부 빈 필드 정리
   if (cleanedData.mms && typeof cleanedData.mms === 'object') {
     const mms = { ...cleanedData.mms as Record<string, unknown> };
-    
+
     // 빈 객체 필드 제거: fileInfo, urlLink
     if (mms.fileInfo && typeof mms.fileInfo === 'object' && Object.keys(mms.fileInfo as object).length === 0) {
       delete mms.fileInfo;
@@ -744,7 +744,7 @@ async function updateCampaignInBizChat(bizchatCampaignId: string, updateData: Re
     }
     cleanedData.mms = mms;
   }
-  
+
   // rcs 배열 정리
   if (Array.isArray(cleanedData.rcs)) {
     if (cleanedData.rcs.length === 0) {
@@ -754,7 +754,7 @@ async function updateCampaignInBizChat(bizchatCampaignId: string, updateData: Re
       // 각 슬라이드 내 빈 필드 정리
       cleanedData.rcs = (cleanedData.rcs as Record<string, unknown>[]).map(slide => {
         const cleanedSlide = { ...slide };
-        
+
         // 빈 객체 필드 제거: urlLink, buttons, opts
         if (cleanedSlide.urlLink && typeof cleanedSlide.urlLink === 'object') {
           const urlLink = cleanedSlide.urlLink as { list?: unknown[] };
@@ -781,20 +781,20 @@ async function updateCampaignInBizChat(bizchatCampaignId: string, updateData: Re
         if (cleanedSlide.imgOrigId === '' || cleanedSlide.imgOrigId === null || cleanedSlide.imgOrigId === undefined) {
           delete cleanedSlide.imgOrigId;
         }
-        
+
         return cleanedSlide;
       });
     }
   }
-  
+
   // cb가 빈 객체면 제거
   if (cleanedData.cb && typeof cleanedData.cb === 'object' && Object.keys(cleanedData.cb as object).length === 0) {
     delete cleanedData.cb;
   }
-  
+
   console.log('[BizChat Update] Payload keys:', Object.keys(cleanedData));
   console.log('[BizChat Update] MMS keys:', Object.keys((cleanedData.mms as object) || {}));
-  
+
   // Query Parameter로 id 전달
   return callBizChatAPI(`/api/v1/cmpn/update?id=${bizchatCampaignId}`, 'POST', cleanedData, useProduction);
 }
@@ -872,8 +872,8 @@ async function verifyMdn(bizchatCampaignId: string, useProduction: boolean = fal
 
 // BizChat 캠페인 목록 조회 (POST /api/v1/cmpn/list)
 async function getCampaignList(
-  pageNumber: number = 0, 
-  pageSize: number = 10, 
+  pageNumber: number = 0,
+  pageSize: number = 10,
   filters: { tgtCompanyName?: string; name?: string; states?: number[]; isTmp?: number } = {},
   useProduction: boolean = false
 ) {
@@ -893,19 +893,19 @@ function detectProductionEnvironment(req: VercelRequest): boolean {
     console.log('[BizChat] Force DEV mode: BIZCHAT_USE_PROD is not set to "true"');
     return false;
   }
-  
+
   // 명시적으로 환경 지정된 경우
   if (req.query.env === 'prod' || req.body?.env === 'prod') return true;
   if (req.query.env === 'dev' || req.body?.env === 'dev') return false;
-  
+
   // Vercel 환경 변수로 자동 감지
   // VERCEL_ENV: 'production', 'preview', 'development'
   const vercelEnv = process.env.VERCEL_ENV;
   if (vercelEnv === 'production') return true;
-  
+
   // NODE_ENV 확인
   if (process.env.NODE_ENV === 'production') return true;
-  
+
   return false;
 }
 
@@ -925,7 +925,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const db = getDb();
   const useProduction = detectProductionEnvironment(req);
-  
+
   // 환경 로깅
   console.log(`[BizChat] Environment: ${useProduction ? 'PRODUCTION' : 'DEVELOPMENT'} (VERCEL_ENV=${process.env.VERCEL_ENV}, NODE_ENV=${process.env.NODE_ENV})`);
 
@@ -941,28 +941,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const bizchatIds: string[] = req.body.campaignIds;
-        
+
         // 모든 BizChat ID에 대해 소유자 확인
         for (const bizchatId of bizchatIds) {
           const campaignCheck = await db.select()
             .from(campaigns)
             .where(eq(campaigns.bizchatCampaignId, bizchatId));
-          
+
           if (campaignCheck.length === 0) {
-            return res.status(404).json({ 
-              error: `Campaign with BizChat ID ${bizchatId} not found` 
+            return res.status(404).json({
+              error: `Campaign with BizChat ID ${bizchatId} not found`
             });
           }
-          
+
           if (campaignCheck[0].userId !== auth.userId) {
-            return res.status(403).json({ 
-              error: 'Access denied: You do not own this campaign' 
+            return res.status(403).json({
+              error: 'Access denied: You do not own this campaign'
             });
           }
         }
 
         const result = await deleteCampaignsInBizChat(bizchatIds, useProduction);
-        
+
         if (result.data.code !== 'S000001') {
           return res.status(400).json({
             success: false,
@@ -989,16 +989,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (action === 'list') {
         const pageNumber = typeof req.body.pageNumber === 'number' ? req.body.pageNumber : 0;
         let pageSize = typeof req.body.pageSize === 'number' ? req.body.pageSize : 10;
-        
+
         // pageSize 검증: 0보다 크고 20보다 작은 정수
         if (pageSize <= 0 || pageSize >= 20) {
           console.warn(`[BizChat List] Invalid pageSize ${pageSize}, adjusting to 10`);
           pageSize = 10;
         }
-        
+
         // 선택적 필터 파라미터 구성
         const filters: { tgtCompanyName?: string; name?: string; states?: number[]; isTmp?: number } = {};
-        
+
         if (req.body.tgtCompanyName && typeof req.body.tgtCompanyName === 'string') {
           filters.tgtCompanyName = req.body.tgtCompanyName;
         }
@@ -1011,11 +1011,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (typeof req.body.isTmp === 'number' && (req.body.isTmp === 0 || req.body.isTmp === 1)) {
           filters.isTmp = req.body.isTmp;
         }
-        
+
         console.log(`[BizChat List] pageNumber=${pageNumber}, pageSize=${pageSize}, filters=`, JSON.stringify(filters));
-        
+
         const result = await getCampaignList(pageNumber, pageSize, filters, useProduction);
-        
+
         if (result.data.code !== 'S000001') {
           return res.status(400).json({
             success: false,
@@ -1072,7 +1072,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await createCampaignInBizChat(campaign, message, useProduction);
-          
+
           // 성공 코드: S000001
           if (result.data.code !== 'S000001') {
             return res.status(400).json({
@@ -1084,7 +1084,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const bizchatCampaignId = result.data.data?.id;
           if (bizchatCampaignId) {
             await db.update(campaigns)
-              .set({ 
+              .set({
                 bizchatCampaignId,
                 statusCode: 0, // 임시등록
                 status: 'temp_registered',
@@ -1109,7 +1109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // 수정 가능 상태 체크: 임시등록(0), 검수완료(2), 반려(17)만 수정 가능
           const editableStates = [0, 2, 17];
           if (!editableStates.includes(campaign.statusCode || 0)) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               error: 'Campaign cannot be modified in current state',
               currentState: campaign.statusCode,
               editableStates,
@@ -1117,11 +1117,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const updateData = req.body.updateData || {};
-          
+
           // 발송 시간이 변경되는 경우 검증
           if (updateData.atsSndStartDate) {
-            const newSendDate = typeof updateData.atsSndStartDate === 'number' 
-              ? new Date(updateData.atsSndStartDate * 1000) 
+            const newSendDate = typeof updateData.atsSndStartDate === 'number'
+              ? new Date(updateData.atsSndStartDate * 1000)
               : new Date(updateData.atsSndStartDate);
             const updateTimeValidation = validateSendTime(newSendDate);
             if (!updateTimeValidation.valid) {
@@ -1130,7 +1130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await updateCampaignInBizChat(campaign.bizchatCampaignId, updateData, useProduction);
-          
+
           if (result.data.code !== 'S000001') {
             return res.status(400).json({
               error: 'Failed to update campaign in BizChat',
@@ -1162,7 +1162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await requestCampaignApproval(campaign.bizchatCampaignId, useProduction);
-          
+
           if (result.data.code !== 'S000001') {
             return res.status(400).json({
               error: 'Failed to request approval',
@@ -1171,7 +1171,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           await db.update(campaigns)
-            .set({ 
+            .set({
               statusCode: 10, // 승인요청
               status: 'approval_requested',
               updatedAt: new Date(),
@@ -1192,7 +1192,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           // 레거시 SIM_ ID 검출 (이전 버전에서 생성된 시뮬레이션 캠페인)
           if (campaign.bizchatCampaignId.startsWith('SIM_')) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               success: false,
               error: '이 캠페인은 유효한 BizChat 캠페인 ID가 없어요. 캠페인을 다시 생성해주세요.',
               bizchatCode: 'INVALID_CAMPAIGN_ID',
@@ -1200,14 +1200,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           if (!mdnList || !Array.isArray(mdnList) || mdnList.length === 0) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               error: 'mdn array is required for test send',
               example: { mdnList: ['01012345678', '01087654321'] },
             });
           }
 
           if (mdnList.length > 20) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               error: 'Maximum 20 numbers for test send',
               maxMdnCount: 20,
               providedCount: mdnList.length,
@@ -1234,7 +1234,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // MDN 정규화 (하이픈 제거)
           const normalizedMdnList = mdnList.map((mdn: string) => mdn.replace(/[^0-9]/g, ''));
           const result = await testSendCampaign(campaign.bizchatCampaignId, normalizedMdnList, sendTime, useProduction);
-          
+
           if (result.data.code !== 'S000001') {
             // E000005: Resource not exists - 캠페인이 BizChat에 존재하지 않음
             if (result.data.code === 'E000005') {
@@ -1248,7 +1248,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 environment: useProduction ? 'production' : 'development',
               });
             }
-            
+
             return res.status(400).json({
               success: false,
               action: 'test',
@@ -1274,7 +1274,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await getCampaignStats(campaign.bizchatCampaignId, useProduction);
-          
+
           return res.status(200).json({
             success: result.data.code === 'S000001',
             action: 'stats',
@@ -1288,10 +1288,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await cancelCampaign(campaign.bizchatCampaignId, useProduction);
-          
+
           if (result.data.code === 'S000001') {
             await db.update(campaigns)
-              .set({ 
+              .set({
                 statusCode: 25,
                 status: 'cancelled',
                 updatedAt: new Date(),
@@ -1312,10 +1312,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await stopCampaign(campaign.bizchatCampaignId, useProduction);
-          
+
           if (result.data.code === 'S000001') {
             await db.update(campaigns)
-              .set({ 
+              .set({
                 statusCode: 35,
                 status: 'stopped',
                 updatedAt: new Date(),
@@ -1338,7 +1338,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const pageNumber = req.body.pageNumber || 1;
           const pageSize = req.body.pageSize || 100;
           const result = await getCampaignMdnList(campaign.bizchatCampaignId, pageNumber, pageSize, useProduction);
-          
+
           return res.status(200).json({
             success: result.data.code === 'S000001',
             action: 'mdn',
@@ -1354,7 +1354,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await getCampaignResult(campaign.bizchatCampaignId, useProduction);
-          
+
           return res.status(200).json({
             success: result.data.code === 'S000001',
             action: 'result',
@@ -1368,7 +1368,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           if (campaign.bizchatCampaignId.startsWith('SIM_')) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               success: false,
               error: '이 캠페인은 유효한 BizChat 캠페인 ID가 없어요. 캠페인을 다시 생성해주세요.',
               bizchatCode: 'INVALID_CAMPAIGN_ID',
@@ -1376,7 +1376,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await cancelTestSend(campaign.bizchatCampaignId, useProduction);
-          
+
           if (result.data.code !== 'S000001') {
             return res.status(400).json({
               success: false,
@@ -1401,7 +1401,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           if (campaign.bizchatCampaignId.startsWith('SIM_')) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               success: false,
               error: '이 캠페인은 유효한 BizChat 캠페인 ID가 없어요. 캠페인을 다시 생성해주세요.',
               bizchatCode: 'INVALID_CAMPAIGN_ID',
@@ -1409,7 +1409,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await getTestResults(campaign.bizchatCampaignId, useProduction);
-          
+
           if (result.data.code !== 'S000001') {
             return res.status(400).json({
               success: false,
@@ -1435,14 +1435,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           // MDN 검증은 rcvType=10(직접 지정)일 때만 의미 있음
           if (campaign.rcvType !== 10) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               error: 'MDN verification is only available for rcvType=10 (direct MDN)',
               currentRcvType: campaign.rcvType,
             });
           }
 
           const result = await verifyMdn(campaign.bizchatCampaignId, useProduction);
-          
+
           if (result.data.code !== 'S000001') {
             return res.status(400).json({
               success: false,
@@ -1468,7 +1468,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const result = await getCampaignFromBizChat(campaign.bizchatCampaignId, useProduction);
-          
+
           if (result.data.code !== 'S000001') {
             return res.status(400).json({
               success: false,
@@ -1490,7 +1490,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         default:
-          return res.status(400).json({ 
+          return res.status(400).json({
             error: 'Invalid action',
             validActions: ['create', 'read', 'update', 'approve', 'test', 'testCancel', 'testResult', 'stats', 'cancel', 'stop', 'delete', 'mdn', 'result', 'verifyMdn', 'list'],
           });

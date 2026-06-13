@@ -5,9 +5,18 @@
   "license": "MIT",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
+    "dev:client": "cross-env NODE_ENV=development TMPDIR=/private/tmp node --import tsx ./node_modules/vite/bin/vite.js --host 127.0.0.1",
+    "dev:local": "cross-env NODE_ENV=development REPL_ID=local-dev HOST=127.0.0.1 PORT=5000 SESSION_SECRET=local-dev-session-secret TMPDIR=/private/tmp node --import tsx server/index.ts",
+    "dev:docker": "cross-env NODE_ENV=development REPL_ID=local-dev HOST=0.0.0.0 PORT=5000 SESSION_SECRET=local-dev-session-secret TMPDIR=/tmp node --import tsx server/index.ts",
+    "docker:up": "mkdir -p /private/tmp/wepick-buildx && BUILDX_CONFIG=/private/tmp/wepick-buildx docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app",
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "verify:bizchat-callback": "cross-env TMPDIR=/private/tmp node --import tsx scripts/verify-bizchat-callback-logic.ts",
+    "verify:credit-local": "cross-env TMPDIR=/private/tmp node --import tsx scripts/verify-credit-local.ts",
+    "verify:prod-env": "cross-env TMPDIR=/private/tmp node --import tsx scripts/verify-production-env.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

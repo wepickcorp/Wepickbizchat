@@ -1,0 +1,9 @@
+<svg width="1800" height="520" viewBox="0 0 1800 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="40" y="60" width="400" height="400" rx="110" fill="#FF6A1A"/>
+  <g transform="translate(40 60) scale(0.390625)">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M330 402C330 378.804 348.804 360 372 360H666C689.196 360 708 378.804 708 402V604C708 627.196 689.196 646 666 646H386L312 710V590L330 590V402ZM384 414H654V586H384V414ZM384 586V628L354 586H384Z" fill="white"/>
+    <circle cx="740" cy="368" r="60" fill="white"/>
+  </g>
+  <text x="520" y="245" fill="#111827" font-family="Inter, Pretendard, Arial, sans-serif" font-size="118" font-weight="900" letter-spacing="-2">BIZCHAT</text>
+  <text x="526" y="330" fill="#FF6A1A" font-family="Inter, Pretendard, Arial, sans-serif" font-size="34" font-weight="800" letter-spacing="10">SK CORE TARGET</text>
+</svg>

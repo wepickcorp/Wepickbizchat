@@ -32,7 +32,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Search, ChevronLeft, ChevronRight, Loader2, Crown, UserX, UserCheck, LogIn, Building2, KeyRound } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Loader2, Crown, UserX, UserCheck, LogIn, Building2, KeyRound, CreditCard } from "lucide-react";
 import type { User, Agency } from "@shared/schema";
 
 interface UsersResponse {
@@ -42,10 +42,96 @@ interface UsersResponse {
   limit: number;
 }
 
+interface AdminUserCreditsResponse {
+  user: {
+    id: string;
+    email: string | null;
+    companyName: string | null;
+    legacyBalance: number;
+  };
+  summary: {
+    enabled: boolean;
+    hasLedger: boolean;
+    availableCredits: number;
+    reservedCredits: number;
+    totalGrantedCredits: number;
+    totalUsedCredits: number;
+    totalRefundCredits: number;
+    activeLotCount: number;
+  };
+  lots: Array<{
+    id: string;
+    productType: string | null;
+    originalCredits: number;
+    remainingCredits: number;
+    purchasedAt: string;
+    expiresAt: string;
+  }>;
+  recentLedger: Array<{
+    id: string;
+    type: string;
+    amountCredits: number;
+    balanceAfterCredits: number | null;
+    productType: string | null;
+    description: string | null;
+    createdAt: string;
+  }>;
+}
+
+function getCreditLedgerLabel(type: string, description?: string | null) {
+  const normalizedDescription = description || "";
+
+  if (type === "adjustment") {
+    if (normalizedDescription.includes("잔여 발송분 복구")) return "잔여분 복구";
+    if (normalizedDescription.includes("SKT 접수 실패 복구")) return "SKT 접수 실패 복구";
+    if (
+      normalizedDescription.includes("내부") ||
+      normalizedDescription.includes("실패 복구") ||
+      normalizedDescription.includes("크레딧 복구")
+    ) {
+      return "전액 복구";
+    }
+    return "수동 조정";
+  }
+
+  switch (type) {
+    case "grant":
+      return "크레딧 지급";
+    case "reserve":
+      return "발송 예약";
+    case "use":
+      return "크레딧 사용";
+    case "release":
+      return "예약 해제";
+    case "refund":
+      return "환불";
+    case "expire":
+      return "만료";
+    default:
+      return type;
+  }
+}
+
+function getCreditLedgerOperationNote(type: string, description?: string | null) {
+  const normalizedDescription = description || "";
+
+  if (type === "adjustment" && normalizedDescription.includes("잔여 발송분 복구")) {
+    return "부분 접수/발송 후 미처리 잔여분만 복구";
+  }
+  if (type === "adjustment" && normalizedDescription.includes("SKT 접수 실패 복구")) {
+    return "SKT 접수 전 실패로 전액 복구";
+  }
+  if (type === "adjustment" && normalizedDescription.includes("내부")) {
+    return "내부 실패로 전액 복구";
+  }
+
+  return "";
+}
+
 export default function AdminUsers() {
   const { toast } = useToast();
   const adminToken = localStorage.getItem("adminToken");
-  
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -60,6 +146,11 @@ export default function AdminUsers() {
   const [agencyContactEmail, setAgencyContactEmail] = useState("");
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
+  const [creditsUser, setCreditsUser] = useState<User | null>(null);
+  const [creditAdjustType, setCreditAdjustType] = useState<"add" | "subtract">("add");
+  const [creditAdjustAmount, setCreditAdjustAmount] = useState("");
+  const [creditAdjustReason, setCreditAdjustReason] = useState("");
 
   const { data, isLoading } = useQuery<UsersResponse>({
     queryKey: ["/api/admin/users", { search, page }],
@@ -71,6 +162,59 @@ export default function AdminUsers() {
       });
       if (!res.ok) throw new Error("Failed to fetch users");
       return res.json();
+    },
+  });
+
+  const { data: creditsData, isLoading: creditsLoading } = useQuery<AdminUserCreditsResponse>({
+    queryKey: ["/api/admin/users/credits", creditsUser?.id],
+    enabled: creditsDialogOpen && !!creditsUser?.id,
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch(`/api/admin/users/${creditsUser?.id}/credits`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "크레딧 정보를 불러오지 못했습니다");
+      return data;
+    },
+  });
+
+  const adjustCreditsMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      amountCredits,
+      reason,
+      adjustmentKey,
+    }: {
+      userId: string;
+      amountCredits: number;
+      reason: string;
+      adjustmentKey: string;
+    }) => {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch(`/api/admin/users/${userId}/credits`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ amountCredits, reason, adjustmentKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "크레딧 조정에 실패했습니다");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "크레딧 조정 완료",
+        description: `${Number(data.previousBalanceCredits).toLocaleString("ko-KR")}C에서 ${Number(data.newBalanceCredits).toLocaleString("ko-KR")}C로 변경되었습니다`,
+      });
+      setCreditAdjustAmount("");
+      setCreditAdjustReason("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users/credits", creditsUser?.id] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "크레딧 조정 실패", description: error.message, variant: "destructive" });
     },
   });
 
@@ -87,14 +231,14 @@ export default function AdminUsers() {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "잔액 조정에 실패했습니다");
+        throw new Error(data.error || "레거시 잔액 조정에 실패했습니다");
       }
       return data;
     },
     onSuccess: (data) => {
-      toast({ 
-        title: "잔액 조정 완료", 
-        description: `잔액이 ₩${Number(data.previousBalance).toLocaleString()}에서 ₩${Number(data.newBalance).toLocaleString()}으로 변경되었습니다` 
+      toast({
+        title: "레거시 잔액 조정 완료",
+        description: `레거시 잔액이 ₩${Number(data.previousBalance).toLocaleString()}에서 ₩${Number(data.newBalance).toLocaleString()}으로 변경되었습니다`
       });
       setBalanceDialogOpen(false);
       setBalanceAmount("");
@@ -103,7 +247,7 @@ export default function AdminUsers() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users", { search, page }] });
     },
     onError: (error: Error) => {
-      toast({ title: "잔액 조정 실패", description: error.message, variant: "destructive" });
+      toast({ title: "레거시 잔액 조정 실패", description: error.message, variant: "destructive" });
     },
   });
 
@@ -142,9 +286,9 @@ export default function AdminUsers() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ 
-        title: "대리 로그인 성공", 
-        description: `${data.user.email}로 접속합니다. 30분 후 자동 만료됩니다.` 
+      toast({
+        title: "대리 로그인 성공",
+        description: `${data.user.email}로 접속합니다. 30분 후 자동 만료됩니다.`
       });
       localStorage.setItem("impersonateToken", data.impersonateToken);
       localStorage.setItem("impersonateUser", JSON.stringify(data.user));
@@ -156,8 +300,8 @@ export default function AdminUsers() {
   });
 
   const setAgencyMutation = useMutation({
-    mutationFn: async ({ userId, name, contactName, contactPhone, contactEmail }: { 
-      userId: string; name: string; contactName?: string; contactPhone?: string; contactEmail?: string 
+    mutationFn: async ({ userId, name, contactName, contactPhone, contactEmail }: {
+      userId: string; name: string; contactName?: string; contactPhone?: string; contactEmail?: string
     }) => {
       const res = await fetch(`/api/admin/users/${userId}/agency`, {
         method: "POST",
@@ -222,9 +366,9 @@ export default function AdminUsers() {
       return data;
     },
     onSuccess: (data) => {
-      toast({ 
-        title: "비밀번호 재설정 완료", 
-        description: `${data.userEmail}의 비밀번호가 변경되었습니다` 
+      toast({
+        title: "비밀번호 재설정 완료",
+        description: `${data.userEmail}의 비밀번호가 변경되었습니다`
       });
       setPasswordDialogOpen(false);
       setNewPassword("");
@@ -261,6 +405,26 @@ export default function AdminUsers() {
       contactName: agencyContactName || undefined,
       contactPhone: agencyContactPhone || undefined,
       contactEmail: agencyContactEmail || undefined,
+    });
+  };
+
+  const handleCreditAdjustSubmit = () => {
+    if (!creditsUser || !creditAdjustAmount || !creditAdjustReason) {
+      toast({ title: "조정 크레딧과 사유를 입력해주세요", variant: "destructive" });
+      return;
+    }
+
+    const absoluteAmount = Math.floor(Number(creditAdjustAmount));
+    if (!Number.isFinite(absoluteAmount) || absoluteAmount <= 0) {
+      toast({ title: "조정 크레딧은 1C 이상이어야 합니다", variant: "destructive" });
+      return;
+    }
+
+    adjustCreditsMutation.mutate({
+      userId: creditsUser.id,
+      amountCredits: creditAdjustType === "add" ? absoluteAmount : -absoluteAmount,
+      reason: creditAdjustReason,
+      adjustmentKey: crypto.randomUUID(),
     });
   };
 
@@ -306,7 +470,7 @@ export default function AdminUsers() {
                     <TableRow>
                       <TableHead>이메일</TableHead>
                       <TableHead>회사명</TableHead>
-                      <TableHead>잔액</TableHead>
+                      <TableHead>레거시 잔액</TableHead>
                       <TableHead>상태</TableHead>
                       <TableHead>가입일</TableHead>
                       <TableHead className="text-right">액션</TableHead>
@@ -369,6 +533,18 @@ export default function AdminUsers() {
                               <KeyRound className="h-4 w-4" />
                             </Button>
                             <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                setCreditsUser(user);
+                                setCreditsDialogOpen(true);
+                              }}
+                              title="크레딧 장부"
+                              data-testid={`button-user-credits-${user.id}`}
+                            >
+                              <CreditCard className="h-4 w-4" />
+                            </Button>
+                            <Button
                               size="sm"
                               variant="outline"
                               onClick={() => {
@@ -377,7 +553,7 @@ export default function AdminUsers() {
                               }}
                               data-testid={`button-adjust-balance-${user.id}`}
                             >
-                              잔액 조정
+                              레거시 잔액 조정
                             </Button>
                             <Button
                               size="sm"
@@ -455,11 +631,11 @@ export default function AdminUsers() {
       <Dialog open={balanceDialogOpen} onOpenChange={setBalanceDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>잔액 조정</DialogTitle>
+            <DialogTitle>레거시 잔액 조정</DialogTitle>
             <DialogDescription>
-              {selectedUser?.email}의 잔액을 조정합니다
+              {selectedUser?.email}의 기존 금액 잔액을 조정합니다. 크레딧 장부가 있는 계정은 크레딧 관리 내역을 우선 확인해주세요.
               <br />
-              현재 잔액: ₩{Number(selectedUser?.balance || 0).toLocaleString()}
+              현재 레거시 잔액: ₩{Number(selectedUser?.balance || 0).toLocaleString()}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -488,7 +664,7 @@ export default function AdminUsers() {
             <div className="space-y-2">
               <Label>사유 (필수)</Label>
               <Textarea
-                placeholder="잔액 조정 사유를 입력해주세요"
+                placeholder="레거시 잔액 조정 사유를 입력해주세요"
                 value={balanceReason}
                 onChange={(e) => setBalanceReason(e.target.value)}
                 data-testid="input-balance-reason"
@@ -508,6 +684,192 @@ export default function AdminUsers() {
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               확인
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={creditsDialogOpen} onOpenChange={setCreditsDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>크레딧 장부</DialogTitle>
+            <DialogDescription>
+              {creditsUser?.email}의 크레딧 잔여량과 최근 장부를 확인합니다
+            </DialogDescription>
+          </DialogHeader>
+          {creditsLoading ? (
+            <div className="space-y-3 py-4">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-40 w-full" />
+            </div>
+          ) : creditsData ? (
+            <div className="space-y-5 py-2">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">사용 가능</div>
+                  <div className="mt-1 text-xl font-semibold">
+                    {creditsData.summary.availableCredits.toLocaleString("ko-KR")}C
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">예약 중</div>
+                  <div className="mt-1 text-xl font-semibold">
+                    {creditsData.summary.reservedCredits.toLocaleString("ko-KR")}C
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">누적 사용</div>
+                  <div className="mt-1 text-xl font-semibold">
+                    {creditsData.summary.totalUsedCredits.toLocaleString("ko-KR")}C
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">레거시 잔액</div>
+                  <div className="mt-1 text-xl font-semibold">
+                    ₩{creditsData.user.legacyBalance.toLocaleString("ko-KR")}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-md border p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">수동 조정</h3>
+                    <p className="text-xs text-muted-foreground">보상 지급이나 오류 보정은 사유와 함께 장부에 기록됩니다</p>
+                  </div>
+                  <Badge variant="outline">adjustment</Badge>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-[140px_1fr_2fr_auto]">
+                  <Select value={creditAdjustType} onValueChange={(value) => setCreditAdjustType(value as "add" | "subtract")}>
+                    <SelectTrigger data-testid="select-credit-adjust-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="add">지급 (+)</SelectItem>
+                      <SelectItem value="subtract">차감 (-)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="크레딧"
+                    value={creditAdjustAmount}
+                    onChange={(e) => setCreditAdjustAmount(e.target.value)}
+                    data-testid="input-credit-adjust-amount"
+                  />
+                  <Input
+                    placeholder="조정 사유"
+                    value={creditAdjustReason}
+                    onChange={(e) => setCreditAdjustReason(e.target.value)}
+                    data-testid="input-credit-adjust-reason"
+                  />
+                  <Button
+                    onClick={handleCreditAdjustSubmit}
+                    disabled={adjustCreditsMutation.isPending}
+                    data-testid="button-confirm-credit-adjust"
+                  >
+                    {adjustCreditsMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    적용
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">남은 크레딧 묶음</h3>
+                  <Badge variant={creditsData.summary.hasLedger ? "default" : "secondary"}>
+                    {creditsData.summary.hasLedger ? "장부 있음" : "장부 없음"}
+                  </Badge>
+                </div>
+                <div className="max-h-44 overflow-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>상품</TableHead>
+                        <TableHead className="text-right">최초</TableHead>
+                        <TableHead className="text-right">잔여</TableHead>
+                        <TableHead>만료일</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {creditsData.lots.length > 0 ? creditsData.lots.map((lot) => (
+                        <TableRow key={lot.id}>
+                          <TableCell>{lot.productType || "-"}</TableCell>
+                          <TableCell className="text-right">{lot.originalCredits.toLocaleString("ko-KR")}C</TableCell>
+                          <TableCell className="text-right">{lot.remainingCredits.toLocaleString("ko-KR")}C</TableCell>
+                          <TableCell>{lot.expiresAt ? new Date(lot.expiresAt).toLocaleDateString("ko-KR") : "-"}</TableCell>
+                        </TableRow>
+                      )) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-16 text-center text-muted-foreground">
+                            남은 크레딧 묶음이 없습니다
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-sm font-semibold">최근 장부</h3>
+                <div className="max-h-56 overflow-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>일시</TableHead>
+                        <TableHead>유형</TableHead>
+                        <TableHead className="text-right">변동</TableHead>
+                        <TableHead className="text-right">이후 잔액</TableHead>
+                        <TableHead>설명</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {creditsData.recentLedger.length > 0 ? creditsData.recentLedger.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="whitespace-nowrap">
+                            {entry.createdAt ? new Date(entry.createdAt).toLocaleString("ko-KR") : "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {getCreditLedgerLabel(entry.type, entry.description)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {entry.amountCredits > 0 ? "+" : ""}{entry.amountCredits.toLocaleString("ko-KR")}C
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {entry.balanceAfterCredits == null ? "-" : `${entry.balanceAfterCredits.toLocaleString("ko-KR")}C`}
+                          </TableCell>
+                          <TableCell className="max-w-56">
+                            <div className="truncate">{entry.description || "-"}</div>
+                            {getCreditLedgerOperationNote(entry.type, entry.description) ? (
+                              <div className="truncate text-xs text-muted-foreground">
+                                {getCreditLedgerOperationNote(entry.type, entry.description)}
+                              </div>
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
+                      )) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="h-16 text-center text-muted-foreground">
+                            최근 크레딧 장부가 없습니다
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              크레딧 정보를 선택해주세요
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreditsDialogOpen(false)}>
+              닫기
             </Button>
           </DialogFooter>
         </DialogContent>

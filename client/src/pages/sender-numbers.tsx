@@ -49,17 +49,17 @@ export default function SenderNumbers() {
   const [senderNumbers, setSenderNumbers] = useState<BizChatSenderNumber[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const { toast } = useToast();
 
   const fetchSenderNumbers = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const response = await apiRequest("POST", "/api/bizchat/sender", { action: "list" });
       const data: BizChatSenderResponse = await response.json();
-      
+
       if (data.success) {
         setSenderNumbers(data.senderNumbers || []);
         toast({
@@ -98,7 +98,7 @@ export default function SenderNumbers() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-display font-bold">발신번호</h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="mt-1 text-body-md text-muted-foreground">
             BizChat에 등록된 발신번호를 확인하고 캠페인에 사용해요
           </p>
         </div>
@@ -132,7 +132,7 @@ export default function SenderNumbers() {
                 <Cloud className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h2 className="font-semibold">BizChat 발신번호</h2>
+                <h2 className="text-title-sm font-semibold">BizChat 발신번호</h2>
                 <CardDescription>
                   SK 비즈챗에 등록된 발신번호 목록이에요
                 </CardDescription>
@@ -181,7 +181,7 @@ export default function SenderNumbers() {
                 const senderId = sender.id || sender.num || `idx-${idx}`;
                 const stateInfo = getSenderStateInfo(sender.state);
                 const StateIcon = stateInfo.icon;
-                
+
                 return (
                   <div
                     key={senderId}
@@ -193,10 +193,10 @@ export default function SenderNumbers() {
                         <Phone className="h-5 w-5 text-primary" />
                       </div>
                       <div>
-                        <div className="font-medium">
+                        <div className="text-body-md font-medium">
                           {sender.name || sender.num || '이름 없음'}
                         </div>
-                        <div className="text-small text-muted-foreground flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-caption text-muted-foreground">
                           {sender.num && (
                             <span>번호 코드: {sender.num}</span>
                           )}
@@ -208,7 +208,7 @@ export default function SenderNumbers() {
                           )}
                         </div>
                         {sender.comment && (
-                          <div className="text-tiny text-muted-foreground mt-1">
+                          <div className="mt-1 text-tiny text-muted-foreground">
                             {sender.comment}
                           </div>
                         )}
@@ -226,8 +226,8 @@ export default function SenderNumbers() {
             <div className="p-6">
               <EmptyState
                 icon={Phone}
-                title="등록된 발신번호가 없어요"
-                description="BizChat에서 발신번호를 등록한 후 다시 조회해주세요"
+                title="발신번호를 등록하면 사용할 수 있어요"
+                description="BizChat에서 발신번호를 등록한 뒤 다시 조회해요"
               />
               <div className="flex justify-center mt-4">
                 <Button onClick={fetchSenderNumbers} className="gap-2">
@@ -244,8 +244,8 @@ export default function SenderNumbers() {
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <Info className="h-5 w-5 text-muted-foreground mt-0.5" />
-            <div className="text-small text-muted-foreground">
-              <p className="font-medium mb-1">발신번호 상태 안내</p>
+            <div className="text-body-md text-muted-foreground">
+              <p className="mb-1 font-medium">발신번호 상태 안내</p>
               <ul className="space-y-1 list-disc list-inside">
                 <li><strong>대기:</strong> BizChat 검수 대기 중인 발신번호</li>
                 <li><strong>승인:</strong> 캠페인 발송에 사용 가능한 발신번호</li>

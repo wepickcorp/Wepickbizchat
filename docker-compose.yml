@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wepickbizchat-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wepickbizchat
+      POSTGRES_USER: wepick
+      POSTGRES_PASSWORD: wepick
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wepick -d wepickbizchat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: wepickbizchat-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      REPL_ID: local-dev
+      HOST: 0.0.0.0
+      PORT: 5000
+      SESSION_SECRET: local-dev-session-secret
+      DATABASE_URL: postgresql://wepick:wepick@postgres:5432/wepickbizchat
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+      VITE_KAKAO_MAP_KEY: ${VITE_KAKAO_MAP_KEY:-}
+      BIZCHAT_USE_PROD: ${BIZCHAT_USE_PROD:-false}
+      BIZCHAT_DEV_API_URL: ${BIZCHAT_DEV_API_URL:-https://gw-dev.bizchat1.co.kr:8443}
+      BIZCHAT_DEV_API_KEY: ${BIZCHAT_DEV_API_KEY:-}
+      BIZCHAT_PROD_API_URL: ${BIZCHAT_PROD_API_URL:-https://gw.bizchat1.co.kr}
+      BIZCHAT_PROD_API_KEY: ${BIZCHAT_PROD_API_KEY:-}
+      BIZCHAT_CALLBACK_AUTH_KEY: ${BIZCHAT_CALLBACK_AUTH_KEY:-}
+      KISPG_USE_PROD: ${KISPG_USE_PROD:-false}
+      KISPG_MID: ${KISPG_MID:-}
+      KISPG_MERCHANT_KEY: ${KISPG_MERCHANT_KEY:-}
+      KISPG_RETURN_URL: ${KISPG_RETURN_URL:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-local-dev-admin-secret}
+      ADMIN_SALT: ${ADMIN_SALT:-local-dev-admin-salt}
+      CRON_SECRET: ${CRON_SECRET:-local-dev-cron-secret}
+      CREDIT_MODE_ENABLED: ${CREDIT_MODE_ENABLED:-true}
+      CREDIT_SHADOW_LOG_ENABLED: ${CREDIT_SHADOW_LOG_ENABLED:-false}
+    ports:
+      - "5050:5000"
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+    command: sh -c "npm install && npm run db:push && npm run dev:docker"
+
+volumes:
+  postgres-data:
+  app-node-modules:

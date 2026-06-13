@@ -155,7 +155,7 @@ export function TargetingConfigEditor({ value, onChange }: TargetingConfigEditor
           />
         </div>
       </CardHeader>
-      
+
       {enabled && (
         <CardContent className="space-y-6">
           {/* 타겟팅 모드 선택 */}
@@ -415,11 +415,11 @@ export function TargetingConfigEditor({ value, onChange }: TargetingConfigEditor
             <Label className="text-sm font-medium mb-2 block">설정 요약</Label>
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline">
-                {config.mode === 'ats-general' ? '일반 ATS' : 
+                {config.mode === 'ats-general' ? '일반 ATS' :
                  config.mode === 'ats-advanced' ? '고급 ATS' : '지오펜스'}
               </Badge>
               <Badge variant="outline">
-                {config.targetGender === 'all' ? '전체' : 
+                {config.targetGender === 'all' ? '전체' :
                  config.targetGender === 'male' ? '남성' : '여성'}
               </Badge>
               <Badge variant="outline">

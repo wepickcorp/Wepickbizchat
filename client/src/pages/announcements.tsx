@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { 
-  Bell, 
-  AlertTriangle, 
+import {
+  Bell,
+  AlertTriangle,
   Info,
   Calendar,
   Pin,
@@ -96,14 +96,14 @@ export default function Announcements() {
                       <div className="flex items-start gap-3 flex-1">
                         <div className={cn(
                           "p-2 rounded-lg",
-                          announcement.type === 'urgent' ? "bg-red-100" : 
-                          announcement.type === 'warning' ? "bg-yellow-100" : 
+                          announcement.type === 'urgent' ? "bg-red-100" :
+                          announcement.type === 'warning' ? "bg-yellow-100" :
                           announcement.type === 'event' ? "bg-purple-100" : "bg-blue-100"
                         )}>
                           <TypeIcon className={cn(
                             "h-4 w-4",
-                            announcement.type === 'urgent' ? "text-red-600" : 
-                            announcement.type === 'warning' ? "text-yellow-600" : 
+                            announcement.type === 'urgent' ? "text-red-600" :
+                            announcement.type === 'warning' ? "text-yellow-600" :
                             announcement.type === 'event' ? "text-purple-600" : "text-blue-600"
                           )} />
                         </div>

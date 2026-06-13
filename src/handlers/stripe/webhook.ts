@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import Stripe from 'stripe';
-import { randomUUID } from 'crypto';
+import { CREDIT_PRODUCTS, type CreditProductType } from '../../../shared/credit-policy';
+import { grantPurchasedCreditsForServerless } from '../_shared/credit-ledger';
 
 neonConfig.fetchConnectionCache = true;
 
@@ -28,6 +29,10 @@ function getDb() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL is not set');
   return drizzle(neon(dbUrl));
+}
+
+function isCreditProductType(value: unknown): value is CreditProductType {
+  return typeof value === 'string' && value in CREDIT_PRODUCTS;
 }
 
 export const config = {
@@ -78,39 +83,181 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.userId;
       const amount = parseInt(session.metadata?.amount || '0');
+      const productType = isCreditProductType(session.metadata?.productType)
+        ? session.metadata.productType
+        : null;
 
       if (userId && amount > 0) {
         const db = getDb();
-        
-        const existingTx = await db.select().from(transactions).where(eq(transactions.stripeSessionId, session.id));
-        
-        if (existingTx.length > 0) {
-          console.log(`Session ${session.id} already processed, skipping`);
-        } else {
-          const userResult = await db.select().from(users).where(eq(users.id, userId));
-          const user = userResult[0];
-          
-          if (user) {
-            const currentBalance = parseInt(user.balance) || 0;
-            const newBalance = currentBalance + amount;
+        const creditModeProduct = process.env.CREDIT_MODE_ENABLED === 'true' && productType;
 
-            await db.update(users).set({ balance: newBalance.toString() }).where(eq(users.id, userId));
-            
-            await db.insert(transactions).values({
-              id: randomUUID(),
-              userId,
-              type: 'charge',
-              amount: amount.toString(),
-              balanceAfter: newBalance.toString(),
-              description: `잔액 충전 (Stripe)`,
-              stripeSessionId: session.id,
-            });
-
-            console.log(`Successfully credited ${amount} to user ${userId}`);
-          } else {
+        if (creditModeProduct) {
+          const userCheck = await db.execute(sql`
+            SELECT id, COALESCE(balance, '0')::numeric AS balance
+            FROM users
+            WHERE id = ${userId}
+            LIMIT 1
+          `);
+          const targetUser = userCheck.rows?.[0];
+          if (!targetUser) {
             console.error(`User ${userId} not found`);
+            throw new Error(`Stripe checkout user not found: ${userId}`);
           }
+
+          const product = CREDIT_PRODUCTS[productType];
+          const paymentReference = `stripe:${session.id}`;
+          const grantResult = await grantPurchasedCreditsForServerless(db, {
+            userId,
+            transactionId: null,
+            productType,
+            paymentReference,
+            metadata: { sessionId: session.id },
+          });
+
+          if (!grantResult.success && !grantResult.alreadyProcessed) {
+            const reason = grantResult.lightLimitBlocked ? 'light monthly limit blocked' : grantResult.error;
+            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${reason}`);
+          }
+
+          await db.execute(sql`
+            WITH target_user AS (
+              SELECT id, COALESCE(balance, '0')::numeric AS balance
+              FROM users
+              WHERE id = ${userId}
+              FOR UPDATE
+            ),
+            existing_tx AS (
+              SELECT id
+              FROM transactions
+              WHERE stripe_session_id = ${session.id}
+              LIMIT 1
+            ),
+            inserted_tx AS (
+              INSERT INTO transactions (
+                id,
+                user_id,
+                type,
+                amount,
+                balance_after,
+                description,
+                stripe_session_id
+              )
+              SELECT
+                gen_random_uuid()::text,
+                target_user.id,
+                'charge',
+                ${amount.toString()},
+                (target_user.balance + ${amount.toString()}::numeric)::text,
+                ${`크레딧 충전 (${product.name})`},
+                ${session.id}
+              FROM target_user
+              WHERE NOT EXISTS (SELECT 1 FROM existing_tx)
+              ON CONFLICT (stripe_session_id) DO NOTHING
+              RETURNING balance_after
+            ),
+            updated_user AS (
+              UPDATE users
+              SET balance = inserted_tx.balance_after
+              FROM inserted_tx
+              WHERE users.id = ${userId}
+              RETURNING users.id
+            )
+            SELECT EXISTS (SELECT 1 FROM inserted_tx) AS transaction_inserted
+          `);
+
+          console.log(`Credits granted or already present: User ${userId} ${product.credits}C (${productType}, session ${session.id})`);
+          console.log(`Successfully processed Stripe session ${session.id} for user ${userId}`);
+          return res.status(200).json({ received: true });
         }
+
+        const chargeResult = await db.execute(sql`
+          WITH target_user AS (
+            SELECT id, COALESCE(balance, '0')::numeric AS balance
+            FROM users
+            WHERE id = ${userId}
+            FOR UPDATE
+          ),
+          existing_tx AS (
+            SELECT id, balance_after
+            FROM transactions
+            WHERE stripe_session_id = ${session.id}
+            LIMIT 1
+          ),
+          inserted_tx AS (
+            INSERT INTO transactions (
+              id,
+              user_id,
+              type,
+              amount,
+              balance_after,
+              description,
+              stripe_session_id
+            )
+            SELECT
+              gen_random_uuid()::text,
+              target_user.id,
+              'charge',
+              ${amount.toString()},
+              (target_user.balance + ${amount.toString()}::numeric)::text,
+              '잔액 충전 (Stripe)',
+              ${session.id}
+            FROM target_user
+            WHERE NOT EXISTS (SELECT 1 FROM existing_tx)
+            ON CONFLICT (stripe_session_id) DO NOTHING
+            RETURNING id, balance_after
+          ),
+          effective_tx AS (
+            SELECT id, balance_after FROM inserted_tx
+            UNION ALL
+            SELECT id, balance_after FROM existing_tx
+          ),
+          updated_user AS (
+            UPDATE users
+            SET balance = inserted_tx.balance_after
+            FROM inserted_tx
+            WHERE users.id = ${userId}
+            RETURNING users.id
+          )
+          SELECT
+            EXISTS (SELECT 1 FROM target_user) AS user_found,
+            EXISTS (SELECT 1 FROM existing_tx) AS already_processed,
+            EXISTS (SELECT 1 FROM inserted_tx) AS transaction_inserted,
+            EXISTS (SELECT 1 FROM updated_user) AS balance_updated,
+            (SELECT id FROM effective_tx LIMIT 1) AS transaction_id,
+            (SELECT balance_after FROM effective_tx LIMIT 1) AS balance_after
+        `);
+
+        const chargeRow = chargeResult.rows?.[0] || {};
+        if (!chargeRow.user_found) {
+          console.error(`User ${userId} not found`);
+          throw new Error(`Stripe checkout user not found: ${userId}`);
+        }
+
+        if (!chargeRow.already_processed && (!chargeRow.transaction_inserted || !chargeRow.balance_updated)) {
+          throw new Error(`Failed to record Stripe charge for session ${session.id}`);
+        }
+
+        if (process.env.CREDIT_MODE_ENABLED === 'true' && productType) {
+          const product = CREDIT_PRODUCTS[productType];
+          const paymentReference = `stripe:${session.id}`;
+
+          const grantResult = await grantPurchasedCreditsForServerless(db, {
+            userId,
+            transactionId: chargeRow.transaction_id,
+            productType,
+            paymentReference,
+            metadata: { sessionId: session.id },
+          });
+
+          if (!grantResult.success && !grantResult.alreadyProcessed) {
+            const reason = grantResult.lightLimitBlocked ? 'light monthly limit blocked' : grantResult.error;
+            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${reason}`);
+          }
+
+          console.log(`Credits granted or already present: User ${userId} ${product.credits}C (${productType}, session ${session.id})`);
+        }
+
+        console.log(`Successfully processed Stripe session ${session.id} for user ${userId}`);
       }
     }
 

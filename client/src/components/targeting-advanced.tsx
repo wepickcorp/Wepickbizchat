@@ -127,7 +127,7 @@ export interface AdvancedTargetingState {
   sndMosu?: number;
   sndMosuQuery?: string;
   sndMosuDesc?: string;
-  
+
   // Maptics 발송 방식 (rcvType=1: realtime, rcvType=2: batch)
   mapticsSendType?: MapticsSendType;
   // Maptics 실시간 발송 시간대 (rcvType=1, HHMM 형식)
@@ -233,7 +233,7 @@ function HierarchicalCategorySection({
   const getCat3Name = (cateid: string) => cat3List.find(c => c.cateid === cateid)?.name || cateid;
 
   const addCategory = (cat1Cateid: string, cat2Cateid?: string, cat3Cateid?: string) => {
-    const newCat: SelectedCategory = { 
+    const newCat: SelectedCategory = {
       cat1: cat1Cateid,
       cat1Name: getCat1Name(cat1Cateid),
     };
@@ -538,7 +538,7 @@ function LocationSearchSection({
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
-    
+
     setIsSearching(true);
     try {
       const res = await apiRequest('POST', '/api/ats/meta/loc', { addr: searchQuery });
@@ -558,7 +558,7 @@ function LocationSearchSection({
       type: locationType,
       name: `${loc.ado} ${loc.sigu} ${loc.dong}`.trim(),
     };
-    
+
     // 중복 체크
     const isDuplicate = selectedLocations.some(
       l => l.code === newLoc.code && l.type === newLoc.type
@@ -576,7 +576,7 @@ function LocationSearchSection({
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <Card className={cn(selectedLocations.length > 0 && "border-primary/50")}>
         <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover-elevate">
+          <CardHeader className="cursor-pointer hover-elevate" data-testid="button-open-location-targeting">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-primary/10">
@@ -835,15 +835,15 @@ function GeofenceSection({
                   <MapPin className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <CardTitle className="text-body">지오펜스 타겟팅</CardTitle>
+                  <CardTitle className="text-body">방문 위치 설정</CardTitle>
                   <CardDescription className="text-small">
-                    특정 위치에 방문한 고객 타겟팅
+                    특정 장소를 방문한 고객에게 보낼 수 있어요.
                   </CardDescription>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {savedGeofences.length > 0 && (
-                  <Badge variant="secondary">{savedGeofences.length}개 지오펜스</Badge>
+                  <Badge variant="secondary">{savedGeofences.length}개 위치</Badge>
                 )}
                 {isOpen ? (
                   <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -860,7 +860,7 @@ function GeofenceSection({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* 왼쪽: 저장된 지오펜스 목록 */}
               <div className="space-y-2">
-                <Label className="text-small font-medium">등록된 지오펜스</Label>
+                <Label className="text-small font-medium">등록된 방문 위치</Label>
                 {savedGeofences.length > 0 ? (
                   <div className="space-y-2">
                     {savedGeofences.map((geo, index) => (
@@ -868,10 +868,10 @@ function GeofenceSection({
                         key={geo.id}
                         className={cn(
                           "flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors",
-                          selectedGeofenceId === geo.id 
-                            ? "bg-primary/10 border border-primary/50" 
-                            : hoveredGeofenceId === geo.id 
-                              ? "bg-muted" 
+                          selectedGeofenceId === geo.id
+                            ? "bg-primary/10 border border-primary/50"
+                            : hoveredGeofenceId === geo.id
+                              ? "bg-muted"
                               : "bg-muted/50"
                         )}
                         data-testid={`geofence-saved-${geo.id}`}
@@ -901,7 +901,7 @@ function GeofenceSection({
                   </div>
                 ) : (
                   <div className="text-small text-muted-foreground p-4 text-center border rounded-lg border-dashed">
-                    아래에서 위치를 검색하여 지오펜스를 추가해주세요
+                    아래에서 장소나 주소를 검색해 방문 위치를 추가해주세요.
                   </div>
                 )}
               </div>
@@ -997,9 +997,9 @@ function GeofenceSection({
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-small">지오펜스 이름</Label>
+                  <Label className="text-small">방문 위치 이름</Label>
                   <Input
-                    placeholder="지오펜스 이름"
+                    placeholder="예: 강남역 매장 주변"
                     value={geoName}
                     onChange={(e) => setGeoName(e.target.value)}
                     data-testid="input-geofence-name"
@@ -1103,7 +1103,7 @@ function GeofenceSection({
                   ) : (
                     <>
                       <Plus className="h-4 w-4 mr-2" />
-                      지오펜스 등록
+                      방문 위치 등록
                     </>
                   )}
                 </Button>
@@ -1149,7 +1149,7 @@ function ProfilingSection({
 
   const toggleFilter = (filter: BizChatFilterMeta) => {
     const existingIndex = selectedProfiling.findIndex(p => p.code === filter.code);
-    
+
     if (existingIndex >= 0) {
       // 제거
       onProfilingChange(selectedProfiling.filter((_, i) => i !== existingIndex));
@@ -1163,7 +1163,7 @@ function ProfilingSection({
       } else {
         value = filter.attributes[0]?.val || 'Y';
       }
-      
+
       onProfilingChange([
         ...selectedProfiling,
         {
@@ -1294,7 +1294,7 @@ export default function TargetingAdvanced({
 }: TargetingAdvancedProps) {
   const [estimatedCount, setEstimatedCount] = useState<number>(0);
   const [isEstimating, setIsEstimating] = useState(false);
-  
+
   // 캐시 저장용 ref (리렌더링 방지)
   const cacheRef = useRef<EstimateCache | null>(null);
 
@@ -1304,7 +1304,7 @@ export default function TargetingAdvanced({
   // 모드 변경 핸들러 (모든 필드 명시적 초기화)
   const handleModeChange = useCallback((newMode: TargetingMode) => {
     if (newMode === currentMode) return;
-    
+
     if (newMode === 'maptics') {
       // Maptics 모드로 전환: ATS 필터 초기화, 지오펜스 유지
       onTargetingChange({
@@ -1341,7 +1341,7 @@ export default function TargetingAdvanced({
         setIsEstimating(false);
         return;
       }
-      
+
       // 캐시 키 생성 (타겟팅 조건 기반)
       const cacheKey = JSON.stringify({
         basicTargeting,
@@ -1351,18 +1351,18 @@ export default function TargetingAdvanced({
         locations: targeting?.locations ?? [],
         profiling: targeting?.profiling ?? [],
       });
-      
+
       // 캐시 확인: 유효한 캐시가 있으면 API 호출 스킵
       const now = Date.now();
-      if (cacheRef.current && 
-          cacheRef.current.key === cacheKey && 
+      if (cacheRef.current &&
+          cacheRef.current.key === cacheKey &&
           (now - cacheRef.current.timestamp) < CACHE_TTL_MS) {
         console.log('[TargetingAdvanced] Using cached estimate:', cacheRef.current.result.estimatedCount);
         setEstimatedCount(cacheRef.current.result.estimatedCount);
         setIsEstimating(false);
         return;
       }
-      
+
       setIsEstimating(true);
       try {
         // ATS 모드에서만 BizChat ATS mosu API 호출
@@ -1375,11 +1375,11 @@ export default function TargetingAdvanced({
           locations: targeting?.locations ?? [],
           profiling: targeting?.profiling ?? [],
         };
-        
+
         const res = await apiRequest("POST", "/api/targeting/estimate", estimatePayload);
         const data = await res.json();
         setEstimatedCount(data.estimatedCount || 0);
-        
+
         // 캐시에 결과 저장
         cacheRef.current = {
           key: cacheKey,
@@ -1391,7 +1391,7 @@ export default function TargetingAdvanced({
           timestamp: Date.now(),
         };
         console.log('[TargetingAdvanced] Cached estimate result:', data.estimatedCount);
-        
+
         // ATS 모드일 때 모수 정보를 부모에게 전달 (캠페인 저장에 필요)
         // 중요: targetingMode를 명시적으로 포함하여 모드 리셋 방지
         if (data.estimatedCount > 0) {
@@ -1435,10 +1435,10 @@ export default function TargetingAdvanced({
         <div>
           <h3 className="font-semibold flex items-center gap-2">
             <Target className="h-5 w-5 text-primary" />
-            고급 타겟팅 (SK CoreTarget)
+            받을 고객 찾기
           </h3>
           <p className="text-small text-muted-foreground mt-1">
-            SKT 빅데이터 기반 정밀 타겟팅으로 광고 효과를 높여보세요
+            관심사나 방문 위치를 기준으로 메시지를 받을 고객을 정할 수 있어요.
           </p>
         </div>
         <div className="text-right">
@@ -1454,7 +1454,7 @@ export default function TargetingAdvanced({
       </div>
 
       {/* 타겟팅 모드 선택 (ATS vs Maptics) */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Card
           className={cn(
             "cursor-pointer transition-all hover-elevate",
@@ -1477,9 +1477,9 @@ export default function TargetingAdvanced({
                 )} />
               </div>
               <div className="flex-1">
-                <div className="font-semibold text-body">ATS 고급 타겟팅</div>
+                <div className="font-semibold text-body">관심사로 찾기</div>
                 <div className="text-tiny text-muted-foreground mt-0.5">
-                  쇼핑, 앱 사용, 통화, 위치, 프로파일링
+                  쇼핑, 앱 사용, 통화, 생활 위치
                 </div>
                 {atsFilterCount > 0 && currentMode === 'ats' && (
                   <Badge variant="secondary" className="mt-2 text-tiny">
@@ -1513,13 +1513,13 @@ export default function TargetingAdvanced({
                 )} />
               </div>
               <div className="flex-1">
-                <div className="font-semibold text-body">Maptics 지오펜스</div>
+                <div className="font-semibold text-body">방문 위치로 찾기</div>
                 <div className="text-tiny text-muted-foreground mt-0.5">
-                  특정 위치 방문자 대상 타겟팅
+                  매장이나 특정 장소 방문 고객
                 </div>
                 {geofenceCount > 0 && currentMode === 'maptics' && (
                   <Badge variant="secondary" className="mt-2 text-tiny">
-                    {geofenceCount}개 지오펜스
+                    {geofenceCount}개 위치
                   </Badge>
                 )}
               </div>
@@ -1529,7 +1529,7 @@ export default function TargetingAdvanced({
       </div>
 
       {/* 모드 변경 시 초기화 알림 */}
-      {((currentMode === 'ats' && geofenceCount > 0) || 
+      {((currentMode === 'ats' && geofenceCount > 0) ||
         (currentMode === 'maptics' && atsFilterCount > 0)) && (
         <Card className="bg-amber-50 border-amber-200">
           <CardContent className="py-3 px-4">
@@ -1541,7 +1541,7 @@ export default function TargetingAdvanced({
       )}
 
       {/* 현재 모드에 해당하는 필터만 표시 */}
-      {((currentMode === 'ats' && atsFilterCount > 0) || 
+      {((currentMode === 'ats' && atsFilterCount > 0) ||
         (currentMode === 'maptics' && geofenceCount > 0)) && (
         <Card className="bg-accent/30">
           <CardContent className="py-3">
@@ -1579,7 +1579,7 @@ export default function TargetingAdvanced({
               {/* Maptics 모드: 지오펜스 배지만 표시 */}
               {currentMode === 'maptics' && (targeting?.geofences ?? []).map((geo, i) => (
                 <Badge key={`geo-${i}`} variant="secondary" className="text-tiny">
-                  지오펜스: {geo.name} ({geo.targets[0]?.radius}m)
+                  방문 위치: {geo.name} ({geo.targets[0]?.radius}m)
                 </Badge>
               ))}
             </div>
@@ -1597,7 +1597,7 @@ export default function TargetingAdvanced({
               icon={ShoppingBag}
               metaType="11st"
               selectedCategories={targeting?.shopping11stCategories ?? []}
-              onCategoriesChange={(cats) => 
+              onCategoriesChange={(cats) =>
                 onTargetingChange({ ...targeting, shopping11stCategories: cats })
               }
               testIdPrefix="11st"
@@ -1609,19 +1609,19 @@ export default function TargetingAdvanced({
               icon={Smartphone}
               metaType="webapp"
               selectedCategories={targeting?.webappCategories ?? []}
-              onCategoriesChange={(cats) => 
+              onCategoriesChange={(cats) =>
                 onTargetingChange({ ...targeting, webappCategories: cats })
               }
               testIdPrefix="webapp"
             />
 
             <HierarchicalCategorySection
-              title="통화 Usage 관심사"
+              title="통화 관심사"
               description="통화 사용 패턴 기반 타겟팅"
               icon={Phone}
               metaType="call"
               selectedCategories={targeting?.callCategories ?? []}
-              onCategoriesChange={(cats) => 
+              onCategoriesChange={(cats) =>
                 onTargetingChange({ ...targeting, callCategories: cats })
               }
               testIdPrefix="call"
@@ -1654,7 +1654,7 @@ export default function TargetingAdvanced({
                   발송 방식
                 </CardTitle>
                 <CardDescription className="text-sm">
-                  지오펜스 진입 시 메시지 발송 방식을 선택하세요
+                  선택한 장소에 고객이 들어왔을 때 메시지를 보내는 방식을 선택하세요.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1680,7 +1680,7 @@ export default function TargetingAdvanced({
                     <div className="flex items-start gap-3">
                       <div className={cn(
                         "p-2 rounded-lg",
-                        (targeting?.mapticsSendType ?? 'batch') === 'realtime' 
+                        (targeting?.mapticsSendType ?? 'batch') === 'realtime'
                           ? "bg-primary/10" : "bg-muted"
                       )}>
                         <TrendingUp className={cn(
@@ -1690,9 +1690,9 @@ export default function TargetingAdvanced({
                         )} />
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-medium text-sm">실시간 보내기</h4>
+                        <h4 className="font-medium text-sm">바로 보내기</h4>
                         <p className="text-xs text-muted-foreground mt-1">
-                          지오펜스에 진입하면 즉시 발송
+                          선택한 장소에 들어오면 바로 발송
                         </p>
                       </div>
                     </div>
@@ -1702,7 +1702,7 @@ export default function TargetingAdvanced({
                       </div>
                     )}
                   </div>
-                  
+
                   {/* 모아서 보내기 (rcvType=2) */}
                   <div
                     className={cn(
@@ -1723,7 +1723,7 @@ export default function TargetingAdvanced({
                     <div className="flex items-start gap-3">
                       <div className={cn(
                         "p-2 rounded-lg",
-                        (targeting?.mapticsSendType ?? 'batch') === 'batch' 
+                        (targeting?.mapticsSendType ?? 'batch') === 'batch'
                           ? "bg-primary/10" : "bg-muted"
                       )}>
                         <Clock className={cn(
@@ -1735,7 +1735,7 @@ export default function TargetingAdvanced({
                       <div className="flex-1">
                         <h4 className="font-medium text-sm">모아서 보내기</h4>
                         <p className="text-xs text-muted-foreground mt-1">
-                          수집 후 지정 시간에 일괄 발송
+                          방문 고객을 모은 뒤 한 번에 발송
                         </p>
                       </div>
                     </div>
@@ -1753,7 +1753,7 @@ export default function TargetingAdvanced({
                     <div className="text-sm font-medium text-muted-foreground mb-2">
                       실시간 발송 시간대 설정
                     </div>
-                    
+
                     {/* 발송 시간대 */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -1857,7 +1857,7 @@ export default function TargetingAdvanced({
                       <div>
                         <p className="font-medium">실시간 발송 안내</p>
                         <p className="mt-1">
-                          지오펜스에 진입한 고객에게 설정한 시간대({targeting?.rtStartHhmm?.slice(0,2)}:{targeting?.rtStartHhmm?.slice(2)}~{targeting?.rtEndHhmm?.slice(0,2)}:{targeting?.rtEndHhmm?.slice(2)}) 내에서 즉시 메시지가 발송됩니다.
+                          선택한 장소에 들어온 고객에게 설정한 시간대({targeting?.rtStartHhmm?.slice(0,2)}:{targeting?.rtStartHhmm?.slice(2)}~{targeting?.rtEndHhmm?.slice(0,2)}:{targeting?.rtEndHhmm?.slice(2)}) 내에서 바로 메시지가 발송됩니다.
                         </p>
                       </div>
                     </div>
@@ -1871,7 +1871,7 @@ export default function TargetingAdvanced({
                     <div>
                       <p className="font-medium">모아서 보내기 안내</p>
                       <p className="mt-1">
-                        수집 기간 동안 지오펜스에 진입한 고객을 모아서 지정 시간에 일괄 발송합니다. 발송 일시는 캠페인 생성 시 자동 설정됩니다.
+                        수집 기간 동안 선택한 장소에 들어온 고객을 모아서 지정 시간에 한 번에 발송합니다. 발송 일시는 캠페인 생성 시 자동 설정됩니다.
                       </p>
                     </div>
                   </div>

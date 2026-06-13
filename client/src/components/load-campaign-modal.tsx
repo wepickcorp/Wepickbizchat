@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Copy, CheckCircle2, Calendar, DollarSign } from "lucide-react";
+import { Search, Copy, CheckCircle2, Calendar, Wallet } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CampaignStatusBadge } from "@/components/campaign-status-badge";
-import { formatCurrency, formatDateTime, getMessageTypeLabel } from "@/lib/authUtils";
+import { formatDateTime, formatNumber, getMessageTypeLabel } from "@/lib/authUtils";
 import { cn } from "@/lib/utils";
+import { calculateCampaignCredits } from "@shared/credit-policy";
 import type { Campaign } from "@shared/schema";
 
 interface LoadCampaignModalProps {
@@ -64,7 +65,7 @@ export default function LoadCampaignModal({ open, onClose, onLoad }: LoadCampaig
             이전 캠페인 복제하기
           </DialogTitle>
           <DialogDescription>
-            이전 캠페인의 메시지, 타겟팅, 예산 설정을 그대로 복제합니다. 캠페인 이름과 발송일만 새로 설정하면 됩니다.
+            이전 캠페인의 메시지와 타겟팅을 그대로 복제해요. 캠페인 이름과 발송일만 새로 설정하면 돼요.
           </DialogDescription>
         </DialogHeader>
 
@@ -87,7 +88,7 @@ export default function LoadCampaignModal({ open, onClose, onLoad }: LoadCampaig
               </div>
             ) : filteredCampaigns.length === 0 ? (
               <div className="flex items-center justify-center py-12 text-muted-foreground text-small">
-                {searchQuery ? '검색 결과가 없습니다' : '이전 캠페인이 없습니다'}
+                {searchQuery ? '다른 검색어로 다시 찾아볼 수 있어요' : '복제할 캠페인을 만들면 여기에서 불러올 수 있어요'}
               </div>
             ) : (
               <div className="divide-y">
@@ -117,12 +118,10 @@ export default function LoadCampaignModal({ open, onClose, onLoad }: LoadCampaig
                         <CampaignStatusBadge statusCode={campaign.statusCode ?? 0} />
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-tiny text-muted-foreground flex-wrap">
-                        {campaign.budget && (
-                          <span className="flex items-center gap-1">
-                            <DollarSign className="h-3 w-3" />
-                            {formatCurrency(Number(campaign.budget))}
-                          </span>
-                        )}
+                        <span className="flex items-center gap-1">
+                          <Wallet className="h-3 w-3" />
+                          {formatNumber(calculateCampaignCredits({ targetCount: campaign.targetCount || 0 }).neededCredits)}C
+                        </span>
                         {campaign.createdAt && (
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
@@ -140,7 +139,7 @@ export default function LoadCampaignModal({ open, onClose, onLoad }: LoadCampaig
 
         <DialogFooter className="flex-wrap gap-2">
           <Button variant="outline" onClick={handleClose} data-testid="button-load-campaign-cancel">
-            취소
+            닫기
           </Button>
           <Button
             onClick={handleConfirm}
@@ -149,7 +148,7 @@ export default function LoadCampaignModal({ open, onClose, onLoad }: LoadCampaig
           >
             {selectedCampaign
               ? `"${selectedCampaign.name.length > 15 ? selectedCampaign.name.slice(0, 15) + '...' : selectedCampaign.name}" 복제하기`
-              : '캠페인을 선택해주세요'}
+              : '캠페인을 선택해요'}
           </Button>
         </DialogFooter>
       </DialogContent>

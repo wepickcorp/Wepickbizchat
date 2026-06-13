@@ -16,8 +16,8 @@ function verifyToken(token: string): { adminId: string } | null {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) {
       return null;
     }
@@ -45,14 +45,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const token = authHeader.replace('Bearer ', '');
   const verified = verifyToken(token);
-  
+
   if (!verified) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
   try {
     const db = getDb();
-    
+
     const admin = await db.select()
       .from(admins)
       .where(eq(admins.id, verified.adminId))

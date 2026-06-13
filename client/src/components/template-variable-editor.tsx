@@ -6,6 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Image, Smartphone, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  getTemplateVariableKey,
+  getTemplateVariableLabel,
+  getTemplateVariableSchema,
+} from "@/lib/template-variables";
 
 interface VariableSchemaItem {
   key?: string;
@@ -19,7 +24,11 @@ interface VariableSchemaItem {
 }
 
 function getVariableKey(variable: VariableSchemaItem): string {
-  return variable.key || variable.name || '';
+  return getTemplateVariableKey(variable);
+}
+
+function getVariableLabel(variable: VariableSchemaItem): string {
+  return getTemplateVariableLabel(variable);
 }
 
 interface RecommendedTemplate {
@@ -44,19 +53,50 @@ interface TemplateVariableEditorProps {
 
 function replaceVariables(template: string, variables: Record<string, any>): string {
   let result = template;
-  
+
   for (const [key, value] of Object.entries(variables)) {
-    const placeholder = `{${key}}`;
+    const doubleBracePlaceholder = `{{${key}}}`;
+    const singleBracePlaceholder = `{${key}}`;
     let displayValue = value;
-    
+
     if (value && typeof value === 'object' && value.start && value.end) {
       displayValue = `${value.start} ~ ${value.end}`;
     }
-    
-    result = result.split(placeholder).join(displayValue || `{${key}}`);
+
+    const fallbackValue = `{${key}}`;
+    result = result
+      .split(doubleBracePlaceholder)
+      .join(displayValue || fallbackValue)
+      .split(singleBracePlaceholder)
+      .join(displayValue || fallbackValue);
   }
-  
+
   return result;
+}
+
+function formatUnfilledVariables(template: string, variableSchema: VariableSchemaItem[]): string {
+  const schemaFormatted = variableSchema.reduce((result, variable) => {
+    const key = getVariableKey(variable);
+    if (!key) return result;
+    const label = getVariableLabel(variable);
+    return result
+      .split(`{{${key}}}`)
+      .join(`{${label}}`)
+      .split(`{${key}}`)
+      .join(`{${label}}`);
+  }, template);
+
+  return schemaFormatted
+    .replace(/\{\{([^{}]+)\}\}/g, (_, key) => `{${getVariableLabel({ key, label: key, type: "text" })}}`)
+    .replace(/(?<!\{)\{([^{}]+)\}(?!\})/g, (_, key) => `{${getVariableLabel({ key, label: key, type: "text" })}}`);
+}
+
+function getInputType(type: VariableSchemaItem["type"]) {
+  if (type === "number") return "number";
+  if (type === "date") return "date";
+  if (type === "tel") return "tel";
+  if (type === "url") return "url";
+  return "text";
 }
 
 export default function TemplateVariableEditor({
@@ -78,14 +118,20 @@ export default function TemplateVariableEditor({
     onAllVariablesChange(newValues);
   };
 
-  const variableSchema = template.variableSchema || [];
-  const previewTitle = template.titleTemplate 
-    ? replaceVariables(template.titleTemplate, localValues)
+  const variableSchema = getTemplateVariableSchema(template);
+  const previewTitle = template.titleTemplate
+    ? formatUnfilledVariables(replaceVariables(template.titleTemplate, localValues), variableSchema)
     : '';
-  const previewContent = replaceVariables(template.contentTemplate, localValues);
+  const previewContent = formatUnfilledVariables(replaceVariables(template.contentTemplate, localValues), variableSchema);
 
   const missingRequired = variableSchema.filter(
-    v => v.required && !localValues[getVariableKey(v)]
+    v => {
+      const value = localValues[getVariableKey(v)];
+      if (value && typeof value === "object" && ("start" in value || "end" in value)) {
+        return v.required && (!value.start || !value.end);
+      }
+      return v.required && !value;
+    }
   );
 
   const getRcsTypeLabel = (type?: number) => {
@@ -105,20 +151,21 @@ export default function TemplateVariableEditor({
       <div className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">메시지 정보 입력</CardTitle>
+            <CardTitle className="text-lg" data-testid="text-template-variable-editor-title">필요한 정보만 입력해주세요</CardTitle>
             <CardDescription>
-              {variableSchema.length > 0 
-                ? '아래 정보를 입력하면 메시지가 자동으로 완성됩니다'
-                : '이 템플릿은 추가 입력이 필요하지 않습니다'}
+              {variableSchema.length > 0
+                ? '문구는 검수가 끝난 메시지로 고정돼요. 아래 정보만 채우면 메시지가 자동으로 완성됩니다.'
+                : '이 메시지는 추가 입력이 필요하지 않아요'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {variableSchema.map((variable) => {
               const varKey = getVariableKey(variable);
+              const label = getVariableLabel(variable);
               return (
                 <div key={varKey} className="space-y-2">
                   <Label htmlFor={varKey} className="flex items-center gap-2">
-                    {variable.label}
+                    {label}
                     {variable.required && (
                       <Badge variant="destructive" className="text-xs">필수</Badge>
                     )}
@@ -126,39 +173,45 @@ export default function TemplateVariableEditor({
                       <span className="text-xs text-muted-foreground">({variable.suffix})</span>
                     )}
                   </Label>
-                  
+
                   {variable.type === 'dateRange' ? (
                     <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        type="date"
-                        value={localValues[varKey]?.start || ''}
-                        onChange={(e) => handleChange(varKey, {
-                          ...localValues[varKey],
-                          start: e.target.value
-                        })}
-                        data-testid={`input-variable-${varKey}-start`}
-                      />
-                      <Input
-                        type="date"
-                        value={localValues[varKey]?.end || ''}
-                        onChange={(e) => handleChange(varKey, {
-                          ...localValues[varKey],
-                          end: e.target.value
-                        })}
-                        data-testid={`input-variable-${varKey}-end`}
-                      />
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">시작일</p>
+                        <Input
+                          type="date"
+                          value={localValues[varKey]?.start || ''}
+                          onChange={(e) => handleChange(varKey, {
+                            ...localValues[varKey],
+                            start: e.target.value
+                          })}
+                          data-testid={`input-variable-${varKey}-start`}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">종료일</p>
+                        <Input
+                          type="date"
+                          value={localValues[varKey]?.end || ''}
+                          onChange={(e) => handleChange(varKey, {
+                            ...localValues[varKey],
+                            end: e.target.value
+                          })}
+                          data-testid={`input-variable-${varKey}-end`}
+                        />
+                      </div>
                     </div>
                   ) : (
                     <Input
                       id={varKey}
-                      type={variable.type === 'number' ? 'number' : variable.type === 'date' ? 'date' : 'text'}
-                      placeholder={variable.placeholder || `${variable.label} 입력`}
+                      type={getInputType(variable.type)}
+                      placeholder={variable.placeholder || `${label}만 입력`}
                       value={localValues[varKey] || ''}
                       onChange={(e) => handleChange(varKey, e.target.value)}
                       data-testid={`input-variable-${varKey}`}
                     />
                   )}
-                  
+
                   {variable.format && (
                     <p className="text-xs text-muted-foreground">형식: {variable.format}</p>
                   )}
@@ -169,7 +222,7 @@ export default function TemplateVariableEditor({
             {variableSchema.length === 0 && (
               <div className="text-center py-6 text-muted-foreground">
                 <Smartphone className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                <p>이 템플릿은 바로 사용할 수 있습니다</p>
+                <p>이 메시지는 바로 사용할 수 있어요</p>
               </div>
             )}
           </CardContent>
@@ -179,7 +232,7 @@ export default function TemplateVariableEditor({
           <Card className="border-destructive">
             <CardContent className="pt-4">
               <p className="text-sm text-destructive">
-                {missingRequired.map(v => v.label).join(', ')} 항목을 입력해주세요
+                {missingRequired.map(getVariableLabel).join(', ')} 항목을 입력해주세요
               </p>
             </CardContent>
           </Card>
@@ -190,7 +243,7 @@ export default function TemplateVariableEditor({
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">미리보기</CardTitle>
+              <CardTitle className="text-lg" data-testid="text-template-variable-preview-title">이렇게 보내드립니다</CardTitle>
               <Badge variant="outline">{getRcsTypeLabel(template.rcsType)}</Badge>
             </div>
             <CardDescription>{template.name}</CardDescription>
@@ -199,14 +252,14 @@ export default function TemplateVariableEditor({
             <div className="bg-muted rounded-lg overflow-hidden">
               {template.defaultImageUrl && (
                 <div className="relative h-40 bg-muted">
-                  <img 
-                    src={template.defaultImageUrl} 
+                  <img
+                    src={template.defaultImageUrl}
                     alt="미리보기"
                     className="w-full h-full object-cover"
                   />
                 </div>
               )}
-              
+
               <div className="p-4 space-y-2">
                 {previewTitle && (
                   <p className="font-bold text-lg">{previewTitle}</p>
@@ -216,7 +269,7 @@ export default function TemplateVariableEditor({
                 </p>
               </div>
             </div>
-            
+
             <div className="mt-4 text-xs text-muted-foreground flex items-center justify-between">
               <span>
                 {template.messageType || 'RCS'} · {getRcsTypeLabel(template.rcsType)}

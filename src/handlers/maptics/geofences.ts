@@ -63,11 +63,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // GET: 지오펜스 목록 조회 (로컬 DB + BizChat 동기화)
     if (req.method === 'GET') {
       console.log(`[Geofence List] Fetching geofences for user: ${auth.userId}`);
-      
+
       // BizChat에서 지오펜스 목록 가져오기
       const bizchatGeofences = await listGeofences();
       console.log(`[Geofence List] BizChat returned ${bizchatGeofences.length} geofences`);
-      
+
       // 로컬 DB에서 사용자의 지오펜스 가져오기
       const db = getDb();
       const localGeofences = await db.select()
@@ -77,9 +77,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           eq(geofences.isActive, true)
         ))
         .orderBy(desc(geofences.createdAt));
-      
+
       console.log(`[Geofence List] Local DB has ${localGeofences.length} geofences`);
-      
+
       // BizChat 지오펜스와 로컬 지오펜스를 매칭하여 반환
       // bizchatGeofenceId로 매핑
       const result = bizchatGeofences.map(bg => {
@@ -96,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           isLocal: !!local,
         };
       });
-      
+
       return res.status(200).json({ geofences: result });
     }
 
@@ -108,7 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { name, target } = parsed.data;
       console.log(`[Geofence Create] name=${name}, targets=${target.length}`);
-      
+
       const geofenceId = await createGeofence(name, target as GeofenceTarget[]);
       console.log(`[Geofence Create] Created geofence ID: ${geofenceId}`);
 
@@ -123,7 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { targetId, name, target } = parsed.data;
       console.log(`[Geofence Update] targetId=${targetId}, name=${name}`);
-      
+
       await updateGeofence(targetId, name, target as GeofenceTarget[]);
       console.log(`[Geofence Update] Updated geofence ID: ${targetId}`);
 
@@ -138,7 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { targetId } = parsed.data;
       console.log(`[Geofence Delete] targetId=${targetId}`);
-      
+
       await deleteGeofence(targetId);
       console.log(`[Geofence Delete] Deleted geofence ID: ${targetId}`);
 

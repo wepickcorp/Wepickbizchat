@@ -10,8 +10,8 @@ neonConfig.fetchConnectionCache = true;
 const BIZCHAT_DEV_URL = process.env.BIZCHAT_DEV_API_URL || 'https://gw-dev.bizchat1.co.kr:8443';
 const BIZCHAT_PROD_URL = process.env.BIZCHAT_PROD_API_URL || 'https://gw.bizchat1.co.kr';
 
-const CALLBACK_BASE_URL = process.env.VERCEL_URL 
-  ? `https://${process.env.VERCEL_URL}` 
+const CALLBACK_BASE_URL = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
   : 'https://wepickbizchat-new.vercel.app';
 
 const campaigns = pgTable('campaigns', {
@@ -106,8 +106,8 @@ async function callBizChatAPI(
   useProduction: boolean = false
 ) {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -117,7 +117,7 @@ async function callBizChatAPI(
   const tid = generateTid();
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
-  
+
   console.log(`[BizChat Test] ${method} ${url}`);
 
   const options: RequestInit = {
@@ -135,7 +135,7 @@ async function callBizChatAPI(
 
   const response = await fetch(url, options);
   const responseText = await response.text();
-  
+
   console.log(`[BizChat Test] Response: ${response.status} - ${responseText.substring(0, 500)}`);
 
   let data;
@@ -180,8 +180,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } = req.body;
 
     if (!name || !templateId || !sndNum || !mdnFileId) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: name, templateId, sndNum, mdnFileId' 
+      return res.status(400).json({
+        error: 'Missing required fields: name, templateId, sndNum, mdnFileId'
       });
     }
 
@@ -285,9 +285,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error('[Test Campaign] Error:', error);
-    return res.status(500).json({ 
-      error: 'Internal server error', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    return res.status(500).json({
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }

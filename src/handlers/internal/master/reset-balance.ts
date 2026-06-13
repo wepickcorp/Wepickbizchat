@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.CRON_SECRET;
-  
+
   if (!cronSecret) {
     console.error('[Master Reset] CRON_SECRET not configured');
     return res.status(500).json({ error: 'Server configuration error' });
@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const db = getDb();
-    
+
     const masterUsers = await db.select()
       .from(users)
       .where(eq(users.isMaster, true));
@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const masterUser of masterUsers) {
       const previousBalance = masterUser.balance || '0';
-      
+
       await db.update(users)
         .set({
           balance: MASTER_BALANCE,
@@ -92,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error('[Master Reset] Error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to reset master balances',
       details: error instanceof Error ? error.message : 'Unknown error'
     });

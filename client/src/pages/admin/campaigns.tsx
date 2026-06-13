@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Search, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { CAMPAIGN_STATUS } from "@shared/schema";
+import { calculateCampaignCredits } from "@shared/credit-policy";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "secondary",
@@ -38,7 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function AdminCampaigns() {
   const adminToken = localStorage.getItem("adminToken");
-  
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -117,45 +118,53 @@ export default function AdminCampaigns() {
                       <TableHead>광고주</TableHead>
                       <TableHead>메시지 유형</TableHead>
                       <TableHead>타겟</TableHead>
-                      <TableHead>예산</TableHead>
+                      <TableHead>필요 크레딧</TableHead>
                       <TableHead>상태</TableHead>
                       <TableHead>생성일</TableHead>
                       <TableHead className="text-right">액션</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data?.campaigns?.map((campaign: any) => (
-                      <TableRow key={campaign.id} data-testid={`row-campaign-${campaign.id}`}>
-                        <TableCell className="font-medium max-w-[200px] truncate">
-                          {campaign.name}
-                        </TableCell>
-                        <TableCell>{campaign.userEmail || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{campaign.messageType}</Badge>
-                        </TableCell>
-                        <TableCell>{campaign.targetCount?.toLocaleString() || 0}명</TableCell>
-                        <TableCell>₩{Number(campaign.budget || 0).toLocaleString()}</TableCell>
-                        <TableCell>
-                          <Badge variant={STATUS_COLORS[campaign.status] as any || "secondary"}>
-                            {getStatusLabel(campaign.status)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {campaign.createdAt ? new Date(campaign.createdAt).toLocaleDateString("ko-KR") : "-"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            asChild
-                          >
-                            <a href={`/campaigns/${campaign.id}`} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {data?.campaigns?.map((campaign: any) => {
+                      const targetCount = Number(campaign.targetCount || 0);
+                      const neededCredits = calculateCampaignCredits({ targetCount }).neededCredits;
+
+                      return (
+                        <TableRow key={campaign.id} data-testid={`row-campaign-${campaign.id}`}>
+                          <TableCell className="font-medium max-w-[200px] truncate">
+                            {campaign.name}
+                          </TableCell>
+                          <TableCell>{campaign.userEmail || "-"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{campaign.messageType}</Badge>
+                          </TableCell>
+                          <TableCell>{targetCount.toLocaleString("ko-KR")}명</TableCell>
+                          <TableCell>
+                            <div className="font-medium">{neededCredits.toLocaleString("ko-KR")}C</div>
+                            <div className="text-xs text-muted-foreground">문자 1건 2C</div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={STATUS_COLORS[campaign.status] as any || "secondary"}>
+                              {getStatusLabel(campaign.status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {campaign.createdAt ? new Date(campaign.createdAt).toLocaleDateString("ko-KR") : "-"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              asChild
+                            >
+                              <a href={`/campaigns/${campaign.id}`} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

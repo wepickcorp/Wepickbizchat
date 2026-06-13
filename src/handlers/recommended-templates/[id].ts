@@ -70,19 +70,23 @@ function getDb() {
 // 변수 치환 함수
 function replaceVariables(template: string, variables: Record<string, any>): string {
   let result = template;
-  
+
   for (const [key, value] of Object.entries(variables)) {
     const placeholder = `{${key}}`;
     let displayValue = value;
-    
+
     // 날짜 범위 처리
     if (value && typeof value === 'object' && value.start && value.end) {
       displayValue = `${value.start} ~ ${value.end}`;
     }
-    
-    result = result.split(placeholder).join(displayValue ?? '');
+
+    result = result
+      .split(`{{${key}}}`)
+      .join(displayValue ?? '')
+      .split(placeholder)
+      .join(displayValue ?? '');
   }
-  
+
   return result;
 }
 
@@ -105,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === 'GET') {
       const [template] = await db.select().from(recommendedTemplates).where(eq(recommendedTemplates.id, id));
-      
+
       if (!template) {
         return res.status(404).json({
           success: false,
@@ -122,9 +126,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       // Preview with variable substitution
       const { variableValues } = req.body;
-      
+
       const [template] = await db.select().from(recommendedTemplates).where(eq(recommendedTemplates.id, id));
-      
+
       if (!template) {
         return res.status(404).json({
           success: false,
@@ -132,14 +136,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const title = template.titleTemplate 
+      const title = template.titleTemplate
         ? replaceVariables(template.titleTemplate, variableValues || {})
         : '';
       const lmsTitle = template.lmsTitleTemplate
         ? replaceVariables(template.lmsTitleTemplate, variableValues || {})
         : '';
       const content = replaceVariables(template.contentTemplate, variableValues || {});
-      const lmsContent = template.lmsContentTemplate 
+      const lmsContent = template.lmsContentTemplate
         ? replaceVariables(template.lmsContentTemplate, variableValues || {})
         : '';
 
@@ -158,7 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'PATCH') {
       const updateData = req.body;
-      
+
       delete updateData.id;
       delete updateData.createdAt;
       delete updateData.advancedTargetingState;

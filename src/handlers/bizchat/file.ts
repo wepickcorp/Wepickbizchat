@@ -17,7 +17,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -37,7 +37,7 @@ async function verifyAuth(req: VercelRequest) {
     }
     return null;
   }
-  
+
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {
@@ -78,8 +78,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const useProduction = detectEnv();
   console.log(`[BizChat File] Environment: ${useProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -103,19 +103,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const fileTypeParam = type || 2; // 기본값: 이미지
     const rcsParam = rcs || 0; // 기본값: 아님
     const url = `${baseUrl}/api/v1/file?tid=${tid}&type=${fileTypeParam}&rcs=${rcsParam}`;
-    
+
     // 파일명을 영문 + 타임스탬프로 변환 (BizChat API는 한글/특수문자 파일명 미지원)
     const fileExt = fileName.split('.').pop()?.toLowerCase() || 'jpg';
     const safeFileName = `bizchat_upload_${Date.now()}.${fileExt}`;
-    
+
     console.log(`[BizChat File] Uploading file: ${fileName} -> ${safeFileName}`);
 
     // form-data 패키지 사용 (Vercel 서버리스 환경에서 올바른 multipart boundary 생성)
     const formData = new FormData();
-    
+
     const base64Data = fileData.replace(/^data:[^;]+;base64,/, '');
     const binaryData = Buffer.from(base64Data, 'base64');
-    
+
     // Buffer를 직접 append (form-data 패키지 방식)
     formData.append('file', binaryData, {
       filename: safeFileName,

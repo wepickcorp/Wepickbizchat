@@ -46,7 +46,7 @@ function generateToken(adminId: string): string {
     exp: Date.now() + (2 * 60 * 60 * 1000),
   };
   const data = JSON.stringify(payload);
-  const signature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+  const signature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
   return Buffer.from(JSON.stringify({ data, signature })).toString('base64');
 }
 
@@ -63,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const db = getDb();
-    
+
     const admin = await db.select()
       .from(admins)
       .where(eq(admins.email, email))
@@ -88,8 +88,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .set({ lastLoginAt: new Date(), updatedAt: new Date() })
       .where(eq(admins.id, adminUser.id));
 
-    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || 
-                      req.headers['x-real-ip'] as string || 
+    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] ||
+                      req.headers['x-real-ip'] as string ||
                       'unknown';
 
     await db.insert(adminLogs).values({

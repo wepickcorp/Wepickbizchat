@@ -41,13 +41,13 @@ function getDb() {
 async function getAuthenticatedUser(req: VercelRequest) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
-  
+
   const token = authHeader.replace('Bearer ', '');
   const supabase = createClient(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-  
+
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return null;
   return user;
@@ -78,15 +78,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     try {
-      const { 
-        amount, 
-        buyerBusinessNumber, 
-        buyerCompanyName, 
+      const {
+        amount,
+        buyerBusinessNumber,
+        buyerCompanyName,
         buyerRepresentative,
         buyerEmail,
-        buyerAddress 
+        buyerAddress
       } = req.body || {};
-      
+
       const numAmount = Number(amount);
       if (isNaN(numAmount) || numAmount < 1000) {
         return res.status(400).json({ error: '발행 금액은 최소 1,000원 이상이어야 합니다' });

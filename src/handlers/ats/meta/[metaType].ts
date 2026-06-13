@@ -8,8 +8,8 @@ function getBizChatUrl() {
 }
 
 function getBizChatApiKey() {
-  return process.env.BIZCHAT_USE_PROD === 'true' 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  return process.env.BIZCHAT_USE_PROD === 'true'
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 }
 
@@ -17,7 +17,7 @@ function getBizChatApiKey() {
 async function fetch11stCategories(cateid?: string): Promise<any> {
   const tid = Date.now().toString();
   const apiKey = getBizChatApiKey();
-  
+
   if (!apiKey) {
     throw new Error('BizChat API key not configured');
   }
@@ -69,7 +69,7 @@ async function fetch11stCategories(cateid?: string): Promise<any> {
 async function fetchCallCategories(cateid?: string): Promise<any> {
   const tid = Date.now().toString();
   const apiKey = getBizChatApiKey();
-  
+
   if (!apiKey) {
     throw new Error('BizChat API key not configured');
   }
@@ -119,7 +119,7 @@ async function fetchCallCategories(cateid?: string): Promise<any> {
 async function fetchWebappCategories(cateid?: string): Promise<any> {
   const tid = Date.now().toString();
   const apiKey = getBizChatApiKey();
-  
+
   if (!apiKey) {
     throw new Error('BizChat API key not configured');
   }
@@ -169,7 +169,7 @@ async function fetchWebappCategories(cateid?: string): Promise<any> {
 async function fetchLocationCodes(addr: string): Promise<any> {
   const tid = Date.now().toString();
   const apiKey = getBizChatApiKey();
-  
+
   if (!apiKey) {
     throw new Error('BizChat API key not configured');
   }
@@ -210,7 +210,7 @@ async function fetchLocationCodes(addr: string): Promise<any> {
 async function fetchFilterMeta(filterType: string): Promise<any> {
   const tid = Date.now().toString();
   const apiKey = getBizChatApiKey();
-  
+
   if (!apiKey) {
     throw new Error('BizChat API key not configured');
   }
@@ -250,7 +250,7 @@ async function fetchFilterMeta(filterType: string): Promise<any> {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { metaType, cateid, addr, filterType } = req.query;
-  
+
   if (typeof metaType !== 'string') {
     return res.status(400).json({ error: 'Invalid meta type' });
   }

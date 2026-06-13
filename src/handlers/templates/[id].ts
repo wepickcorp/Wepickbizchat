@@ -49,7 +49,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -68,7 +68,7 @@ async function verifyAuth(req: VercelRequest) {
     }
     return null;
   }
-  
+
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {
@@ -82,8 +82,8 @@ const updateTemplateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   messageType: z.enum(['LMS', 'MMS', 'RCS']).optional(),
   rcsType: z.number().optional(),
-  title: z.string().max(60).optional(),
-  lmsTitle: z.string().max(60).optional().nullable(),
+  title: z.string().max(30).optional(),
+  lmsTitle: z.string().max(30).optional().nullable(),
   content: z.string().min(1).max(2000).optional(),
   imageUrl: z.string().optional(),
   imageFileId: z.string().optional(),
@@ -93,7 +93,7 @@ const updateTemplateSchema = z.object({
   }).optional(),
   buttons: z.object({
     list: z.array(z.object({
-      type: z.string(),
+      type: z.enum(['0', '1', '2']),
       name: z.string(),
       val1: z.string(),
       val2: z.string().optional(),
@@ -144,9 +144,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const data = updateTemplateSchema.parse(req.body);
-      
+
       // RCS 템플릿이 아닌 경우 LMS 필드를 null로 정리
       const messageType = data.messageType || template.messageType;
+      const mergedData = { ...template, ...data };
+      if (messageType === 'RCS') {
+        if (!mergedData.content || String(mergedData.content).trim().length === 0) {
+          return res.status(400).json({
+            error: 'Invalid template data',
+            details: [{ path: ['content'], message: 'RCS 메시지의 경우 RCS 메시지도 필수로 입력해주세요' }],
+          });
+        }
+        if (!mergedData.lmsContent || String(mergedData.lmsContent).trim().length === 0) {
+          return res.status(400).json({
+            error: 'Invalid template data',
+            details: [{ path: ['lmsContent'], message: 'RCS 메시지의 경우 일반(LMS) 메시지도 필수로 입력해주세요' }],
+          });
+        }
+      }
       const updateData: Record<string, unknown> = { ...data };
       if (messageType !== 'RCS') {
         updateData.lmsTitle = null;
@@ -155,7 +170,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updateData.lmsImageFileId = null;
         updateData.lmsUrlLinks = null;
       }
-      
+
       const updated = await db.update(templates).set(updateData).where(eq(templates.id, id)).returning();
       return res.status(200).json(updated[0]);
     } catch (error) {
@@ -183,7 +198,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     const { action, reason } = req.body || {};
-    
+
     try {
       const result = await db.select().from(templates).where(eq(templates.id, id));
       const template = result[0];

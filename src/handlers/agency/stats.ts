@@ -55,7 +55,7 @@ function verifyAgencyToken(token: string): { agencyId: string; userId: string } 
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -69,7 +69,7 @@ async function verifyAgency(req: VercelRequest) {
   const token = authHeader.replace('Bearer ', '');
   const verified = verifyAgencyToken(token);
   if (!verified) return null;
-  
+
   try {
     const db = getDb();
     const [agency] = await db.select().from(agencies).where(eq(agencies.id, verified.agencyId));
@@ -137,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from(campaigns)
       .where(inArray(campaigns.userId, subAccountIds));
 
-    const activeCampaigns = allCampaigns.filter(c => 
+    const activeCampaigns = allCampaigns.filter(c =>
       c.statusCode === 30 || c.status === 'running'
     );
 

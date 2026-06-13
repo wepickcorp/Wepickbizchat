@@ -113,10 +113,10 @@ export default function TestCampaign() {
 
   const onSubmit = async (data: TestCampaignFormData) => {
     setIsSubmitting(true);
-    
+
     try {
       const mdnList = parseMdnList(data.mdnList);
-      
+
       if (mdnList.length === 0) {
         toast({
           title: "전화번호 오류",
@@ -157,7 +157,7 @@ export default function TestCampaign() {
       const scheduledAt = data.scheduledAt || minScheduledTime.toISOString();
 
       const template = approvedTemplates?.find(t => t.id === data.templateId);
-      
+
       const campaignRes = await apiRequest("POST", "/api/campaigns/test-create", {
         name: data.name,
         templateId: data.templateId,
@@ -174,9 +174,9 @@ export default function TestCampaign() {
 
       if (campaignData.success && campaignData.campaign?.id) {
         setCreatedCampaignId(campaignData.campaign.id);
-        
+
         queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
-        
+
         toast({
           title: "테스트 캠페인 생성 완료",
           description: `${mdnList.length}건의 번호로 테스트 캠페인이 생성되었어요. 승인 요청 후 발송됩니다.`,
@@ -222,7 +222,7 @@ export default function TestCampaign() {
             </div>
             <div className="flex gap-3 justify-center">
               <Button asChild variant="outline">
-                <Link href="/campaigns">캠페인 목록</Link>
+                <Link href="/campaigns/history">발송 목록</Link>
               </Button>
               <Button asChild>
                 <Link href={`/campaigns/${createdCampaignId}`}>캠페인 상세 보기</Link>
@@ -237,9 +237,9 @@ export default function TestCampaign() {
   return (
     <div className="animate-fade-in space-y-6">
       <div className="flex items-center gap-4">
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => navigate("/campaigns")}
           data-testid="button-back"
         >
@@ -257,8 +257,8 @@ export default function TestCampaign() {
         <AlertTriangle className="h-4 w-4 text-amber-600" />
         <AlertTitle className="text-amber-800">SKT 번호만 수신 가능</AlertTitle>
         <AlertDescription className="text-amber-700">
-          BizChat은 SK텔레콤 가입자 대상 서비스입니다. 
-          테스트 발송은 <strong>SKT 번호</strong>만 수신 가능하며, 
+          BizChat은 SK텔레콤 가입자 대상 서비스입니다.
+          테스트 발송은 <strong>SKT 번호</strong>만 수신 가능하며,
           개발 환경에서만 사용 가능합니다.
         </AlertDescription>
       </Alert>
@@ -281,9 +281,9 @@ export default function TestCampaign() {
                   <FormItem>
                     <FormLabel>캠페인 이름</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="예: 테스트발송_12월10일" 
-                        {...field} 
+                      <Input
+                        placeholder="예: 테스트발송_12월10일"
+                        {...field}
                         data-testid="input-campaign-name"
                       />
                     </FormControl>
@@ -353,8 +353,8 @@ export default function TestCampaign() {
                       </FormControl>
                       <SelectContent>
                         {senderNumbers.map((sender) => (
-                          <SelectItem 
-                            key={sender.id || sender.code} 
+                          <SelectItem
+                            key={sender.id || sender.code}
                             value={sender.id || sender.code || ''}
                           >
                             {sender.name} ({sender.num || sender.number})
@@ -387,7 +387,7 @@ export default function TestCampaign() {
                   <FormItem>
                     <FormLabel>전화번호 목록</FormLabel>
                     <FormControl>
-                      <Textarea 
+                      <Textarea
                         placeholder="01012345678&#10;01098765432&#10;또는 쉼표로 구분: 01012345678, 01098765432"
                         className="min-h-[150px] font-mono"
                         {...field}
@@ -422,16 +422,16 @@ export default function TestCampaign() {
           </Card>
 
           <div className="flex justify-between">
-            <Button 
-              type="button" 
-              variant="outline" 
+            <Button
+              type="button"
+              variant="outline"
               onClick={() => navigate("/campaigns")}
               data-testid="button-cancel"
             >
               취소
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={isSubmitting || parsedMdnCount === 0}
               data-testid="button-submit"
             >

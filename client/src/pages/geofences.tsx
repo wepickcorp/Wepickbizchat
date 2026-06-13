@@ -1,8 +1,8 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { 
-  MapPin, 
-  Search, 
+import {
+  MapPin,
+  Search,
   MoreHorizontal,
   Trash2,
   Pencil,
@@ -308,8 +308,8 @@ export default function Geofences() {
                         <Pencil className="mr-2 h-4 w-4" />
                         수정
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => handleDelete(geofence)} 
+                      <DropdownMenuItem
+                        onClick={() => handleDelete(geofence)}
                         className="text-destructive"
                         data-testid={`button-delete-geofence-${geofence.id}`}
                       >
@@ -411,8 +411,8 @@ export default function Geofences() {
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
               취소
             </Button>
-            <Button 
-              onClick={confirmUpdate} 
+            <Button
+              onClick={confirmUpdate}
               disabled={updateMutation.isPending}
               data-testid="button-confirm-edit-geofence"
             >

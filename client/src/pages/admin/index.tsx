@@ -12,23 +12,23 @@ interface DashboardStats {
   totalSent: number;
 }
 
-function StatCard({ 
-  title, 
-  value, 
-  change, 
+function StatCard({
+  title,
+  value,
+  change,
   changeLabel,
   icon: Icon,
-  isLoading 
-}: { 
-  title: string; 
-  value: string | number; 
+  isLoading
+}: {
+  title: string;
+  value: string | number;
   change?: number;
   changeLabel?: string;
   icon: React.ComponentType<{ className?: string }>;
   isLoading?: boolean;
 }) {
   const isPositive = change && change > 0;
-  
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
@@ -170,7 +170,7 @@ export default function AdminDashboard() {
                 <Users className="h-5 w-5 text-primary" />
                 <div>
                   <p className="font-medium">광고주 관리</p>
-                  <p className="text-xs text-muted-foreground">계정 조회 및 잔액 조정</p>
+                  <p className="text-xs text-muted-foreground">계정 조회 및 레거시 잔액 확인</p>
                 </div>
               </div>
             </a>
@@ -183,7 +183,7 @@ export default function AdminDashboard() {
                 <CreditCard className="h-5 w-5 text-primary" />
                 <div>
                   <p className="font-medium">결제 내역</p>
-                  <p className="text-xs text-muted-foreground">충전 및 사용 내역 확인</p>
+                  <p className="text-xs text-muted-foreground">결제 금액과 크레딧 전환 흐름 확인</p>
                 </div>
               </div>
             </a>

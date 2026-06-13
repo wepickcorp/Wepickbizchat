@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const db = getDb();
-    
+
     const activeAgencies = await db
       .select({
         id: agencies.id,

@@ -51,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getDb();
     const result = await db.select().from(templates).where(eq(templates.id, id));
     const template = result[0];
-    
+
     if (!template) return res.status(404).json({ error: 'Template not found' });
     if (template.userId !== auth.userId) return res.status(403).json({ error: 'Access denied' });
     if (template.status !== 'draft' && template.status !== 'rejected') {

@@ -52,7 +52,7 @@ function createAgencyToken(agencyId: string, userId: string, email: string, agen
     iat: Date.now(),
   };
   const data = JSON.stringify(payload);
-  const signature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+  const signature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
   return Buffer.from(JSON.stringify({ data, signature })).toString('base64');
 }
 
@@ -69,7 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const supabase = getSupabaseAdmin();
-    
+
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -80,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const db = getDb();
-    
+
     const [user] = await db.select().from(users).where(eq(users.id, authData.user.id));
     if (!user) {
       return res.status(401).json({ error: '등록된 사용자가 아닙니다' });

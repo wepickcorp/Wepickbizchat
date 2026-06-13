@@ -96,7 +96,7 @@ export function GeofenceMap({
   const getCircleColor = useCallback((id: number) => {
     const isSelected = selectedGeofenceId === id;
     const isHovered = hoveredGeofenceId === id;
-    
+
     if (isSelected) {
       return { stroke: "#E84040", fill: "#E84040", fillOpacity: 0.35 };
     }

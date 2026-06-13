@@ -30,11 +30,11 @@ function getDb() {
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
+
   if (!supabaseUrl || !supabaseServiceKey) {
     throw new Error('Supabase configuration is missing');
   }
-  
+
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
@@ -48,7 +48,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = crypto.createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -63,7 +63,7 @@ async function verifyAuth(req: VercelRequest): Promise<{ userId: string; email: 
   // 대리 로그인 토큰 확인
   const impersonateToken = req.headers['x-impersonate-token'] as string;
   const impersonateUserId = req.headers['x-impersonate-user-id'] as string;
-  
+
   if (impersonateToken && impersonateUserId) {
     const verified = verifyImpersonateToken(impersonateToken);
     if (verified && verified.userId === impersonateUserId) {
@@ -71,9 +71,9 @@ async function verifyAuth(req: VercelRequest): Promise<{ userId: string; email: 
     }
     return null; // 토큰 무효
   }
-  
+
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log('No authorization header found');
     return null;
@@ -89,7 +89,7 @@ async function verifyAuth(req: VercelRequest): Promise<{ userId: string; email: 
       console.error('Supabase auth error:', error.message);
       return null;
     }
-    
+
     if (!user) {
       console.log('No user found for token');
       return null;
@@ -116,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const auth = await verifyAuth(req);
-    
+
     if (!auth) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -143,7 +143,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Error fetching user:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to fetch user',
       details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
     });

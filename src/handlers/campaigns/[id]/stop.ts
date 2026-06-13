@@ -35,7 +35,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -87,10 +87,10 @@ const STATUS_NAMES: Record<number, string> = {
 async function callBizChatStopAPI(bizchatCampaignId: string, useProduction: boolean = false) {
   const BIZCHAT_DEV_URL = process.env.BIZCHAT_DEV_API_URL || 'https://gw-dev.bizchat1.co.kr:8443';
   const BIZCHAT_PROD_URL = process.env.BIZCHAT_PROD_API_URL || 'https://gw.bizchat1.co.kr';
-  
+
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -99,7 +99,7 @@ async function callBizChatStopAPI(bizchatCampaignId: string, useProduction: bool
 
   const tid = Date.now().toString();
   const url = `${baseUrl}/api/v1/cmpn/stop?tid=${tid}&id=${bizchatCampaignId}`;
-  
+
   console.log(`[BizChat Stop] POST ${url}`);
 
   const response = await fetch(url, {
@@ -152,7 +152,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 캠페인 조회
     const campaignResult = await db.select().from(campaigns).where(eq(campaigns.id, id));
     const campaign = campaignResult[0];
-    
+
     if (!campaign) {
       return res.status(404).json({ error: '캠페인을 찾을 수 없습니다' });
     }
@@ -165,8 +165,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const currentStatusCode = campaign.statusCode || 0;
     if (!STOPPABLE_STATUS_CODES.includes(currentStatusCode)) {
       const statusName = STATUS_NAMES[currentStatusCode] || `상태코드 ${currentStatusCode}`;
-      return res.status(400).json({ 
-        error: `현재 상태(${statusName})에서는 중단할 수 없습니다. 중단은 발송 중인 캠페인만 가능합니다.` 
+      return res.status(400).json({
+        error: `현재 상태(${statusName})에서는 중단할 수 없습니다. 중단은 발송 중인 캠페인만 가능합니다.`
       });
     }
 
@@ -174,12 +174,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (campaign.bizchatCampaignId) {
       const useProduction = process.env.BIZCHAT_USE_PROD === 'true';
       console.log(`[Stop] Calling BizChat stop API for campaign: ${campaign.bizchatCampaignId}`);
-      
+
       const bizchatResult = await callBizChatStopAPI(campaign.bizchatCampaignId, useProduction);
-      
+
       if (bizchatResult.data.code !== 'S000001') {
         console.error('[Stop] BizChat API error:', bizchatResult.data);
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: `BizChat 중단 실패: ${bizchatResult.data.msg || '알 수 없는 오류'}`,
           bizchatError: bizchatResult.data
         });
@@ -188,8 +188,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 로컬 DB 상태 업데이트 (BizChat 규격: state=35는 중단)
     const updatedResult = await db.update(campaigns)
-      .set({ 
-        statusCode: 35, 
+      .set({
+        statusCode: 35,
         status: 'stopped',
         updatedAt: new Date()
       })
@@ -206,7 +206,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error) {
     console.error('[Stop] Error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: '캠페인 중단 중 오류가 발생했습니다',
       details: error instanceof Error ? error.message : 'Unknown error'
     });

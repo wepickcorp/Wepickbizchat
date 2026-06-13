@@ -1,8 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
-import { 
-  FilePlus, 
-  Search, 
+import { useLocation } from "wouter";
+import {
+  Search,
   FileText,
   MoreHorizontal,
   Eye,
@@ -29,6 +28,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getUserFacingMessageName } from "@/lib/display-copy";
 import type { Template } from "@shared/schema";
 
 interface TemplateWithStats extends Template {
@@ -57,8 +57,8 @@ export default function Templates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
       toast({
-        title: "템플릿 삭제 완료",
-        description: "템플릿이 삭제되었어요.",
+        title: "메시지를 삭제했어요",
+        description: "메시지 목록에서 삭제했어요.",
       });
     },
     onError: () => {
@@ -75,7 +75,7 @@ export default function Templates() {
   });
 
   const handleDelete = (id: string) => {
-    if (confirm("정말 이 템플릿을 삭제할까요?")) {
+    if (confirm("정말 이 메시지를 삭제할까요?")) {
       deleteMutation.mutate(id);
     }
   };
@@ -84,17 +84,11 @@ export default function Templates() {
     <div className="animate-fade-in space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-display font-bold">메세지 목록</h1>
+          <h1 className="text-display font-bold">메시지 목록</h1>
           <p className="text-muted-foreground mt-1">
-            메시지 템플릿을 관리하고 캠페인에 활용해요
+            검수가 끝난 메시지를 확인하고 캠페인에 활용해요
           </p>
         </div>
-        <Button asChild className="gap-2 w-fit" data-testid="button-new-template">
-          <Link href="/templates/new">
-            <FilePlus className="h-4 w-4" />
-            메세지 만들기
-          </Link>
-        </Button>
       </div>
 
       <Card>
@@ -102,7 +96,7 @@ export default function Templates() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="메세지 이름으로 검색..."
+              placeholder="메시지 이름으로 검색..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -137,11 +131,11 @@ export default function Templates() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1 flex-wrap">
                       <span className="font-medium truncate" data-testid={`text-template-name-${template.id}`}>
-                        {template.name}
+                        {getUserFacingMessageName(template.name)}
                       </span>
                       {template.isSystem && (
                         <Badge variant="secondary" className="text-tiny shrink-0 bg-amber-100 text-amber-800 border-amber-200" data-testid={`badge-recommended-${template.id}`}>
-                          추천템플릿
+                          추천 메시지
                         </Badge>
                       )}
                       <Badge variant="outline" className="text-tiny shrink-0">
@@ -155,7 +149,7 @@ export default function Templates() {
                       <span className="truncate max-w-[200px]">{template.content.substring(0, 50)}...</span>
                       <span className="shrink-0">{template.createdAt ? formatDateTime(template.createdAt) : '-'}</span>
                     </div>
-                    
+
                     {/* Send History Stats */}
                     {template.sendHistory && template.sendHistory.campaignCount > 0 && (
                       <div className="mt-2 flex items-center gap-4 text-small" data-testid={`send-history-${template.id}`}>
@@ -222,12 +216,8 @@ export default function Templates() {
           ) : (
             <EmptyState
               icon={FileText}
-              title="메세지가 없어요"
-              description="메시지 템플릿을 만들고 캠페인에 활용해보세요."
-              action={{
-                label: "첫 메세지 만들기",
-                onClick: () => setLocation("/templates/new"),
-              }}
+              title="준비된 메시지를 확인하고 있어요"
+              description="운영팀이 검수를 마친 메시지만 캠페인에서 선택할 수 있어요."
             />
           )}
         </CardContent>

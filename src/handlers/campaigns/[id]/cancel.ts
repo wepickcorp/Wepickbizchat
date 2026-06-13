@@ -5,6 +5,10 @@ import { createHmac } from 'crypto';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq } from 'drizzle-orm';
 import { pgTable, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import {
+  isCreditModeEnabled,
+  releaseReservedCampaignCreditsForServerless,
+} from '../../_shared/credit-ledger';
 
 neonConfig.fetchConnectionCache = true;
 
@@ -35,7 +39,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -89,20 +93,20 @@ const STATUS_NAMES: Record<number, string> = {
 
 /**
  * BizChat 캠페인 취소 API 호출 (연동규격서 7.5)
- * 
+ *
  * URL: /api/v1/cmpn/cancel
  * Method: POST
  * Header: Authorization: {token}
  * Query Parameter:
  *   - tid (Y): transaction ID
  *   - id (Y): 대상 캠페인 아이디 (BizChat 캠페인 ID)
- * 
+ *
  * 취소 가능 상태: 검수요청(1), 검수완료(2), 승인요청(10), 승인완료(11), 반려(17), 발송준비(20)
  */
 async function callBizChatCancelAPI(bizchatCampaignId: string, useProduction: boolean = false) {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -112,10 +116,10 @@ async function callBizChatCancelAPI(bizchatCampaignId: string, useProduction: bo
 
   // Transaction ID 생성 (현재 시간 밀리초)
   const tid = Date.now().toString();
-  
+
   // 연동규격서 형식: Query Parameter로 tid와 id 전달
   const url = `${baseUrl}/api/v1/cmpn/cancel?tid=${encodeURIComponent(tid)}&id=${encodeURIComponent(bizchatCampaignId)}`;
-  
+
   console.log(`[BizChat Cancel] Request URL: ${url}`);
   console.log(`[BizChat Cancel] Campaign ID: ${bizchatCampaignId}`);
   console.log(`[BizChat Cancel] Transaction ID: ${tid}`);
@@ -139,10 +143,10 @@ async function callBizChatCancelAPI(bizchatCampaignId: string, useProduction: bo
       data = JSON.parse(responseText);
     } catch {
       console.error('[BizChat Cancel] Failed to parse response as JSON');
-      data = { 
+      data = {
         tid: tid,
-        code: `HTTP_${response.status}`, 
-        msg: responseText || 'Empty response' 
+        code: `HTTP_${response.status}`,
+        msg: responseText || 'Empty response'
       };
     }
 
@@ -197,7 +201,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 캠페인 조회
     const campaignResult = await db.select().from(campaigns).where(eq(campaigns.id, id));
     const campaign = campaignResult[0];
-    
+
     if (!campaign) {
       console.log(`[Cancel] Campaign ${id} not found`);
       return res.status(404).json({ error: '캠페인을 찾을 수 없습니다' });
@@ -212,11 +216,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 상태 검증
     const currentStatusCode = campaign.statusCode ?? 0;
     console.log(`[Cancel] Campaign ${id} current status: ${currentStatusCode} (${STATUS_NAMES[currentStatusCode] || 'Unknown'})`);
-    
+
     if (!CANCELLABLE_STATUS_CODES.includes(currentStatusCode)) {
       const statusName = STATUS_NAMES[currentStatusCode] || `상태코드 ${currentStatusCode}`;
       console.log(`[Cancel] Campaign ${id} cannot be cancelled from status ${statusName}`);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: `현재 상태(${statusName})에서는 취소할 수 없습니다.`,
         detail: '취소 가능 상태: 검수요청(1), 검수완료(2), 승인요청(10), 승인완료(11), 반려(17), 발송준비(20)',
         currentStatusCode,
@@ -227,16 +231,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // BizChat에 등록된 캠페인인 경우 BizChat API 호출
     if (campaign.bizchatCampaignId) {
       console.log(`[Cancel] Calling BizChat cancel API for bizchatCampaignId: ${campaign.bizchatCampaignId}`);
-      
+
       const useProduction = process.env.BIZCHAT_USE_PROD === 'true';
-      
+
       try {
         const bizchatResult = await callBizChatCancelAPI(campaign.bizchatCampaignId, useProduction);
-        
+
         // 성공 코드: S000001
         if (bizchatResult.code !== 'S000001') {
           console.error(`[Cancel] BizChat API returned error: ${bizchatResult.code} - ${bizchatResult.msg}`);
-          return res.status(400).json({ 
+          return res.status(400).json({
             error: `BizChat 취소 실패: ${bizchatResult.msg}`,
             bizchatError: {
               tid: bizchatResult.tid,
@@ -245,11 +249,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           });
         }
-        
+
         console.log(`[Cancel] BizChat cancel API succeeded for campaign ${campaign.bizchatCampaignId}`);
       } catch (bizchatError) {
         console.error('[Cancel] BizChat API call failed:', bizchatError);
-        return res.status(500).json({ 
+        return res.status(500).json({
           error: 'BizChat 서버 연결 실패',
           detail: bizchatError instanceof Error ? bizchatError.message : 'Network error',
         });
@@ -258,15 +262,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`[Cancel] Campaign ${id} has no bizchatCampaignId, skipping BizChat API call`);
     }
 
-    // 로컬 DB 상태 업데이트
-    const updatedResult = await db.update(campaigns)
-      .set({ 
-        statusCode: 90, 
+    let creditRelease: Awaited<ReturnType<typeof releaseReservedCampaignCreditsForServerless>> | null = null;
+
+    if (isCreditModeEnabled()) {
+      creditRelease = await releaseReservedCampaignCreditsForServerless(db, {
+        userId: auth.userId,
+        campaignId: id,
+        description: `캠페인 취소로 예약 크레딧 해제 (${campaign.name})`,
+        statusCode: 25,
         status: 'cancelled',
-        updatedAt: new Date(),
-      })
-      .where(eq(campaigns.id, id))
-      .returning();
+      });
+
+      if (!creditRelease.success) {
+        return res.status(400).json({ error: creditRelease.error });
+      }
+    }
+
+    // 로컬 DB 상태 업데이트
+    const updatedResult = isCreditModeEnabled()
+      ? await db.select().from(campaigns).where(eq(campaigns.id, id))
+      : await db.update(campaigns)
+        .set({
+          statusCode: 25,
+          status: 'cancelled',
+          updatedAt: new Date(),
+        })
+        .where(eq(campaigns.id, id))
+        .returning();
 
     console.log(`[Cancel] Campaign ${id} cancelled successfully in local DB`);
 
@@ -274,11 +296,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       success: true,
       message: '캠페인이 취소되었습니다',
       campaign: updatedResult[0],
+      ...(creditRelease && {
+        releasedCredits: creditRelease.releasedCredits,
+        creditBalanceAfter: creditRelease.balanceAfterCredits,
+      }),
     });
 
   } catch (error) {
     console.error('[Cancel] Unexpected error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: '캠페인 취소 중 오류가 발생했습니다',
       details: error instanceof Error ? error.message : 'Unknown error',
     });

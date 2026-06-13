@@ -16,7 +16,7 @@ function verifyImpersonateToken(token: string): { userId: string; adminId: strin
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET || 'wepick-admin-secret').update(data).digest('hex');
+    const expectedSignature = createHmac('sha256', process.env.ADMIN_JWT_SECRET!).update(data).digest('hex');
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -35,7 +35,7 @@ async function verifyAuth(req: VercelRequest) {
     }
     return null;
   }
-  
+
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {
@@ -56,8 +56,8 @@ async function callBizChatAPI(
   useProduction: boolean = false
 ) {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -67,7 +67,7 @@ async function callBizChatAPI(
   const tid = generateTid();
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
-  
+
   console.log(`[BizChat Sender] ${method} ${url}`);
 
   const options: RequestInit = {
@@ -85,7 +85,7 @@ async function callBizChatAPI(
 
   const response = await fetch(url, options);
   const responseText = await response.text();
-  
+
   console.log(`[BizChat Sender] Response: ${response.status} - ${responseText.substring(0, 300)}`);
 
   let data;
@@ -117,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('[BizChat Sender] Force DEV mode: BIZCHAT_USE_PROD is not set to "true"');
       return false;
     }
-    
+
     if (req.query.env === 'prod' || req.body?.env === 'prod') return true;
     if (req.query.env === 'dev' || req.body?.env === 'dev') return false;
     if (process.env.VERCEL_ENV === 'production') return true;
@@ -132,7 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     switch (action) {
       case 'list': {
         const result = await callBizChatAPI('/api/v1/sndnum/list', 'POST', {}, useProduction);
-        
+
         // BizChat API 응답에서 발신번호 목록 추출 및 정규화
         // 발신번호코드(id)와 발신번호(num)를 명확히 구분
         // 예: { id: "001001", num: "16700823", name: "SK텔레콤 혜택 알림" }
@@ -164,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'create': {
         const { number, name, comment, certFiles } = req.body;
-        
+
         if (!number) {
           return res.status(400).json({ error: 'number is required' });
         }
@@ -180,7 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const result = await callBizChatAPI('/api/v1/sndnum/create', 'POST', payload, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'create',
@@ -191,13 +191,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'read': {
         const { senderId } = req.body;
-        
+
         if (!senderId) {
           return res.status(400).json({ error: 'senderId is required' });
         }
 
         const result = await callBizChatAPI(`/api/v1/sndnum?id=${senderId}`, 'GET', undefined, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'read',
@@ -208,7 +208,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'update': {
         const { senderId, name, comment, certFiles } = req.body;
-        
+
         if (!senderId) {
           return res.status(400).json({ error: 'senderId is required' });
         }
@@ -219,7 +219,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (certFiles) payload.certFiles = certFiles;
 
         const result = await callBizChatAPI(`/api/v1/sndnum/update?id=${senderId}`, 'POST', payload, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'update',
@@ -229,13 +229,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'delete': {
         const { senderId } = req.body;
-        
+
         if (!senderId) {
           return res.status(400).json({ error: 'senderId is required' });
         }
 
         const result = await callBizChatAPI(`/api/v1/sndnum/delete?id=${senderId}`, 'POST', {}, useProduction);
-        
+
         return res.status(200).json({
           success: result.data.code === 'S000001',
           action: 'delete',

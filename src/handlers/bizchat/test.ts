@@ -25,8 +25,8 @@ async function callBizChatAPI(
   useProduction: boolean = false
 ): Promise<BizChatResponse> {
   const baseUrl = useProduction ? BIZCHAT_PROD_URL : BIZCHAT_DEV_URL;
-  const apiKey = useProduction 
-    ? process.env.BIZCHAT_PROD_API_KEY 
+  const apiKey = useProduction
+    ? process.env.BIZCHAT_PROD_API_KEY
     : process.env.BIZCHAT_DEV_API_KEY;
 
   if (!apiKey) {
@@ -34,7 +34,7 @@ async function callBizChatAPI(
   }
 
   const tid = generateTid();
-  
+
   // URL에 tid 쿼리 파라미터 추가
   const url = `${baseUrl}${endpoint}?tid=${tid}`;
   console.log(`[BizChat] Calling ${method} ${url}`);
@@ -56,7 +56,7 @@ async function callBizChatAPI(
 
   const response = await fetch(url, options);
   const responseText = await response.text();
-  
+
   console.log(`[BizChat] Response status: ${response.status}`);
   console.log(`[BizChat] Response body: ${responseText.substring(0, 500)}`);
 
