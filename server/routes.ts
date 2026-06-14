@@ -2211,6 +2211,10 @@ export async function registerRoutes(
   });
 
   app.get("/api/stripe/config", async (req, res) => {
+    if (process.env.ENABLE_STRIPE_PAYMENTS !== 'true') {
+      return res.status(410).json({ error: "Stripe payment is disabled. Please use KISPG payment." });
+    }
+
     try {
       const publishableKey = await getStripePublishableKey();
       res.json({ publishableKey });
@@ -2221,6 +2225,10 @@ export async function registerRoutes(
   });
 
   app.post("/api/stripe/checkout", isAuthenticated, async (req, res) => {
+    if (process.env.ENABLE_STRIPE_PAYMENTS !== 'true') {
+      return res.status(410).json({ error: "Stripe payment is disabled. Please use KISPG payment." });
+    }
+
     try {
       const userId = (req as any).userId;
       const user = await storage.getUser(userId);

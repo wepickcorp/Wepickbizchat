@@ -17,6 +17,7 @@ const campaigns = pgTable('campaigns', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
+  sndGoalCnt: integer('snd_goal_cnt'),
   targetCount: integer('target_count').default(0),
   statusCode: integer('status_code').default(0),
   status: text('status').default('temp_registered'),
@@ -129,15 +130,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (reason === 'partial_delivery_failure') {
       const numericChargeableCount = Number(chargeableCount);
-      const targetCount = Number((campaign as any).targetCount || 0);
+      // H1: 차감(use)이 sndGoalCnt 기준이므로, 잔여 복원도 동일 기준으로 계산해야
+      // 실제 차감액과 어긋나지 않는다.
+      const chargedBase = Number((campaign as any).sndGoalCnt || (campaign as any).targetCount || 0);
 
-      if (!Number.isFinite(numericChargeableCount) || numericChargeableCount < 0 || numericChargeableCount > targetCount) {
+      if (!Number.isFinite(numericChargeableCount) || numericChargeableCount < 0 || numericChargeableCount > chargedBase) {
         return res.status(400).json({
-          error: 'partial_delivery_failure requires chargeableCount between 0 and targetCount',
+          error: 'partial_delivery_failure requires chargeableCount between 0 and the charged send count',
         });
       }
 
-      restoreCredits = getNeededCampaignCredits(Math.max(0, targetCount - numericChargeableCount)).neededCredits;
+      restoreCredits = getNeededCampaignCredits(Math.max(0, chargedBase - numericChargeableCount)).neededCredits;
     }
 
     const restoreResult = await restoreUsedCampaignCreditsForServerless(db, {

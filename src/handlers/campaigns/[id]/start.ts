@@ -20,6 +20,7 @@ const campaigns = pgTable('campaigns', {
   sndNum: text('snd_num'),
   statusCode: integer('status_code').default(0),
   status: text('status').default('temp_registered'),
+  sndGoalCnt: integer('snd_goal_cnt'),
   targetCount: integer('target_count'),
   sentCount: integer('sent_count'),
   successCount: integer('success_count'),
@@ -146,7 +147,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       campaign = approvedCampaign;
     }
 
-    const sentCount = Number(campaign.targetCount || 0);
+    // H1: 차감(use)은 예약(reserve)과 동일하게 sndGoalCnt를 기준으로 계산해야
+    // "예약된 크레딧과 필요한 크레딧이 일치하지 않습니다" 가드에 걸리지 않는다.
+    const sentCount = Number(campaign.sndGoalCnt || campaign.targetCount || 0);
     const successCount = getSimulatedSuccessCount(sentCount);
     const creditEstimate = getNeededCampaignCredits(sentCount);
 

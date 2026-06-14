@@ -6,7 +6,10 @@ import { sql } from 'drizzle-orm';
 import { pgTable, text, timestamp, numeric, varchar } from 'drizzle-orm/pg-core';
 import { createHash } from 'crypto';
 import { CREDIT_PRODUCTS, type CreditProductType } from '../../../shared/credit-policy';
-import { grantPurchasedCreditsForServerless } from '../_shared/credit-ledger';
+import {
+  grantPurchasedCreditsForServerless,
+  hasLightCreditGrantInCurrentKstMonthForServerless,
+} from '../_shared/credit-ledger';
 
 neonConfig.fetchConnectionCache = true;
 
@@ -168,6 +171,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('[KISPG Callback] Auth callback received - tid:', tid, 'amt:', amt);
 
+    const userId = String(order.user_id);
+    const productType = isCreditProductType(order.product_type) ? order.product_type : null;
+    const creditModeEnabled = process.env.CREDIT_MODE_ENABLED === 'true';
+
+    // C1: 라이트 충전은 캡처(승인) 전에 월 1회 한도를 다시 검사한다.
+    // 주문 생성(auth) 이후 다른 결제로 한도가 소진될 수 있으므로, 여기서 막아야
+    // "결제는 됐는데 크레딧은 못 받는" 상황(환불 필요)을 원천 차단할 수 있다.
+    if (creditModeEnabled && productType === 'light' && !existingTransaction) {
+      const lightAlreadyUsed = await hasLightCreditGrantInCurrentKstMonthForServerless(db, userId);
+      if (lightAlreadyUsed) {
+        const errorUrl = new URL(`${baseUrl}/billing`);
+        errorUrl.searchParams.set('error', 'true');
+        errorUrl.searchParams.set('message', '라이트 충전은 매월 1회만 구매할 수 있습니다');
+        return res.redirect(302, errorUrl.toString());
+      }
+    }
+
     if (existingTransaction) {
       console.warn('[KISPG Callback] Duplicate payment callback will retry credit grant:', tid);
     } else {
@@ -211,10 +231,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const userId = String(order.user_id);
-    const productType = isCreditProductType(order.product_type) ? order.product_type : null;
-
-    if (process.env.CREDIT_MODE_ENABLED === 'true' && productType) {
+    if (creditModeEnabled && productType) {
       const product = CREDIT_PRODUCTS[productType];
       const grantResult = await grantPurchasedCreditsForServerless(db, {
         userId,
@@ -224,9 +241,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         metadata: { tid, ordNo },
       });
 
+      // C1/C2: 캡처는 됐는데 라이트 한도로 지급이 막힌 잔여 레이스(선검사 이후 동시 결제).
+      // 이 경우 무한 실패로 두지 않고, 환불 필요 상태로 주문을 기록한 뒤 종료한다.
+      // (KISPG 취소 API는 본 코드베이스에 연동돼 있지 않아 운영 환불 처리가 필요하다.)
+      if (grantResult.lightLimitBlocked) {
+        console.error('[KISPG Callback] CRITICAL: payment captured but light grant blocked, manual refund required', { tid, ordNo, userId, amount });
+        await db.execute(sql`
+          UPDATE payment_orders
+          SET
+            status = 'paid_grant_blocked',
+            payment_reference = ${paymentReference},
+            metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ tid, grantBlocked: 'light_monthly_limit', refundRequired: true })}::jsonb,
+            updated_at = now()
+          WHERE order_no = ${ordNo}
+        `);
+        const blockedUrl = new URL(`${baseUrl}/billing`);
+        blockedUrl.searchParams.set('error', 'true');
+        blockedUrl.searchParams.set('message', '라이트 충전은 월 1회만 가능합니다. 결제 금액은 확인 후 환불 처리됩니다.');
+        return res.redirect(302, blockedUrl.toString());
+      }
+
       if (!grantResult.success && !grantResult.alreadyProcessed) {
-        const reason = grantResult.lightLimitBlocked ? 'light monthly limit blocked' : grantResult.error;
-        throw new Error(`Failed to grant KISPG credits for TID ${tid}: ${reason}`);
+        throw new Error(`Failed to grant KISPG credits for TID ${tid}: ${grantResult.error}`);
       }
 
       console.log('[KISPG Callback] Credits granted or already present:', userId, product.productType, product.credits);

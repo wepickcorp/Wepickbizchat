@@ -4,6 +4,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (process.env.ENABLE_STRIPE_PAYMENTS !== 'true') {
+    return res.status(410).json({ error: 'Stripe payment is disabled. Please use KISPG payment.' });
+  }
 
   try {
     const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;

@@ -48,6 +48,9 @@ function isCreditProductType(value: unknown): value is CreditProductType {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (process.env.ENABLE_STRIPE_PAYMENTS !== 'true') {
+    return res.status(410).json({ error: 'Stripe payment is disabled. Please use KISPG payment.' });
+  }
 
   try {
     const auth = await verifyAuth(req);

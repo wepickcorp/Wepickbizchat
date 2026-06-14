@@ -56,7 +56,7 @@ export async function grantPurchasedCreditsForServerless(
 
   const result = await db.execute(sql`
     WITH existing_ledger AS (
-      SELECT id
+      SELECT id, type
       FROM credit_ledger
       WHERE idempotency_key = ${idempotencyKey}
       LIMIT 1
@@ -94,20 +94,21 @@ export async function grantPurchasedCreditsForServerless(
       SELECT
         ${input.userId},
         ${input.transactionId || null},
-        'grant',
-        ${product.credits},
+        CASE WHEN EXISTS (SELECT 1 FROM existing_light_grant) THEN 'grant_blocked' ELSE 'grant' END,
+        CASE WHEN EXISTS (SELECT 1 FROM existing_light_grant) THEN 0 ELSE ${product.credits} END,
         NULL,
         ${product.productType},
         ${idempotencyKey},
-        ${`${product.name} 크레딧 지급`},
+        CASE WHEN EXISTS (SELECT 1 FROM existing_light_grant)
+          THEN ${`${product.name} 크레딧 지급 차단(라이트 월 1회 한도)`}
+          ELSE ${`${product.name} 크레딧 지급`} END,
         ${JSON.stringify({
           paymentReference: input.paymentReference,
           ...(input.metadata || {}),
         })}::jsonb
       WHERE NOT EXISTS (SELECT 1 FROM existing_ledger)
-        AND NOT EXISTS (SELECT 1 FROM existing_light_grant)
       ON CONFLICT (idempotency_key) DO NOTHING
-      RETURNING id
+      RETURNING id, type
     ),
     inserted_grant AS (
       INSERT INTO credit_grants (
@@ -126,6 +127,7 @@ export async function grantPurchasedCreditsForServerless(
         ${product.credits},
         ${expiresAt}
       FROM inserted_ledger_marker
+      WHERE inserted_ledger_marker.type = 'grant'
       RETURNING id
     ),
     updated_ledger AS (
@@ -134,12 +136,13 @@ export async function grantPurchasedCreditsForServerless(
         credit_grant_id = inserted_grant.id,
         balance_after_credits = active_balance_before.balance_before_credits + ${product.credits}
       FROM inserted_grant, active_balance_before
-      WHERE credit_ledger.id = (SELECT id FROM inserted_ledger_marker LIMIT 1)
+      WHERE credit_ledger.id = (SELECT id FROM inserted_ledger_marker WHERE type = 'grant' LIMIT 1)
       RETURNING credit_ledger.id, credit_ledger.balance_after_credits
     )
     SELECT
       EXISTS (SELECT 1 FROM existing_ledger) AS already_granted,
-      EXISTS (SELECT 1 FROM existing_light_grant) AS light_limit_blocked,
+      COALESCE((SELECT type = 'grant_blocked' FROM existing_ledger LIMIT 1), false) AS already_blocked,
+      EXISTS (SELECT 1 FROM inserted_ledger_marker WHERE type = 'grant_blocked') AS light_limit_blocked,
       EXISTS (SELECT 1 FROM inserted_grant) AS grant_inserted,
       EXISTS (SELECT 1 FROM updated_ledger) AS ledger_inserted,
       COALESCE(
@@ -154,6 +157,7 @@ export async function grantPurchasedCreditsForServerless(
     return {
       success: false as const,
       alreadyProcessed: true,
+      lightLimitBlocked: Boolean(row.already_blocked),
       productType: product.productType,
       credits: product.credits,
       balanceAfterCredits: Number(row.balance_after_credits || 0),

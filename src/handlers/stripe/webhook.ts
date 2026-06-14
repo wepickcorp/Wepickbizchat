@@ -52,6 +52,9 @@ async function buffer(readable: any): Promise<Buffer> {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (process.env.ENABLE_STRIPE_PAYMENTS !== 'true') {
+    return res.status(410).json({ error: 'Stripe payment is disabled. Please use KISPG payment.' });
+  }
 
   try {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -114,9 +117,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             metadata: { sessionId: session.id },
           });
 
+          // C1/C2: 결제는 완료됐는데 라이트 한도로 지급이 막힌 경우(체크아웃 선검사 이후 동시 결제).
+          // 무한 재시도를 유발하지 않도록 Stripe 자동 환불 후 200으로 종료한다.
+          // (grant_blocked 멱등 마커 덕분에 중복 webhook이 와도 환불은 1회만 일어난다.)
+          if (grantResult.lightLimitBlocked) {
+            // 최초 차단일 때만 환불한다. 중복 webhook(alreadyProcessed)에서는 재환불하지 않는다.
+            if (!grantResult.alreadyProcessed) {
+              console.error(`[Stripe Webhook] CRITICAL: payment captured but light grant blocked, refunding session ${session.id}`);
+              try {
+                if (session.payment_intent) {
+                  await stripe.refunds.create({ payment_intent: String(session.payment_intent) });
+                } else {
+                  console.error(`[Stripe Webhook] No payment_intent on session ${session.id}, manual refund required`);
+                }
+              } catch (refundErr) {
+                console.error(`[Stripe Webhook] Auto-refund failed for session ${session.id}, manual refund required`, refundErr);
+              }
+            }
+            return res.status(200).json({ received: true, lightLimitBlocked: true });
+          }
+
           if (!grantResult.success && !grantResult.alreadyProcessed) {
-            const reason = grantResult.lightLimitBlocked ? 'light monthly limit blocked' : grantResult.error;
-            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${reason}`);
+            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${grantResult.error}`);
           }
 
           await db.execute(sql`
@@ -249,9 +271,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             metadata: { sessionId: session.id },
           });
 
+          if (grantResult.lightLimitBlocked) {
+            if (!grantResult.alreadyProcessed) {
+              console.error(`[Stripe Webhook] CRITICAL: payment captured but light grant blocked, refunding session ${session.id}`);
+              try {
+                if (session.payment_intent) {
+                  await stripe.refunds.create({ payment_intent: String(session.payment_intent) });
+                }
+              } catch (refundErr) {
+                console.error(`[Stripe Webhook] Auto-refund failed for session ${session.id}, manual refund required`, refundErr);
+              }
+            }
+            return res.status(200).json({ received: true, lightLimitBlocked: true });
+          }
+
           if (!grantResult.success && !grantResult.alreadyProcessed) {
-            const reason = grantResult.lightLimitBlocked ? 'light monthly limit blocked' : grantResult.error;
-            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${reason}`);
+            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${grantResult.error}`);
           }
 
           console.log(`Credits granted or already present: User ${userId} ${product.credits}C (${productType}, session ${session.id})`);

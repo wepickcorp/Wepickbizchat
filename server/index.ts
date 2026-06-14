@@ -17,6 +17,11 @@ declare module "http" {
 }
 
 async function initStripe() {
+  if (process.env.ENABLE_STRIPE_PAYMENTS !== 'true') {
+    console.warn('Stripe payments disabled, skipping Stripe initialization');
+    return;
+  }
+
   if (process.env.NODE_ENV === "development" && process.env.REPL_ID === "local-dev") {
     console.warn('Local development detected, skipping Stripe initialization');
     return;
@@ -65,6 +70,10 @@ app.post(
   '/api/stripe/webhook/:uuid',
   express.raw({ type: 'application/json' }),
   async (req, res) => {
+    if (process.env.ENABLE_STRIPE_PAYMENTS !== 'true') {
+      return res.status(410).json({ error: 'Stripe payment is disabled. Please use KISPG payment.' });
+    }
+
     const signature = req.headers['stripe-signature'];
 
     if (!signature) {

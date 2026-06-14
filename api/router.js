@@ -2721,7 +2721,7 @@ async function grantPurchasedCreditsForServerless(db, input) {
   const idempotencyKey = `credit-grant:${input.paymentReference}`;
   const result = await db.execute(sql13`
     WITH existing_ledger AS (
-      SELECT id
+      SELECT id, type
       FROM credit_ledger
       WHERE idempotency_key = ${idempotencyKey}
       LIMIT 1
@@ -2759,20 +2759,21 @@ async function grantPurchasedCreditsForServerless(db, input) {
       SELECT
         ${input.userId},
         ${input.transactionId || null},
-        'grant',
-        ${product.credits},
+        CASE WHEN EXISTS (SELECT 1 FROM existing_light_grant) THEN 'grant_blocked' ELSE 'grant' END,
+        CASE WHEN EXISTS (SELECT 1 FROM existing_light_grant) THEN 0 ELSE ${product.credits} END,
         NULL,
         ${product.productType},
         ${idempotencyKey},
-        ${`${product.name} \uD06C\uB808\uB527 \uC9C0\uAE09`},
+        CASE WHEN EXISTS (SELECT 1 FROM existing_light_grant)
+          THEN ${`${product.name} \uD06C\uB808\uB527 \uC9C0\uAE09 \uCC28\uB2E8(\uB77C\uC774\uD2B8 \uC6D4 1\uD68C \uD55C\uB3C4)`}
+          ELSE ${`${product.name} \uD06C\uB808\uB527 \uC9C0\uAE09`} END,
         ${JSON.stringify({
     paymentReference: input.paymentReference,
     ...input.metadata || {}
   })}::jsonb
       WHERE NOT EXISTS (SELECT 1 FROM existing_ledger)
-        AND NOT EXISTS (SELECT 1 FROM existing_light_grant)
       ON CONFLICT (idempotency_key) DO NOTHING
-      RETURNING id
+      RETURNING id, type
     ),
     inserted_grant AS (
       INSERT INTO credit_grants (
@@ -2791,6 +2792,7 @@ async function grantPurchasedCreditsForServerless(db, input) {
         ${product.credits},
         ${expiresAt}
       FROM inserted_ledger_marker
+      WHERE inserted_ledger_marker.type = 'grant'
       RETURNING id
     ),
     updated_ledger AS (
@@ -2799,12 +2801,13 @@ async function grantPurchasedCreditsForServerless(db, input) {
         credit_grant_id = inserted_grant.id,
         balance_after_credits = active_balance_before.balance_before_credits + ${product.credits}
       FROM inserted_grant, active_balance_before
-      WHERE credit_ledger.id = (SELECT id FROM inserted_ledger_marker LIMIT 1)
+      WHERE credit_ledger.id = (SELECT id FROM inserted_ledger_marker WHERE type = 'grant' LIMIT 1)
       RETURNING credit_ledger.id, credit_ledger.balance_after_credits
     )
     SELECT
       EXISTS (SELECT 1 FROM existing_ledger) AS already_granted,
-      EXISTS (SELECT 1 FROM existing_light_grant) AS light_limit_blocked,
+      COALESCE((SELECT type = 'grant_blocked' FROM existing_ledger LIMIT 1), false) AS already_blocked,
+      EXISTS (SELECT 1 FROM inserted_ledger_marker WHERE type = 'grant_blocked') AS light_limit_blocked,
       EXISTS (SELECT 1 FROM inserted_grant) AS grant_inserted,
       EXISTS (SELECT 1 FROM updated_ledger) AS ledger_inserted,
       COALESCE(
@@ -2817,6 +2820,7 @@ async function grantPurchasedCreditsForServerless(db, input) {
     return {
       success: false,
       alreadyProcessed: true,
+      lightLimitBlocked: Boolean(row.already_blocked),
       productType: product.productType,
       credits: product.credits,
       balanceAfterCredits: Number(row.balance_after_credits || 0)
@@ -4480,6 +4484,7 @@ var campaigns8 = pgTable16("campaigns", {
   id: text10("id").primaryKey(),
   userId: text10("user_id").notNull(),
   name: text10("name").notNull(),
+  sndGoalCnt: integer9("snd_goal_cnt"),
   targetCount: integer9("target_count").default(0),
   statusCode: integer9("status_code").default(0),
   status: text10("status").default("temp_registered"),
@@ -4573,13 +4578,13 @@ async function handler19(req, res) {
     let restoreCredits;
     if (reason === "partial_delivery_failure") {
       const numericChargeableCount = Number(chargeableCount);
-      const targetCount = Number(campaign.targetCount || 0);
-      if (!Number.isFinite(numericChargeableCount) || numericChargeableCount < 0 || numericChargeableCount > targetCount) {
+      const chargedBase = Number(campaign.sndGoalCnt || campaign.targetCount || 0);
+      if (!Number.isFinite(numericChargeableCount) || numericChargeableCount < 0 || numericChargeableCount > chargedBase) {
         return res.status(400).json({
-          error: "partial_delivery_failure requires chargeableCount between 0 and targetCount"
+          error: "partial_delivery_failure requires chargeableCount between 0 and the charged send count"
         });
       }
-      restoreCredits = getNeededCampaignCredits(Math.max(0, targetCount - numericChargeableCount)).neededCredits;
+      restoreCredits = getNeededCampaignCredits(Math.max(0, chargedBase - numericChargeableCount)).neededCredits;
     }
     const restoreResult = await restoreUsedCampaignCreditsForServerless(db, {
       userId: auth.userId,
@@ -4669,6 +4674,7 @@ var campaigns9 = pgTable17("campaigns", {
   sndNum: text11("snd_num"),
   statusCode: integer10("status_code").default(0),
   status: text11("status").default("temp_registered"),
+  sndGoalCnt: integer10("snd_goal_cnt"),
   targetCount: integer10("target_count"),
   sentCount: integer10("sent_count"),
   successCount: integer10("success_count"),
@@ -4775,7 +4781,7 @@ async function handler20(req, res) {
       }
       campaign = approvedCampaign;
     }
-    const sentCount = Number(campaign.targetCount || 0);
+    const sentCount = Number(campaign.sndGoalCnt || campaign.targetCount || 0);
     const successCount = getSimulatedSuccessCount(sentCount);
     const creditEstimate = getNeededCampaignCredits(sentCount);
     if (isCreditModeEnabled()) {
@@ -13979,6 +13985,18 @@ async function handler59(req, res) {
     }
     const [existingTransaction] = await db.select().from(transactions11).where(sql34`${transactions11.stripeSessionId} = ${paymentReference} OR ${transactions11.description} LIKE ${`%${tid}%`}`).limit(1);
     console.log("[KISPG Callback] Auth callback received - tid:", tid, "amt:", amt);
+    const userId = String(order.user_id);
+    const productType = isCreditProductType2(order.product_type) ? order.product_type : null;
+    const creditModeEnabled = process.env.CREDIT_MODE_ENABLED === "true";
+    if (creditModeEnabled && productType === "light" && !existingTransaction) {
+      const lightAlreadyUsed = await hasLightCreditGrantInCurrentKstMonthForServerless(db, userId);
+      if (lightAlreadyUsed) {
+        const errorUrl = new URL(`${baseUrl}/billing`);
+        errorUrl.searchParams.set("error", "true");
+        errorUrl.searchParams.set("message", "\uB77C\uC774\uD2B8 \uCDA9\uC804\uC740 \uB9E4\uC6D4 1\uD68C\uB9CC \uAD6C\uB9E4\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4");
+        return res.redirect(302, errorUrl.toString());
+      }
+    }
     if (existingTransaction) {
       console.warn("[KISPG Callback] Duplicate payment callback will retry credit grant:", tid);
     } else {
@@ -14013,9 +14031,7 @@ async function handler59(req, res) {
         return res.redirect(302, errorUrl.toString());
       }
     }
-    const userId = String(order.user_id);
-    const productType = isCreditProductType2(order.product_type) ? order.product_type : null;
-    if (process.env.CREDIT_MODE_ENABLED === "true" && productType) {
+    if (creditModeEnabled && productType) {
       const product = CREDIT_PRODUCTS[productType];
       const grantResult = await grantPurchasedCreditsForServerless(db, {
         userId,
@@ -14024,9 +14040,24 @@ async function handler59(req, res) {
         paymentReference,
         metadata: { tid, ordNo }
       });
+      if (grantResult.lightLimitBlocked) {
+        console.error("[KISPG Callback] CRITICAL: payment captured but light grant blocked, manual refund required", { tid, ordNo, userId, amount });
+        await db.execute(sql34`
+          UPDATE payment_orders
+          SET
+            status = 'paid_grant_blocked',
+            payment_reference = ${paymentReference},
+            metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ tid, grantBlocked: "light_monthly_limit", refundRequired: true })}::jsonb,
+            updated_at = now()
+          WHERE order_no = ${ordNo}
+        `);
+        const blockedUrl = new URL(`${baseUrl}/billing`);
+        blockedUrl.searchParams.set("error", "true");
+        blockedUrl.searchParams.set("message", "\uB77C\uC774\uD2B8 \uCDA9\uC804\uC740 \uC6D4 1\uD68C\uB9CC \uAC00\uB2A5\uD569\uB2C8\uB2E4. \uACB0\uC81C \uAE08\uC561\uC740 \uD655\uC778 \uD6C4 \uD658\uBD88 \uCC98\uB9AC\uB429\uB2C8\uB2E4.");
+        return res.redirect(302, blockedUrl.toString());
+      }
       if (!grantResult.success && !grantResult.alreadyProcessed) {
-        const reason = grantResult.lightLimitBlocked ? "light monthly limit blocked" : grantResult.error;
-        throw new Error(`Failed to grant KISPG credits for TID ${tid}: ${reason}`);
+        throw new Error(`Failed to grant KISPG credits for TID ${tid}: ${grantResult.error}`);
       }
       console.log("[KISPG Callback] Credits granted or already present:", userId, product.productType, product.credits);
     }
@@ -14912,6 +14943,9 @@ function isCreditProductType3(value) {
 async function handler66(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (process.env.ENABLE_STRIPE_PAYMENTS !== "true") {
+    return res.status(410).json({ error: "Stripe payment is disabled. Please use KISPG payment." });
+  }
   try {
     const auth = await verifyAuth26(req);
     if (!auth) return res.status(401).json({ error: "Unauthorized" });
@@ -15005,6 +15039,9 @@ async function handler67(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
+  if (process.env.ENABLE_STRIPE_PAYMENTS !== "true") {
+    return res.status(410).json({ error: "Stripe payment is disabled. Please use KISPG payment." });
+  }
   try {
     const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
     if (!publishableKey) {
@@ -15066,6 +15103,9 @@ async function buffer(readable) {
 async function handler68(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (process.env.ENABLE_STRIPE_PAYMENTS !== "true") {
+    return res.status(410).json({ error: "Stripe payment is disabled. Please use KISPG payment." });
+  }
   try {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -15115,9 +15155,23 @@ async function handler68(req, res) {
             paymentReference,
             metadata: { sessionId: session.id }
           });
+          if (grantResult.lightLimitBlocked) {
+            if (!grantResult.alreadyProcessed) {
+              console.error(`[Stripe Webhook] CRITICAL: payment captured but light grant blocked, refunding session ${session.id}`);
+              try {
+                if (session.payment_intent) {
+                  await stripe.refunds.create({ payment_intent: String(session.payment_intent) });
+                } else {
+                  console.error(`[Stripe Webhook] No payment_intent on session ${session.id}, manual refund required`);
+                }
+              } catch (refundErr) {
+                console.error(`[Stripe Webhook] Auto-refund failed for session ${session.id}, manual refund required`, refundErr);
+              }
+            }
+            return res.status(200).json({ received: true, lightLimitBlocked: true });
+          }
           if (!grantResult.success && !grantResult.alreadyProcessed) {
-            const reason = grantResult.lightLimitBlocked ? "light monthly limit blocked" : grantResult.error;
-            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${reason}`);
+            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${grantResult.error}`);
           }
           await db.execute(sql37`
             WITH target_user AS (
@@ -15242,9 +15296,21 @@ async function handler68(req, res) {
             paymentReference,
             metadata: { sessionId: session.id }
           });
+          if (grantResult.lightLimitBlocked) {
+            if (!grantResult.alreadyProcessed) {
+              console.error(`[Stripe Webhook] CRITICAL: payment captured but light grant blocked, refunding session ${session.id}`);
+              try {
+                if (session.payment_intent) {
+                  await stripe.refunds.create({ payment_intent: String(session.payment_intent) });
+                }
+              } catch (refundErr) {
+                console.error(`[Stripe Webhook] Auto-refund failed for session ${session.id}, manual refund required`, refundErr);
+              }
+            }
+            return res.status(200).json({ received: true, lightLimitBlocked: true });
+          }
           if (!grantResult.success && !grantResult.alreadyProcessed) {
-            const reason = grantResult.lightLimitBlocked ? "light monthly limit blocked" : grantResult.error;
-            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${reason}`);
+            throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${grantResult.error}`);
           }
           console.log(`Credits granted or already present: User ${userId} ${product.credits}C (${productType}, session ${session.id})`);
         }
