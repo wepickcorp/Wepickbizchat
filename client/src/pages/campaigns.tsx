@@ -288,12 +288,14 @@ export default function Campaigns() {
             문자 보내기
           </Link>
         </Button>
-        <Button asChild variant="outline" className="h-12 gap-2 px-4 text-sm" data-testid="button-test-campaign">
-          <Link href="/campaigns/test">
-            <TestTube className="h-4 w-4" />
-            테스트
-          </Link>
-        </Button>
+        {import.meta.env.DEV && (
+          <Button asChild variant="outline" className="h-12 gap-2 px-4 text-sm" data-testid="button-test-campaign">
+            <Link href="/campaigns/test">
+              <TestTube className="h-4 w-4" />
+              테스트
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">

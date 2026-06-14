@@ -460,18 +460,18 @@ export default function CampaignDetail() {
   const nextAction = (() => {
     if (isDraftLike || isRejected) {
       return {
-        title: "바로 발송할 수 있어요",
-        description: "검수가 끝난 메시지, 발신번호, 크레딧 기준을 확인한 뒤 발송해요.",
+        title: "발송 전 확인만 남았어요",
+        description: "받을 고객, 차감 크레딧, 발신번호를 확인한 뒤 발송해요.",
         tone: "bg-emerald-50 border-emerald-100 text-emerald-700",
         icon: Send,
       };
     }
     if (campaign.status === "pending" || campaign.status === "approval_requested") {
       return {
-        title: "발송 준비를 확인했어요",
+        title: "발송 전 확인만 남았어요",
         description: hasReservedCredits
           ? `${formatNumber(creditEstimate.neededCredits)}C를 발송용으로 묶어두었어요. 발송하기를 누르면 이 크레딧을 사용해요.`
-          : "발송하기를 누르면 크레딧을 확인하고 바로 발송해요.",
+          : "발송하기 전에 받을 고객과 차감 크레딧을 다시 확인해요.",
         tone: "bg-emerald-50 border-emerald-100 text-emerald-700",
         icon: Send,
       };
@@ -502,8 +502,8 @@ export default function CampaignDetail() {
         };
       }
       return {
-        title: "발송 준비가 끝났어요",
-        description: "필요 크레딧이 충분해요. 발송하기를 누르면 크레딧이 사용돼요.",
+        title: "발송 전 확인만 남았어요",
+        description: "필요 크레딧이 충분해요. 확인 창에서 한 번 더 확인한 뒤 발송해요.",
         tone: "bg-emerald-50 border-emerald-100 text-emerald-700",
         icon: CheckCircle2,
       };
@@ -607,8 +607,8 @@ export default function CampaignDetail() {
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-2">
-        <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2">
+        <div className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
           {canEdit && (
             <Button variant="outline" asChild className="h-11 gap-2" data-testid="button-edit">
               <Link href={`/campaigns/${campaign.id}/edit`}>
@@ -660,16 +660,16 @@ export default function CampaignDetail() {
           )}
         </div>
         {(canCancelBeforeSend || canDelete) && (
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-1">
           {canCancelBeforeSend && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="h-10 gap-2 px-3 text-small text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  className="h-9 gap-1.5 px-2 text-caption text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   data-testid="button-cancel-campaign"
                 >
-                  <XCircle className="h-4 w-4" />
+                  <XCircle className="h-3.5 w-3.5" />
                   발송 전 취소
                 </Button>
               </AlertDialogTrigger>
@@ -699,8 +699,8 @@ export default function CampaignDetail() {
           {canDelete && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" className="h-10 gap-2 px-3 text-small text-destructive hover:bg-destructive/10 hover:text-destructive" data-testid="button-delete">
-                  <Trash2 className="h-4 w-4" />
+                <Button variant="ghost" className="h-9 gap-1.5 px-2 text-caption text-muted-foreground hover:bg-destructive/10 hover:text-destructive" data-testid="button-delete">
+                  <Trash2 className="h-3.5 w-3.5" />
                   삭제
                 </Button>
               </AlertDialogTrigger>
@@ -743,7 +743,7 @@ export default function CampaignDetail() {
                 <NextActionIcon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <p className="text-caption font-semibold">다음 단계</p>
+                <p className="text-caption font-semibold">최종 확인</p>
                 <h2 className="mt-1 text-xl font-bold md:text-2xl">{nextAction.title}</h2>
                 <p className="mt-1 text-small opacity-80">{nextAction.description}</p>
               </div>
@@ -793,9 +793,9 @@ export default function CampaignDetail() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-primary" />
-                발송 상태
+                진행 상태
               </CardTitle>
-              <CardDescription>문자가 어디까지 진행됐는지 확인해요.</CardDescription>
+              <CardDescription>발송 전에는 준비 상태만 간단히 확인해요.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-3 md:grid-cols-4">
