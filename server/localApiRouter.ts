@@ -143,6 +143,41 @@ function generateAdminToken(adminId: string) {
   return Buffer.from(JSON.stringify({ data, signature })).toString("base64");
 }
 
+function generateImpersonateToken(adminId: string, userId: string) {
+  const data = JSON.stringify({
+    type: "impersonate",
+    adminId,
+    userId,
+    exp: Date.now() + 2 * 60 * 60 * 1000,
+  });
+  const signature = crypto
+    .createHmac("sha256", process.env.ADMIN_JWT_SECRET!)
+    .update(data)
+    .digest("hex");
+
+  return Buffer.from(JSON.stringify({ data, signature })).toString("base64");
+}
+
+function verifyImpersonateToken(token: string): { userId: string; adminId: string } | null {
+  try {
+    const secret = process.env.ADMIN_JWT_SECRET;
+    if (!secret) return null;
+    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
+    const { data, signature } = decoded;
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(data)
+      .digest("hex");
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    if (payload.type !== "impersonate") return null;
+    return { userId: payload.userId, adminId: payload.adminId };
+  } catch {
+    return null;
+  }
+}
+
 async function ensureLocalAdmin(pool: any) {
   await pool.query(
     `
@@ -199,7 +234,11 @@ function getRequestUserId(req: Request) {
 
   const impersonateUserId = req.headers["x-impersonate-user-id"];
   if (typeof impersonateUserId === "string" && impersonateUserId.trim()) {
-    return impersonateUserId.trim();
+    const impersonateToken = req.headers["x-impersonate-token"];
+    if (typeof impersonateToken !== "string") return LOCAL_DEFAULT_USER_ID;
+    const verified = verifyImpersonateToken(impersonateToken);
+    if (verified?.userId === impersonateUserId.trim()) return verified.userId;
+    return LOCAL_DEFAULT_USER_ID;
   }
 
   return LOCAL_DEFAULT_USER_ID;
@@ -1309,19 +1348,28 @@ async function handleLocalVerifyMessageCopyPrivateTemplateFlow(req: Request, res
     [LOCAL_ADMIN.id, ownerTemplateId, requestId],
   );
 
+  const ownerImpersonateHeaders = {
+    "x-impersonate-user-id": ownerUserId,
+    "x-impersonate-token": generateImpersonateToken(LOCAL_ADMIN.id, ownerUserId),
+  } as any;
+  const otherImpersonateHeaders = {
+    "x-impersonate-user-id": otherUserId,
+    "x-impersonate-token": generateImpersonateToken(LOCAL_ADMIN.id, otherUserId),
+  } as any;
+
   const ownerRequests = await runLocalVerificationHandler(req, handleMessageCopyRequests, {
-    headers: { "x-impersonate-user-id": ownerUserId } as any,
+    headers: ownerImpersonateHeaders,
   });
   const otherRequests = await runLocalVerificationHandler(req, handleMessageCopyRequests, {
-    headers: { "x-impersonate-user-id": otherUserId } as any,
+    headers: otherImpersonateHeaders,
   });
   const ownerTemplates = await runLocalVerificationHandler(req, handleRecommendedTemplates, {
     query: {},
-    headers: { "x-impersonate-user-id": ownerUserId } as any,
+    headers: ownerImpersonateHeaders,
   });
   const otherTemplates = await runLocalVerificationHandler(req, handleRecommendedTemplates, {
     query: {},
-    headers: { "x-impersonate-user-id": otherUserId } as any,
+    headers: otherImpersonateHeaders,
   });
 
   const ownerRequest = ownerRequests.body?.requests?.find((item: any) => item.id === requestId);

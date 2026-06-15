@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq, and, asc, desc } from 'drizzle-orm';
+import { createHmac } from 'crypto';
 
 // Inline schema definitions for Vercel serverless
 import { sql } from "drizzle-orm";
@@ -122,10 +123,30 @@ function getSupabaseAdmin() {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
+function verifyImpersonateToken(token: string): { userId: string; adminId: string } | null {
+  try {
+    const secret = process.env.ADMIN_JWT_SECRET;
+    if (!secret) return null;
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+    const { data, signature } = decoded;
+    const expectedSignature = createHmac('sha256', secret).update(data).digest('hex');
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    if (payload.type !== 'impersonate') return null;
+    return { userId: payload.userId, adminId: payload.adminId };
+  } catch {
+    return null;
+  }
+}
+
 async function getOptionalUserId(req: VercelRequest) {
   const impersonateUserId = req.headers['x-impersonate-user-id'];
+  const impersonateToken = req.headers['x-impersonate-token'];
   if (typeof impersonateUserId === 'string' && impersonateUserId.trim()) {
-    return impersonateUserId.trim();
+    if (typeof impersonateToken !== 'string') return null;
+    const verified = verifyImpersonateToken(impersonateToken);
+    return verified?.userId === impersonateUserId.trim() ? verified.userId : null;
   }
 
   const authHeader = req.headers.authorization;
@@ -170,7 +191,7 @@ function mapPrivateTemplate(row: typeof templates.$inferSelect) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Impersonate-Token, X-Impersonate-User-Id');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();

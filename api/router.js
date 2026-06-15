@@ -17774,6 +17774,7 @@ import { createClient as createClient37 } from "@supabase/supabase-js";
 import { neon as neon64 } from "@neondatabase/serverless";
 import { drizzle as drizzle64 } from "drizzle-orm/neon-http";
 import { eq as eq53, and as and13, asc, desc as desc15 } from "drizzle-orm";
+import { createHmac as createHmac23 } from "crypto";
 import { sql as sql41 } from "drizzle-orm";
 import { pgTable as pgTable55, text as text42, varchar as varchar32, timestamp as timestamp52, integer as integer28, boolean as boolean30, jsonb as jsonb18 } from "drizzle-orm/pg-core";
 var recommendedTemplates3 = pgTable55("recommended_templates", {
@@ -17856,10 +17857,29 @@ function getSupabaseAdmin36() {
   if (!url || !key) return null;
   return createClient37(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
+function verifyImpersonateToken27(token) {
+  try {
+    const secret = process.env.ADMIN_JWT_SECRET;
+    if (!secret) return null;
+    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
+    const { data, signature } = decoded;
+    const expectedSignature = createHmac23("sha256", secret).update(data).digest("hex");
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    if (payload.type !== "impersonate") return null;
+    return { userId: payload.userId, adminId: payload.adminId };
+  } catch {
+    return null;
+  }
+}
 async function getOptionalUserId(req) {
   const impersonateUserId = req.headers["x-impersonate-user-id"];
+  const impersonateToken = req.headers["x-impersonate-token"];
   if (typeof impersonateUserId === "string" && impersonateUserId.trim()) {
-    return impersonateUserId.trim();
+    if (typeof impersonateToken !== "string") return null;
+    const verified = verifyImpersonateToken27(impersonateToken);
+    return verified?.userId === impersonateUserId.trim() ? verified.userId : null;
   }
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) return null;
@@ -17900,7 +17920,7 @@ function mapPrivateTemplate(row) {
 async function handler78(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Impersonate-Token, X-Impersonate-User-Id");
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -18274,7 +18294,7 @@ import { drizzle as drizzle67 } from "drizzle-orm/neon-http";
 import { eq as eq56, desc as desc18, and as and15, or as or8 } from "drizzle-orm";
 import { pgTable as pgTable58, text as text45, integer as integer29, timestamp as timestamp55, jsonb as jsonb19 } from "drizzle-orm/pg-core";
 import { z as z5 } from "zod";
-import { randomUUID as randomUUID4, createHmac as createHmac23 } from "crypto";
+import { randomUUID as randomUUID4, createHmac as createHmac24 } from "crypto";
 var BIZCHAT_DEV_URL17 = process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443";
 var BIZCHAT_PROD_URL17 = process.env.BIZCHAT_PROD_API_URL || "https://gw.bizchat1.co.kr";
 function getBizChatConfig() {
@@ -18347,11 +18367,11 @@ function getSupabaseAdmin37() {
   if (!url || !key) throw new Error("Supabase configuration is missing");
   return createClient40(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
-function verifyImpersonateToken27(token) {
+function verifyImpersonateToken28(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac23("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    const expectedSignature = createHmac24("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -18365,7 +18385,7 @@ async function verifyAuth33(req) {
   const impersonateToken = req.headers["x-impersonate-token"];
   const impersonateUserId = req.headers["x-impersonate-user-id"];
   if (impersonateToken && impersonateUserId) {
-    const verified = verifyImpersonateToken27(impersonateToken);
+    const verified = verifyImpersonateToken28(impersonateToken);
     if (verified && verified.userId === impersonateUserId) {
       return { userId: verified.userId, email: "" };
     }
@@ -18564,7 +18584,7 @@ __export(transactions_exports2, {
 });
 import { createClient as createClient41 } from "@supabase/supabase-js";
 import { neon as neon68, neonConfig as neonConfig23 } from "@neondatabase/serverless";
-import { createHmac as createHmac24 } from "crypto";
+import { createHmac as createHmac25 } from "crypto";
 import { drizzle as drizzle68 } from "drizzle-orm/neon-http";
 import { eq as eq57, desc as desc19 } from "drizzle-orm";
 import { pgTable as pgTable59, text as text46, timestamp as timestamp56 } from "drizzle-orm/pg-core";
@@ -18591,11 +18611,11 @@ function getSupabaseAdmin38() {
   if (!url || !key) throw new Error("Supabase configuration is missing");
   return createClient41(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
-function verifyImpersonateToken28(token) {
+function verifyImpersonateToken29(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
-    const expectedSignature = createHmac24("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    const expectedSignature = createHmac25("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -18609,7 +18629,7 @@ async function verifyAuth34(req) {
   const impersonateToken = req.headers["x-impersonate-token"];
   const impersonateUserId = req.headers["x-impersonate-user-id"];
   if (impersonateToken && impersonateUserId) {
-    const verified = verifyImpersonateToken28(impersonateToken);
+    const verified = verifyImpersonateToken29(impersonateToken);
     if (verified && verified.userId === impersonateUserId) {
       return { userId: verified.userId, email: "" };
     }

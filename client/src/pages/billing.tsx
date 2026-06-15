@@ -219,37 +219,6 @@ export default function Billing() {
     queryKey: ["/api/credits/summary"],
   });
 
-  const chargeMutation = useMutation({
-    mutationFn: async (data: { amount: number; paymentMethod: string }) => {
-      const res = await apiRequest("POST", "/api/transactions/charge", data);
-      return await res.json();
-    },
-    onSuccess: async (data) => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/credits/summary"] });
-      await refetchUser();
-      const chargedAmount = data.transaction?.amount
-        ? Math.abs(parseFloat(data.transaction.amount))
-        : chargeAmount;
-      toast({
-        title: "크레딧을 충전했어요",
-        description: `${formatCurrency(chargedAmount)}을 충전했어요.`,
-      });
-      setIsChargeDialogOpen(false);
-      setChargeAmount(100000);
-      setSelectedProductType("light");
-      setCustomAmount("");
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "충전을 다시 확인해요",
-        description: error.message || "잠시 후 다시 시도해요",
-        variant: "destructive",
-      });
-    },
-  });
-
   const devCreditGrantMutation = useMutation({
     mutationFn: async (productType: CreditProductType) => {
       const res = await apiRequest("POST", "/api/credits/dev-grant", { productType });
@@ -393,13 +362,6 @@ export default function Billing() {
       });
     },
   });
-
-  const handleCharge = () => {
-    chargeMutation.mutate({
-      amount: chargeAmount,
-      paymentMethod: "card",
-    });
-  };
 
   const handleKispgCheckout = () => {
     trackFunnelEvent({
@@ -675,11 +637,11 @@ export default function Billing() {
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button variant="outline" onClick={() => setIsChargeDialogOpen(false)} disabled={chargeMutation.isPending || kispgCheckoutMutation.isPending}>
+              <Button variant="outline" onClick={() => setIsChargeDialogOpen(false)} disabled={kispgCheckoutMutation.isPending}>
                 닫기
               </Button>
               <Button
-                disabled={chargeAmount < 10000 || chargeMutation.isPending || kispgCheckoutMutation.isPending}
+                disabled={chargeAmount < 10000 || kispgCheckoutMutation.isPending}
                 onClick={handleKispgCheckout}
                 className="gap-2"
                 data-testid="button-kispg-checkout"

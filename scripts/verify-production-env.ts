@@ -21,6 +21,11 @@ const exactValues: Record<string, string> = {
   KISPG_USE_PROD: "true",
 };
 
+const forbiddenTrueValues = [
+  "ENABLE_DIRECT_CHARGE",
+  "ENABLE_STRIPE_PAYMENTS",
+];
+
 const insecureValues = new Set([
   "wepick-admin-secret",
   "local-dev-admin-secret",
@@ -31,12 +36,16 @@ const insecureValues = new Set([
 
 const missing = required.filter((key) => !process.env[key]?.trim());
 const wrongValues = Object.entries(exactValues).filter(([key, expected]) => process.env[key] !== expected);
+const forbiddenEnabled = forbiddenTrueValues.filter((key) => process.env[key] === "true");
+const invalidUrls = [
+  ["KISPG_RETURN_URL", process.env.KISPG_RETURN_URL],
+].filter(([, value]) => value && !String(value).startsWith("https://"));
 const insecure = [...required, ...Object.keys(exactValues)].filter((key) => {
   const value = process.env[key];
   return value ? insecureValues.has(value) : false;
 });
 
-if (missing.length || wrongValues.length || insecure.length) {
+if (missing.length || wrongValues.length || forbiddenEnabled.length || invalidUrls.length || insecure.length) {
   console.error("Production environment check failed.");
 
   if (missing.length) {
@@ -49,6 +58,14 @@ if (missing.length || wrongValues.length || insecure.length) {
         .map(([key, expected]) => `${key} must be ${expected}`)
         .join(", ")}`,
     );
+  }
+
+  if (forbiddenEnabled.length) {
+    console.error(`Disabled payment paths must not be enabled: ${forbiddenEnabled.join(", ")}`);
+  }
+
+  if (invalidUrls.length) {
+    console.error(`Invalid URL values: ${invalidUrls.map(([key]) => `${key} must start with https://`).join(", ")}`);
   }
 
   if (insecure.length) {
