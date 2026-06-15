@@ -29,6 +29,7 @@ import * as templatesIdSubmit from './handlers/templates/[id]/submit';
 import * as adminAgencies from './handlers/admin/agencies/index';
 import * as adminAnnouncements from './handlers/admin/announcements/index';
 import * as adminCampaigns from './handlers/admin/campaigns';
+import * as adminFunnel from './handlers/admin/funnel';
 import * as adminLogin from './handlers/admin/login';
 import * as adminLogs from './handlers/admin/logs';
 import * as adminMe from './handlers/admin/me';
@@ -57,6 +58,7 @@ import * as creditsEstimate from './handlers/credits/estimate';
 import * as creditsPolicy from './handlers/credits/policy';
 import * as creditsSummary from './handlers/credits/summary';
 import * as dashboardStats from './handlers/dashboard/stats';
+import * as events from './handlers/events/index';
 import * as kispgAuth from './handlers/kispg/auth';
 import * as kispgCallback from './handlers/kispg/callback';
 import * as mapticsGeofences from './handlers/maptics/geofences';
@@ -113,6 +115,7 @@ const routes: RouteEntry[] = [
   { segments: ['admin', 'agencies'], handler: adminAgencies },
   { segments: ['admin', 'announcements'], handler: adminAnnouncements },
   { segments: ['admin', 'campaigns'], handler: adminCampaigns },
+  { segments: ['admin', 'funnel'], handler: adminFunnel },
   { segments: ['admin', 'login'], handler: adminLogin },
   { segments: ['admin', 'logs'], handler: adminLogs },
   { segments: ['admin', 'me'], handler: adminMe },
@@ -141,6 +144,7 @@ const routes: RouteEntry[] = [
   { segments: ['credits', 'policy'], handler: creditsPolicy },
   { segments: ['credits', 'summary'], handler: creditsSummary },
   { segments: ['dashboard', 'stats'], handler: dashboardStats },
+  { segments: ['events'], handler: events },
   { segments: ['kispg', 'auth'], handler: kispgAuth },
   { segments: ['kispg', 'callback'], handler: kispgCallback },
   { segments: ['maptics', 'geofences'], handler: mapticsGeofences },

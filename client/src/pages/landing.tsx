@@ -11,6 +11,7 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
+import { trackFunnelEvent } from "@/lib/funnel-events";
 
 const ORANGE = "#FF6B1A";
 
@@ -150,6 +151,13 @@ function PhoneMockup() {
 
 export default function Landing() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const trackLandingClick = (cta: string) => {
+    trackFunnelEvent({
+      eventName: "landing_cta_clicked",
+      funnelStep: "landing",
+      metadata: { cta },
+    });
+  };
 
   return (
     <div className="min-h-screen bg-white text-[#111827]">
@@ -178,7 +186,7 @@ export default function Landing() {
           </nav>
           <div className="flex items-center gap-3">
             <Button variant="ghost" asChild className="font-bold text-slate-950">
-              <a href="/auth">로그인</a>
+              <a href="/auth" onClick={() => trackLandingClick("header_login")}>로그인</a>
             </Button>
           </div>
         </div>
@@ -211,13 +219,13 @@ export default function Landing() {
                 </p>
                 <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                   <Button asChild className="min-h-14 rounded-2xl bg-[#FF6B1A] px-9 text-base font-black text-white shadow-2xl shadow-orange-500/25 hover:bg-[#f25a12]">
-                    <a href="/auth">
+                    <a href="/auth" onClick={() => trackLandingClick("hero_start")}>
                       지금 바로 시작하기
                       <ArrowRight className="h-5 w-5" />
                     </a>
                   </Button>
                   <Button asChild variant="outline" className="min-h-14 rounded-2xl border-slate-200 bg-white px-9 text-base font-black shadow-sm">
-                    <a href="/auth">도입 문의</a>
+                    <a href="/auth" onClick={() => trackLandingClick("hero_inquiry")}>도입 문의</a>
                   </Button>
                 </div>
 

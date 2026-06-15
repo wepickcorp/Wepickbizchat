@@ -36,6 +36,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { calculateCampaignCredits } from "@shared/credit-policy";
 import { CREDIT_COPY, getCreditShortageMessage, getMinimumSendMessage } from "@/lib/credit-copy";
+import { trackFunnelEvent } from "@/lib/funnel-events";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -307,6 +308,16 @@ export default function CampaignDetail() {
       return response.json();
     },
     onSuccess: () => {
+      trackFunnelEvent({
+        eventName: "send_started",
+        funnelStep: "send",
+        campaignId: campaignId || undefined,
+        metadata: {
+          targetCount: campaign?.targetCount,
+          neededCredits: creditEstimate.neededCredits,
+          source: "campaign_detail",
+        },
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
       queryClient.invalidateQueries({ queryKey: ["/api/campaigns", campaignId] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
@@ -319,6 +330,17 @@ export default function CampaignDetail() {
       });
     },
     onError: (error: Error) => {
+      trackFunnelEvent({
+        eventName: "send_failed",
+        funnelStep: "send",
+        campaignId: campaignId || undefined,
+        metadata: {
+          targetCount: campaign?.targetCount,
+          neededCredits: creditEstimate.neededCredits,
+          source: "campaign_detail",
+          reason: error.message,
+        },
+      });
       toast({
         title: "발송을 다시 확인해요",
         description: error.message,
@@ -623,6 +645,18 @@ export default function CampaignDetail() {
                 <Button
                   className="h-11 gap-2 sm:min-w-[150px]"
                   disabled={!canSendWithCredits || startMutation.isPending}
+                  onClick={() => {
+                    trackFunnelEvent({
+                      eventName: "send_confirm_opened",
+                      funnelStep: "send",
+                      campaignId: campaignId || undefined,
+                      metadata: {
+                        targetCount: campaign.targetCount,
+                        neededCredits: creditEstimate.neededCredits,
+                        source: "campaign_detail",
+                      },
+                    });
+                  }}
                   data-testid="button-start"
                 >
                   <Send className="h-4 w-4" />
@@ -642,7 +676,19 @@ export default function CampaignDetail() {
                 <AlertDialogFooter>
                   <AlertDialogCancel>닫기</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={() => startMutation.mutate()}
+                    onClick={() => {
+                      trackFunnelEvent({
+                        eventName: "send_submitted",
+                        funnelStep: "send",
+                        campaignId: campaignId || undefined,
+                        metadata: {
+                          targetCount: campaign.targetCount,
+                          neededCredits: creditEstimate.neededCredits,
+                          source: "campaign_detail",
+                        },
+                      });
+                      startMutation.mutate();
+                    }}
                     disabled={startMutation.isPending}
                   >
                     {startMutation.isPending ? (

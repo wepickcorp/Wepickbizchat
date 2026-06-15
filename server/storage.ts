@@ -6,6 +6,7 @@ import {
   transactions,
   creditGrants,
   creditLedger,
+  eventLogs,
   reports,
   templates,
   files,
@@ -29,6 +30,8 @@ import {
   type InsertCreditGrant,
   type CreditLedger,
   type InsertCreditLedger,
+  type EventLog,
+  type InsertEventLog,
   type Report,
   type InsertReport,
   type Template,
@@ -156,6 +159,7 @@ export interface IStorage {
   hasPurchasedCreditProductInCurrentKstMonth(userId: string, productType: CreditProductType): Promise<boolean>;
   createCreditGrant(grant: InsertCreditGrant): Promise<CreditGrant>;
   createCreditLedgerEntry(entry: InsertCreditLedger): Promise<CreditLedger>;
+  createEventLog(entry: InsertEventLog): Promise<EventLog>;
   grantPurchasedCreditsAtomically(input: {
     userId: string;
     transactionId?: string | null;
@@ -597,6 +601,11 @@ export class DatabaseStorage implements IStorage {
 
   async createCreditLedgerEntry(entryData: InsertCreditLedger): Promise<CreditLedger> {
     const [entry] = await db.insert(creditLedger).values(entryData).returning();
+    return entry;
+  }
+
+  async createEventLog(entryData: InsertEventLog): Promise<EventLog> {
+    const [entry] = await db.insert(eventLogs).values(entryData).returning();
     return entry;
   }
 

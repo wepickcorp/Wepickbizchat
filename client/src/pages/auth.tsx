@@ -20,6 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, FileText, Building2 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
+import { trackFunnelEvent } from "@/lib/funnel-events";
 
 interface AgencyOption {
   id: string;
@@ -275,12 +276,22 @@ export default function AuthPage() {
       : await signIn(loginEmail, loginPassword);
 
     if (error) {
+      trackFunnelEvent({
+        eventName: "login_failed",
+        funnelStep: "auth",
+        metadata: { method: isLocalDev ? "local_dev" : "email" },
+      });
       toast({
         title: "로그인 실패",
         description: error.message || "이메일 또는 비밀번호를 확인해주세요.",
         variant: "destructive",
       });
     } else {
+      trackFunnelEvent({
+        eventName: "login_completed",
+        funnelStep: "auth",
+        metadata: { method: isLocalDev ? "local_dev" : "email" },
+      });
       toast({
         title: "로그인 성공",
         description: "환영합니다!",
@@ -310,12 +321,22 @@ export default function AuthPage() {
       : await signUp(signupEmail, signupPassword, signupName, selectedAgencyId || undefined);
 
     if (error) {
+      trackFunnelEvent({
+        eventName: "signup_failed",
+        funnelStep: "auth",
+        metadata: { method: isLocalDev ? "local_dev" : "email" },
+      });
       toast({
         title: "회원가입 실패",
         description: error.message || "회원가입 중 오류가 발생했어요.",
         variant: "destructive",
       });
     } else {
+      trackFunnelEvent({
+        eventName: "signup_completed",
+        funnelStep: "auth",
+        metadata: { method: isLocalDev ? "local_dev" : "email" },
+      });
       toast({
         title: "회원가입 성공",
         description: "이메일 인증을 완료해주세요.",
@@ -361,12 +382,22 @@ export default function AuthPage() {
     setIsLoading(true);
     const { error } = await localDevLogin("local@wepick.test", "password123");
     if (error) {
+      trackFunnelEvent({
+        eventName: "login_failed",
+        funnelStep: "auth",
+        metadata: { method: "local_dev_quick" },
+      });
       toast({
         title: "로컬 로그인 실패",
         description: error.message,
         variant: "destructive",
       });
     } else {
+      trackFunnelEvent({
+        eventName: "login_completed",
+        funnelStep: "auth",
+        metadata: { method: "local_dev_quick" },
+      });
       toast({
         title: "로컬 테스트 계정 로그인",
         description: "크레딧 16,000C가 있는 테스트 계정으로 시작해요.",

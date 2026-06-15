@@ -61,6 +61,7 @@ import type { Transaction, Refund } from "@shared/schema";
 import { CREDIT_PRODUCTS, type CreditProductType } from "@shared/credit-policy";
 import { CREDIT_COPY } from "@/lib/credit-copy";
 import { useLocation } from "wouter";
+import { trackFunnelEvent } from "@/lib/funnel-events";
 
 interface CreditGrantView {
   id: string;
@@ -308,6 +309,12 @@ export default function Billing() {
         }
       } else if (resultCode === 'XXXX') {
         // 결제 실패
+        trackFunnelEvent({
+          eventName: "payment_failed",
+          funnelStep: "payment",
+          productType: customAmount ? "custom" : selectedProductType,
+          metadata: { amount: chargeAmount, reason: data?.resultMsg || "cancelled" },
+        });
         setShowPaymentFrame(false);
         toast({
           title: "결제를 다시 확인해요",
@@ -328,6 +335,12 @@ export default function Billing() {
     },
     onSuccess: (data) => {
       if (data.success && data.kispgAuthUrl && data.params) {
+        trackFunnelEvent({
+          eventName: "payment_auth_opened",
+          funnelStep: "payment",
+          productType: customAmount ? "custom" : selectedProductType,
+          metadata: { amount: chargeAmount },
+        });
         const isMobile = /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
 
         if (isMobile) {
@@ -367,6 +380,12 @@ export default function Billing() {
       }
     },
     onError: (error: Error) => {
+      trackFunnelEvent({
+        eventName: "payment_failed",
+        funnelStep: "payment",
+        productType: customAmount ? "custom" : selectedProductType,
+        metadata: { amount: chargeAmount, reason: error.message },
+      });
       toast({
         title: "결제 오류",
         description: error.message || "결제 페이지로 다시 이동해요",
@@ -383,6 +402,12 @@ export default function Billing() {
   };
 
   const handleKispgCheckout = () => {
+    trackFunnelEvent({
+      eventName: "payment_started",
+      funnelStep: "payment",
+      productType: customAmount ? "custom" : selectedProductType,
+      metadata: { amount: chargeAmount },
+    });
     kispgCheckoutMutation.mutate({
       amount: chargeAmount,
       productType: customAmount ? undefined : selectedProductType,
@@ -444,6 +469,16 @@ export default function Billing() {
 
   const selectCreditProduct = (productType: CreditProductType) => {
     const product = CREDIT_PRODUCTS[productType];
+    trackFunnelEvent({
+      eventName: "credit_product_selected",
+      funnelStep: "credit_product",
+      productType,
+      metadata: {
+        credits: product.credits,
+        priceKrw: product.priceKrw,
+        messageCount: product.messageCount,
+      },
+    });
     setSelectedProductType(productType);
     setChargeAmount(product.priceKrw);
     setCustomAmount("");

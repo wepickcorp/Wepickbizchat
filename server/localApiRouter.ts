@@ -440,6 +440,170 @@ async function getVerifiedAdmin(req: Request) {
   return admin;
 }
 
+const FUNNEL_STEPS = [
+  { key: "landing", label: "랜딩에서 시작", events: ["landing_cta_clicked"] },
+  { key: "auth", label: "가입/로그인 완료", events: ["signup_completed", "login_completed"] },
+  { key: "credit", label: "충전 관심", events: ["credit_product_selected", "payment_started", "payment_auth_opened"] },
+  { key: "campaign", label: "문자 만들기 시작", events: ["campaign_create_started"] },
+  { key: "message", label: "메시지 선택", events: ["message_template_selected"] },
+  { key: "target", label: "받을 고객 설정", events: ["targeting_completed"] },
+  { key: "review", label: "최종 확인 도착", events: ["campaign_review_reached"] },
+  { key: "confirm", label: "발송 확인", events: ["send_confirm_opened", "send_submitted"] },
+  { key: "send", label: "발송 시작", events: ["send_started"] },
+];
+
+const FUNNEL_FAILURE_EVENTS = [
+  "signup_failed",
+  "login_failed",
+  "payment_failed",
+  "campaign_update_failed",
+  "send_failed",
+];
+
+function getFunnelDays(value: unknown) {
+  const parsed = Number.parseInt(String(value || "7"), 10);
+  if (!Number.isFinite(parsed)) return 7;
+  return Math.min(90, Math.max(1, parsed));
+}
+
+function buildLocalFunnel(eventRows: any[]) {
+  const byEvent = new Map(
+    eventRows.map((row) => [
+      String(row.event_name),
+      { events: Number(row.event_count || 0), users: Number(row.user_count || 0) },
+    ]),
+  );
+
+  let previousUsers = 0;
+  return FUNNEL_STEPS.map((step, index) => {
+    const totals = step.events.reduce(
+      (acc, eventName) => {
+        const row = byEvent.get(eventName);
+        acc.events += row?.events || 0;
+        acc.users += row?.users || 0;
+        return acc;
+      },
+      { events: 0, users: 0 },
+    );
+
+    const conversionFromPrevious =
+      index === 0 || previousUsers === 0 ? 100 : Math.round((totals.users / previousUsers) * 1000) / 10;
+    const dropoff = index === 0 ? 0 : Math.max(0, previousUsers - totals.users);
+    previousUsers = totals.users;
+
+    return {
+      key: step.key,
+      label: step.label,
+      events: totals.events,
+      users: totals.users,
+      conversionFromPrevious,
+      dropoff,
+    };
+  });
+}
+
+async function handleAdminFunnel(req: Request, res: Response) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const admin = await getVerifiedAdmin(req);
+  if (!admin) return res.status(401).json({ error: "Unauthorized" });
+
+  const days = getFunnelDays(req.query.period);
+  const pool = await getPool();
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  startDate.setHours(0, 0, 0, 0);
+
+  try {
+    const [eventResult, trendResult, recentResult, failureResult] = await Promise.all([
+      pool.query(
+        `select
+           event_name,
+           count(*)::int as event_count,
+           count(distinct coalesce(user_id, anonymous_id))::int as user_count
+         from event_logs
+         where created_at >= $1
+         group by event_name`,
+        [startDate],
+      ),
+      pool.query(
+        `select
+           date(created_at)::text as date,
+           event_name,
+           count(*)::int as event_count
+         from event_logs
+         where created_at >= $1
+           and event_name in ('landing_cta_clicked', 'campaign_review_reached', 'send_started')
+         group by date(created_at), event_name
+         order by date(created_at)`,
+        [startDate],
+      ),
+      pool.query(
+        `select event_name, funnel_step, page_path, campaign_id, product_type, metadata, created_at
+         from event_logs
+         where created_at >= $1
+         order by created_at desc
+         limit 30`,
+        [startDate],
+      ),
+      pool.query(
+        `select event_name, count(*)::int as event_count
+         from event_logs
+         where created_at >= $1
+           and event_name in ('signup_failed', 'login_failed', 'payment_failed', 'campaign_update_failed', 'send_failed')
+         group by event_name`,
+        [startDate],
+      ),
+    ]);
+
+    const funnel = buildLocalFunnel(eventResult.rows || []);
+    const first = funnel[0]?.users || 0;
+    const last = funnel[funnel.length - 1]?.users || 0;
+    const failureEvents = FUNNEL_FAILURE_EVENTS.map((eventName) => {
+      const row = (failureResult.rows || []).find((item: any) => item.event_name === eventName);
+      return { eventName, count: Number(row?.event_count || 0) };
+    });
+
+    return res.status(200).json({
+      period: { days, startDate: startDate.toISOString() },
+      missingTable: false,
+      overview: {
+        startUsers: first,
+        sendUsers: last,
+        finalConversion: first > 0 ? Math.round((last / first) * 1000) / 10 : 0,
+        failureCount: failureEvents.reduce((sum, item) => sum + item.count, 0),
+      },
+      funnel,
+      trends: trendResult.rows || [],
+      recentEvents: recentResult.rows || [],
+      failureEvents,
+    });
+  } catch (error: any) {
+    if (error?.code === "42P01" || String(error?.message || "").includes("event_logs")) {
+      return res.status(200).json({
+        period: { days, startDate: null },
+        missingTable: true,
+        overview: { startUsers: 0, sendUsers: 0, finalConversion: 0, failureCount: 0 },
+        funnel: FUNNEL_STEPS.map((step) => ({
+          key: step.key,
+          label: step.label,
+          events: 0,
+          users: 0,
+          conversionFromPrevious: 0,
+          dropoff: 0,
+        })),
+        trends: [],
+        recentEvents: [],
+        failureEvents: FUNNEL_FAILURE_EVENTS.map((eventName) => ({ eventName, count: 0 })),
+        message: "event_logs 테이블을 먼저 만들어야 해요.",
+      });
+    }
+    throw error;
+  }
+}
+
 async function handleAdminUsers(req: Request, res: Response) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -4960,6 +5124,7 @@ export async function localApiRouter(req: Request, res: Response, next: NextFunc
     if (req.path === "/api/admin/login") return await handleAdminLogin(req, res);
     if (req.path === "/api/admin/me") return await handleAdminMe(req, res);
     if (req.path === "/api/admin/users") return await handleAdminUsers(req, res);
+    if (req.path === "/api/admin/funnel") return await handleAdminFunnel(req, res);
     if (req.path === "/api/admin/logs") return await handleAdminLogs(req, res);
     if (req.path === "/api/admin/refunds") return await handleAdminRefunds(req, res);
     if (req.path === "/api/admin/message-copy-requests") return await handleAdminMessageCopyRequests(req, res);

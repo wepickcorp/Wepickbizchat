@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertCampaignSchema, insertMessageSchema, insertTargetingSchema, insertTemplateSchema, CAMPAIGN_STATUS } from "@shared/schema";
+import { insertCampaignSchema, insertEventLogSchema, insertMessageSchema, insertTargetingSchema, insertTemplateSchema, CAMPAIGN_STATUS } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
@@ -100,6 +100,14 @@ function hasUnresolvedTemplateVariables(...templates: Array<string | null | unde
   return templates.some((template) => /\{[^}]+\}/.test(template || ""));
 }
 
+function getClientIp(req: any) {
+  const forwardedFor = req.headers["x-forwarded-for"];
+  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+    return forwardedFor.split(",")[0]?.trim().slice(0, 45);
+  }
+  return (req.ip || req.socket?.remoteAddress || "").slice(0, 45);
+}
+
 // ATS 메타데이터 시뮬레이션 데이터
 function getSimulatedAtsMeta(metaType: string) {
   switch (metaType) {
@@ -164,6 +172,40 @@ export async function registerRoutes(
 ): Promise<Server> {
   await setupAuth(app);
   registerDevAuthRoutes(app);
+
+  app.post("/api/events", async (req, res) => {
+    try {
+      const raw = req.body || {};
+      const metadata =
+        raw.metadata && typeof raw.metadata === "object" && !Array.isArray(raw.metadata)
+          ? raw.metadata
+          : undefined;
+      const parsed = insertEventLogSchema.parse({
+        userId: typeof raw.userId === "string" && raw.userId ? raw.userId : undefined,
+        anonymousId: typeof raw.anonymousId === "string" ? raw.anonymousId.slice(0, 120) : undefined,
+        eventName: String(raw.eventName || "").slice(0, 100),
+        funnelStep: typeof raw.funnelStep === "string" ? raw.funnelStep.slice(0, 80) : undefined,
+        pagePath: typeof raw.pagePath === "string" ? raw.pagePath.slice(0, 1000) : undefined,
+        referrer: typeof raw.referrer === "string" ? raw.referrer.slice(0, 1000) : undefined,
+        campaignId: typeof raw.campaignId === "string" && raw.campaignId ? raw.campaignId : undefined,
+        templateId: typeof raw.templateId === "string" && raw.templateId ? raw.templateId : undefined,
+        productType: typeof raw.productType === "string" ? raw.productType.slice(0, 30) : undefined,
+        metadata,
+        userAgent: String(req.headers["user-agent"] || "").slice(0, 1000),
+        ipAddress: getClientIp(req),
+      });
+
+      if (!parsed.eventName) {
+        return res.status(400).json({ error: "eventName is required" });
+      }
+
+      await storage.createEventLog(parsed);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error recording event:", error);
+      res.status(204).send();
+    }
+  });
 
   app.get("/api/auth/user", isAuthenticated, async (req, res) => {
     try {

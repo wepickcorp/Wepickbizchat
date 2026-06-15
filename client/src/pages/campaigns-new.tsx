@@ -83,6 +83,7 @@ import LoadCampaignModal from "@/components/load-campaign-modal";
 import type { Template } from "@shared/schema";
 import { calculateCampaignCredits } from "@shared/credit-policy";
 import { getCreditShortageMessage, getMinimumSendMessage } from "@/lib/credit-copy";
+import { trackFunnelEvent } from "@/lib/funnel-events";
 import {
   getTemplateVariableKey,
   getTemplateVariableLabel,
@@ -577,6 +578,14 @@ export default function CampaignsNew() {
     },
   });
 
+  useEffect(() => {
+    trackFunnelEvent({
+      eventName: isEditMode ? "campaign_edit_opened" : "campaign_create_started",
+      funnelStep: "campaign_start",
+      campaignId: campaignId || undefined,
+    });
+  }, [campaignId, isEditMode]);
+
   const handleRecommendedTemplateSelect = useCallback((template: RecommendedTemplate) => {
     const normalizedTemplate = {
       ...template,
@@ -956,7 +965,19 @@ export default function CampaignsNew() {
         return startResponse.json();
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      const resultCampaignId = result?.campaign?.id || result?.id || campaignId;
+      trackFunnelEvent({
+        eventName: isEditMode ? "campaign_update_completed" : "send_started",
+        funnelStep: "send",
+        campaignId: resultCampaignId,
+        templateId: form.getValues("templateId"),
+        metadata: {
+          targetCount: form.getValues("targetCount"),
+          neededCredits: creditEstimate.neededCredits,
+          creationMode,
+        },
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       if (isEditMode) {
@@ -971,6 +992,17 @@ export default function CampaignsNew() {
       navigate(isEditMode ? `/campaigns/${campaignId}` : "/campaigns/history");
     },
     onError: (error: Error) => {
+      trackFunnelEvent({
+        eventName: isEditMode ? "campaign_update_failed" : "send_failed",
+        funnelStep: "send",
+        campaignId: campaignId || undefined,
+        templateId: form.getValues("templateId"),
+        metadata: {
+          targetCount: form.getValues("targetCount"),
+          neededCredits: creditEstimate.neededCredits,
+          reason: error.message,
+        },
+      });
       toast({
         title: isEditMode ? "수정 내용을 다시 확인해요" : "문자 발송을 다시 확인해요",
         description: error.message || "처리하는 중 문제가 생겼어요. 다시 시도해요.",
@@ -999,6 +1031,16 @@ export default function CampaignsNew() {
           : ["name", "templateId", "sndNum"];
       const isValid = await form.trigger(fieldsToValidate);
       if (!isValid) return;
+      trackFunnelEvent({
+        eventName: "message_template_selected",
+        funnelStep: "message",
+        templateId: form.getValues("templateId"),
+        metadata: {
+          messageType,
+          creationMode,
+          templateName: selectedTemplateSummaryName,
+        },
+      });
     }
     if (currentStep === 2) {
       if (creationMode === "recommended") {
@@ -1014,8 +1056,33 @@ export default function CampaignsNew() {
       }
       const isValid = await form.trigger(["gender", "ageMin", "ageMax", "targetCount"]);
       if (!isValid) return;
+      trackFunnelEvent({
+        eventName: "targeting_completed",
+        funnelStep: "target",
+        templateId: form.getValues("templateId"),
+        metadata: {
+          targetCount: form.getValues("targetCount"),
+          gender: form.getValues("gender"),
+          ageMin: form.getValues("ageMin"),
+          ageMax: form.getValues("ageMax"),
+          regions: form.getValues("regions"),
+          targetingMode: advancedTargeting.targetingMode,
+          geofenceCount: advancedTargeting.geofences?.length || 0,
+        },
+      });
     }
     if (currentStep < 3) {
+      if (currentStep === 2) {
+        trackFunnelEvent({
+          eventName: "campaign_review_reached",
+          funnelStep: "review",
+          templateId: form.getValues("templateId"),
+          metadata: {
+            targetCount: form.getValues("targetCount"),
+            neededCredits: creditEstimate.neededCredits,
+          },
+        });
+      }
       setIsTransitioning(true);
       console.log('[Campaign Form] Transitioning from step', currentStep, 'to step', currentStep + 1);
       setCurrentStep(prev => prev + 1);
@@ -1049,6 +1116,17 @@ export default function CampaignsNew() {
       return;
     }
     console.log('[Campaign Form] Submitting campaign data:', data);
+    trackFunnelEvent({
+      eventName: "send_submitted",
+      funnelStep: "send",
+      campaignId: campaignId || undefined,
+      templateId: data.templateId,
+      metadata: {
+        targetCount: data.targetCount,
+        neededCredits: creditEstimate.neededCredits,
+        creationMode,
+      },
+    });
     saveCampaignMutation.mutate(data);
   };
 
@@ -2426,6 +2504,18 @@ export default function CampaignsNew() {
                           (!creditModeEnabled && estimatedCost > legacyBalance)
                         }
                         className="min-h-12 gap-2 text-base"
+                        onClick={() => {
+                          trackFunnelEvent({
+                            eventName: "send_confirm_opened",
+                            funnelStep: "send",
+                            templateId: form.getValues("templateId"),
+                            metadata: {
+                              targetCount: form.getValues("targetCount"),
+                              neededCredits: creditEstimate.neededCredits,
+                              creationMode,
+                            },
+                          });
+                        }}
                         data-testid="button-save-campaign"
                       >
                         {saveCampaignMutation.isPending ? (

@@ -48,6 +48,7 @@ import AdminRefunds from "@/pages/admin/refunds";
 import AdminTaxInvoices from "@/pages/admin/tax-invoices";
 import AdminReports from "@/pages/admin/reports";
 import AdminAnalytics from "@/pages/admin/analytics";
+import AdminFunnel from "@/pages/admin/funnel";
 import AdminRecommendedTemplates from "@/pages/admin/recommended-templates";
 import AdminRecommendedTemplateForm from "@/pages/admin/recommended-template-form";
 import AdminMessageCopyRequests from "@/pages/admin/message-copy-requests";
@@ -307,6 +308,7 @@ function Router() {
       <Route path="/admin/tax-invoices" component={() => <AdminRoute component={AdminTaxInvoices} />} />
       <Route path="/admin/reports" component={() => <AdminRoute component={AdminReports} />} />
       <Route path="/admin/analytics" component={() => <AdminRoute component={AdminAnalytics} />} />
+      <Route path="/admin/funnel" component={() => <AdminRoute component={AdminFunnel} />} />
       <Route path="/admin/recommended-templates/new" component={() => <AdminRoute component={AdminRecommendedTemplateForm} />} />
       <Route path="/admin/recommended-templates/:id/edit" component={() => <AdminRoute component={AdminRecommendedTemplateForm} />} />
       <Route path="/admin/recommended-templates" component={() => <AdminRoute component={AdminRecommendedTemplates} />} />

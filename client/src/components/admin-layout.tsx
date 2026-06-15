@@ -15,6 +15,7 @@ import {
   Receipt,
   BarChart3,
   TrendingUp,
+  GitBranch,
   MessageSquarePlus,
   MessageSquareText
 } from "lucide-react";
@@ -40,6 +41,7 @@ const navItems = [
   { href: "/admin/tax-invoices", icon: Receipt, label: "세금계산서" },
   { href: "/admin/reports", icon: BarChart3, label: "정산 리포트" },
   { href: "/admin/analytics", icon: TrendingUp, label: "통계 분석" },
+  { href: "/admin/funnel", icon: GitBranch, label: "런칭 퍼널" },
   { href: "/admin/logs", icon: FileText, label: "활동 로그" },
 ];
 

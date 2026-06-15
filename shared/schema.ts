@@ -531,6 +531,35 @@ export const creditLedger = pgTable(
   ],
 );
 
+// Funnel event logs table
+// 제품 퍼널에서 사용자가 어디까지 진행했는지 세션/사용자 기준으로 남긴다.
+export const eventLogs = pgTable(
+  "event_logs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").references(() => users.id),
+    anonymousId: varchar("anonymous_id", { length: 120 }),
+    eventName: varchar("event_name", { length: 100 }).notNull(),
+    funnelStep: varchar("funnel_step", { length: 80 }),
+    pagePath: text("page_path"),
+    referrer: text("referrer"),
+    campaignId: varchar("campaign_id").references(() => campaigns.id),
+    templateId: varchar("template_id"),
+    productType: varchar("product_type", { length: 30 }),
+    metadata: jsonb("metadata"),
+    userAgent: text("user_agent"),
+    ipAddress: varchar("ip_address", { length: 45 }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_event_logs_created").on(table.createdAt),
+    index("idx_event_logs_event_created").on(table.eventName, table.createdAt),
+    index("idx_event_logs_user_created").on(table.userId, table.createdAt),
+    index("idx_event_logs_anonymous_created").on(table.anonymousId, table.createdAt),
+    index("idx_event_logs_funnel_created").on(table.funnelStep, table.createdAt),
+  ],
+);
+
 // Reports table
 export const reports = pgTable("reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -553,6 +582,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   transactions: many(transactions),
   creditGrants: many(creditGrants),
   creditLedger: many(creditLedger),
+  eventLogs: many(eventLogs),
   files: many(files),
   geofences: many(geofences),
 }));
@@ -634,6 +664,17 @@ export const creditLedgerRelations = relations(creditLedger, ({ one }) => ({
   }),
   campaign: one(campaigns, {
     fields: [creditLedger.campaignId],
+    references: [campaigns.id],
+  }),
+}));
+
+export const eventLogsRelations = relations(eventLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [eventLogs.userId],
+    references: [users.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [eventLogs.campaignId],
     references: [campaigns.id],
   }),
 }));
@@ -745,6 +786,11 @@ export const insertCreditLedgerSchema = createInsertSchema(creditLedger).omit({
   createdAt: true,
 });
 
+export const insertEventLogSchema = createInsertSchema(eventLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertReportSchema = createInsertSchema(reports).omit({
   id: true,
   createdAt: true,
@@ -806,6 +852,9 @@ export type InsertCreditGrant = z.infer<typeof insertCreditGrantSchema>;
 
 export type CreditLedger = typeof creditLedger.$inferSelect;
 export type InsertCreditLedger = z.infer<typeof insertCreditLedgerSchema>;
+
+export type EventLog = typeof eventLogs.$inferSelect;
+export type InsertEventLog = z.infer<typeof insertEventLogSchema>;
 
 export type Report = typeof reports.$inferSelect;
 export type InsertReport = z.infer<typeof insertReportSchema>;

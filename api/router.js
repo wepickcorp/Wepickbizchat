@@ -7321,6 +7321,32 @@ var creditLedger = pgTable20(
     uniqueIndex("uidx_credit_ledger_idempotency").on(table.idempotencyKey)
   ]
 );
+var eventLogs = pgTable20(
+  "event_logs",
+  {
+    id: varchar12("id").primaryKey().default(sql15`gen_random_uuid()`),
+    userId: varchar12("user_id").references(() => users10.id),
+    anonymousId: varchar12("anonymous_id", { length: 120 }),
+    eventName: varchar12("event_name", { length: 100 }).notNull(),
+    funnelStep: varchar12("funnel_step", { length: 80 }),
+    pagePath: text14("page_path"),
+    referrer: text14("referrer"),
+    campaignId: varchar12("campaign_id").references(() => campaigns12.id),
+    templateId: varchar12("template_id"),
+    productType: varchar12("product_type", { length: 30 }),
+    metadata: jsonb8("metadata"),
+    userAgent: text14("user_agent"),
+    ipAddress: varchar12("ip_address", { length: 45 }),
+    createdAt: timestamp18("created_at").defaultNow()
+  },
+  (table) => [
+    index("idx_event_logs_created").on(table.createdAt),
+    index("idx_event_logs_event_created").on(table.eventName, table.createdAt),
+    index("idx_event_logs_user_created").on(table.userId, table.createdAt),
+    index("idx_event_logs_anonymous_created").on(table.anonymousId, table.createdAt),
+    index("idx_event_logs_funnel_created").on(table.funnelStep, table.createdAt)
+  ]
+);
 var reports2 = pgTable20("reports", {
   id: varchar12("id").primaryKey().default(sql15`gen_random_uuid()`),
   campaignId: varchar12("campaign_id").references(() => campaigns12.id).notNull(),
@@ -7340,6 +7366,7 @@ var usersRelations = relations(users10, ({ many }) => ({
   transactions: many(transactions6),
   creditGrants: many(creditGrants),
   creditLedger: many(creditLedger),
+  eventLogs: many(eventLogs),
   files: many(files),
   geofences: many(geofences2)
 }));
@@ -7413,6 +7440,16 @@ var creditLedgerRelations = relations(creditLedger, ({ one }) => ({
   }),
   campaign: one(campaigns12, {
     fields: [creditLedger.campaignId],
+    references: [campaigns12.id]
+  })
+}));
+var eventLogsRelations = relations(eventLogs, ({ one }) => ({
+  user: one(users10, {
+    fields: [eventLogs.userId],
+    references: [users10.id]
+  }),
+  campaign: one(campaigns12, {
+    fields: [eventLogs.campaignId],
     references: [campaigns12.id]
   })
 }));
@@ -7510,6 +7547,10 @@ var insertCreditGrantSchema = createInsertSchema(creditGrants).omit({
   updatedAt: true
 });
 var insertCreditLedgerSchema = createInsertSchema(creditLedger).omit({
+  id: true,
+  createdAt: true
+});
+var insertEventLogSchema = createInsertSchema(eventLogs).omit({
   id: true,
   createdAt: true
 });
@@ -7681,8 +7722,8 @@ var MASTER_BALANCE = "100000000";
 function getDb22() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sql43 = neon22(databaseUrl);
-  return drizzle22(sql43, { schema: { users: users10, transactions: transactions6 } });
+  const sql44 = neon22(databaseUrl);
+  return drizzle22(sql44, { schema: { users: users10, transactions: transactions6 } });
 }
 async function handler23(req, res) {
   if (req.method !== "GET" && req.method !== "POST") {
@@ -8335,15 +8376,15 @@ async function handler29(req, res) {
   }
 }
 
-// src/handlers/admin/login.ts
-var login_exports = {};
-__export(login_exports, {
+// src/handlers/admin/funnel.ts
+var funnel_exports = {};
+__export(funnel_exports, {
   default: () => handler30
 });
 import { neon as neon29 } from "@neondatabase/serverless";
 import { drizzle as drizzle29 } from "drizzle-orm/neon-http";
-import { eq as eq27, sql as sql19 } from "drizzle-orm";
-import { pgTable as pgTable27, varchar as varchar16, timestamp as timestamp25, boolean as boolean15, jsonb as jsonb10 } from "drizzle-orm/pg-core";
+import { sql as sql19, eq as eq27 } from "drizzle-orm";
+import { pgTable as pgTable27, varchar as varchar16, timestamp as timestamp25, boolean as boolean15 } from "drizzle-orm/pg-core";
 import crypto17 from "crypto";
 var admins15 = pgTable27("admins", {
   id: varchar16("id").primaryKey().default(sql19`gen_random_uuid()`),
@@ -8356,24 +8397,239 @@ var admins15 = pgTable27("admins", {
   createdAt: timestamp25("created_at").defaultNow(),
   updatedAt: timestamp25("updated_at").defaultNow()
 });
-var adminLogs9 = pgTable27("admin_logs", {
-  id: varchar16("id").primaryKey().default(sql19`gen_random_uuid()`),
-  adminId: varchar16("admin_id").notNull(),
-  action: varchar16("action", { length: 50 }).notNull(),
-  targetType: varchar16("target_type", { length: 50 }),
-  targetId: varchar16("target_id"),
-  details: jsonb10("details"),
-  ipAddress: varchar16("ip_address", { length: 45 }),
-  createdAt: timestamp25("created_at").defaultNow()
-});
+var FUNNEL_STEPS = [
+  { key: "landing", label: "\uB79C\uB529\uC5D0\uC11C \uC2DC\uC791", events: ["landing_cta_clicked"] },
+  { key: "auth", label: "\uAC00\uC785/\uB85C\uADF8\uC778 \uC644\uB8CC", events: ["signup_completed", "login_completed"] },
+  { key: "credit", label: "\uCDA9\uC804 \uAD00\uC2EC", events: ["credit_product_selected", "payment_started", "payment_auth_opened"] },
+  { key: "campaign", label: "\uBB38\uC790 \uB9CC\uB4E4\uAE30 \uC2DC\uC791", events: ["campaign_create_started"] },
+  { key: "message", label: "\uBA54\uC2DC\uC9C0 \uC120\uD0DD", events: ["message_template_selected"] },
+  { key: "target", label: "\uBC1B\uC744 \uACE0\uAC1D \uC124\uC815", events: ["targeting_completed"] },
+  { key: "review", label: "\uCD5C\uC885 \uD655\uC778 \uB3C4\uCC29", events: ["campaign_review_reached"] },
+  { key: "confirm", label: "\uBC1C\uC1A1 \uD655\uC778", events: ["send_confirm_opened", "send_submitted"] },
+  { key: "send", label: "\uBC1C\uC1A1 \uC2DC\uC791", events: ["send_started"] }
+];
+var FAILURE_EVENTS = [
+  "signup_failed",
+  "login_failed",
+  "payment_failed",
+  "campaign_update_failed",
+  "send_failed"
+];
 function getDb29() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sqlClient = neon29(databaseUrl);
-  return drizzle29(sqlClient, { schema: { admins: admins15, adminLogs: adminLogs9 } });
+  return drizzle29(neon29(databaseUrl));
+}
+function verifyToken16(token) {
+  try {
+    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
+    const { data, signature } = decoded;
+    const expectedSignature = crypto17.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    return { adminId: payload.adminId };
+  } catch {
+    return null;
+  }
+}
+async function verifyAdminToken14(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const verified = verifyToken16(authHeader.replace("Bearer ", ""));
+  if (!verified) return null;
+  try {
+    const db = getDb29();
+    const admin = await db.select().from(admins15).where(eq27(admins15.id, verified.adminId)).limit(1);
+    if (admin.length === 0 || !admin[0].isActive) return null;
+    return admin[0];
+  } catch {
+    return null;
+  }
+}
+function getDays(value) {
+  const parsed = Number.parseInt(String(value || "7"), 10);
+  if (!Number.isFinite(parsed)) return 7;
+  return Math.min(90, Math.max(1, parsed));
+}
+function isMissingEventTable(error) {
+  const code = error?.code;
+  const message = error instanceof Error ? error.message : String(error || "");
+  return code === "42P01" || message.includes("event_logs");
+}
+function toNumber(value) {
+  return Number(value || 0);
+}
+function buildFunnel(eventRows) {
+  const byEvent = new Map(
+    eventRows.map((row) => [
+      String(row.event_name),
+      {
+        events: toNumber(row.event_count),
+        users: toNumber(row.user_count)
+      }
+    ])
+  );
+  let previousUsers = 0;
+  return FUNNEL_STEPS.map((step, index2) => {
+    const totals = step.events.reduce(
+      (acc, eventName) => {
+        const row = byEvent.get(eventName);
+        acc.events += row?.events || 0;
+        acc.users += row?.users || 0;
+        return acc;
+      },
+      { events: 0, users: 0 }
+    );
+    const conversionFromPrevious = index2 === 0 || previousUsers === 0 ? 100 : Math.round(totals.users / previousUsers * 1e3) / 10;
+    const dropoff = index2 === 0 ? 0 : Math.max(0, previousUsers - totals.users);
+    previousUsers = totals.users;
+    return {
+      key: step.key,
+      label: step.label,
+      events: totals.events,
+      users: totals.users,
+      conversionFromPrevious,
+      dropoff
+    };
+  });
+}
+async function handler30(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+  const admin = await verifyAdminToken14(req);
+  if (!admin) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    const db = getDb29();
+    const days = getDays(req.query.period);
+    const startDate = /* @__PURE__ */ new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
+    const [eventResult, trendResult, recentResult, failureResult] = await Promise.all([
+      db.execute(sql19`
+        SELECT
+          event_name,
+          COUNT(*)::int AS event_count,
+          COUNT(DISTINCT COALESCE(user_id, anonymous_id))::int AS user_count
+        FROM event_logs
+        WHERE created_at >= ${startDate}
+        GROUP BY event_name
+      `),
+      db.execute(sql19`
+        SELECT
+          DATE(created_at)::text AS date,
+          event_name,
+          COUNT(*)::int AS event_count
+        FROM event_logs
+        WHERE created_at >= ${startDate}
+          AND event_name IN ('landing_cta_clicked', 'campaign_review_reached', 'send_started')
+        GROUP BY DATE(created_at), event_name
+        ORDER BY DATE(created_at)
+      `),
+      db.execute(sql19`
+        SELECT event_name, funnel_step, page_path, campaign_id, product_type, metadata, created_at
+        FROM event_logs
+        WHERE created_at >= ${startDate}
+        ORDER BY created_at DESC
+        LIMIT 30
+      `),
+      db.execute(sql19`
+        SELECT event_name, COUNT(*)::int AS event_count
+        FROM event_logs
+        WHERE created_at >= ${startDate}
+          AND event_name IN ('signup_failed', 'login_failed', 'payment_failed', 'campaign_update_failed', 'send_failed')
+        GROUP BY event_name
+      `)
+    ]);
+    const funnel = buildFunnel(eventResult.rows || []);
+    const first = funnel[0]?.users || 0;
+    const last = funnel[funnel.length - 1]?.users || 0;
+    const finalConversion = first > 0 ? Math.round(last / first * 1e3) / 10 : 0;
+    const failureEvents = FAILURE_EVENTS.map((eventName) => {
+      const row = (failureResult.rows || []).find((item) => item.event_name === eventName);
+      return { eventName, count: toNumber(row?.event_count) };
+    });
+    return res.status(200).json({
+      period: { days, startDate: startDate.toISOString() },
+      missingTable: false,
+      overview: {
+        startUsers: first,
+        sendUsers: last,
+        finalConversion,
+        failureCount: failureEvents.reduce((sum, item) => sum + item.count, 0)
+      },
+      funnel,
+      trends: trendResult.rows || [],
+      recentEvents: recentResult.rows || [],
+      failureEvents
+    });
+  } catch (error) {
+    if (isMissingEventTable(error)) {
+      return res.status(200).json({
+        period: { days: getDays(req.query.period), startDate: null },
+        missingTable: true,
+        overview: { startUsers: 0, sendUsers: 0, finalConversion: 0, failureCount: 0 },
+        funnel: FUNNEL_STEPS.map((step) => ({
+          key: step.key,
+          label: step.label,
+          events: 0,
+          users: 0,
+          conversionFromPrevious: 0,
+          dropoff: 0
+        })),
+        trends: [],
+        recentEvents: [],
+        failureEvents: FAILURE_EVENTS.map((eventName) => ({ eventName, count: 0 })),
+        message: "event_logs \uD14C\uC774\uBE14\uC744 \uBA3C\uC800 \uB9CC\uB4E4\uC5B4\uC57C \uD574\uC694."
+      });
+    }
+    console.error("[Admin Funnel]", error);
+    return res.status(500).json({ error: "Failed to load funnel report" });
+  }
+}
+
+// src/handlers/admin/login.ts
+var login_exports = {};
+__export(login_exports, {
+  default: () => handler31
+});
+import { neon as neon30 } from "@neondatabase/serverless";
+import { drizzle as drizzle30 } from "drizzle-orm/neon-http";
+import { eq as eq28, sql as sql20 } from "drizzle-orm";
+import { pgTable as pgTable28, varchar as varchar17, timestamp as timestamp26, boolean as boolean16, jsonb as jsonb10 } from "drizzle-orm/pg-core";
+import crypto18 from "crypto";
+var admins16 = pgTable28("admins", {
+  id: varchar17("id").primaryKey().default(sql20`gen_random_uuid()`),
+  email: varchar17("email").unique().notNull(),
+  passwordHash: varchar17("password_hash").notNull(),
+  name: varchar17("name", { length: 100 }).notNull(),
+  role: varchar17("role", { length: 20 }).default("cs").notNull(),
+  isActive: boolean16("is_active").default(true),
+  lastLoginAt: timestamp26("last_login_at"),
+  createdAt: timestamp26("created_at").defaultNow(),
+  updatedAt: timestamp26("updated_at").defaultNow()
+});
+var adminLogs9 = pgTable28("admin_logs", {
+  id: varchar17("id").primaryKey().default(sql20`gen_random_uuid()`),
+  adminId: varchar17("admin_id").notNull(),
+  action: varchar17("action", { length: 50 }).notNull(),
+  targetType: varchar17("target_type", { length: 50 }),
+  targetId: varchar17("target_id"),
+  details: jsonb10("details"),
+  ipAddress: varchar17("ip_address", { length: 45 }),
+  createdAt: timestamp26("created_at").defaultNow()
+});
+function getDb30() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL not configured");
+  const sqlClient = neon30(databaseUrl);
+  return drizzle30(sqlClient, { schema: { admins: admins16, adminLogs: adminLogs9 } });
 }
 function hashPassword(password) {
-  return crypto17.createHash("sha256").update(password + (process.env.ADMIN_SALT || "wepick-admin-salt")).digest("hex");
+  return crypto18.createHash("sha256").update(password + (process.env.ADMIN_SALT || "wepick-admin-salt")).digest("hex");
 }
 function generateToken(adminId) {
   const payload = {
@@ -8381,10 +8637,10 @@ function generateToken(adminId) {
     exp: Date.now() + 2 * 60 * 60 * 1e3
   };
   const data = JSON.stringify(payload);
-  const signature = crypto17.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+  const signature = crypto18.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
   return Buffer.from(JSON.stringify({ data, signature })).toString("base64");
 }
-async function handler30(req, res) {
+async function handler31(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -8393,8 +8649,8 @@ async function handler30(req, res) {
     return res.status(400).json({ error: "\uC774\uBA54\uC77C\uACFC \uBE44\uBC00\uBC88\uD638\uB97C \uC785\uB825\uD574\uC8FC\uC138\uC694" });
   }
   try {
-    const db = getDb29();
-    const admin = await db.select().from(admins15).where(eq27(admins15.email, email)).limit(1);
+    const db = getDb30();
+    const admin = await db.select().from(admins16).where(eq28(admins16.email, email)).limit(1);
     if (admin.length === 0) {
       return res.status(401).json({ error: "\uC774\uBA54\uC77C \uB610\uB294 \uBE44\uBC00\uBC88\uD638\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4" });
     }
@@ -8406,7 +8662,7 @@ async function handler30(req, res) {
     if (adminUser.passwordHash !== hashedPassword) {
       return res.status(401).json({ error: "\uC774\uBA54\uC77C \uB610\uB294 \uBE44\uBC00\uBC88\uD638\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4" });
     }
-    await db.update(admins15).set({ lastLoginAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq27(admins15.id, adminUser.id));
+    await db.update(admins16).set({ lastLoginAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq28(admins16.id, adminUser.id));
     const ipAddress = req.headers["x-forwarded-for"]?.split(",")[0] || req.headers["x-real-ip"] || "unknown";
     await db.insert(adminLogs9).values({
       adminId: adminUser.id,
@@ -8436,45 +8692,45 @@ async function handler30(req, res) {
 // src/handlers/admin/logs.ts
 var logs_exports = {};
 __export(logs_exports, {
-  default: () => handler31
+  default: () => handler32
 });
-import { neon as neon30 } from "@neondatabase/serverless";
-import { drizzle as drizzle30 } from "drizzle-orm/neon-http";
-import { sql as sql20, ilike as ilike3, or as or3, desc as desc6, eq as eq28 } from "drizzle-orm";
-import { pgTable as pgTable28, varchar as varchar17, timestamp as timestamp26, boolean as boolean16, jsonb as jsonb11 } from "drizzle-orm/pg-core";
-import crypto18 from "crypto";
-var admins16 = pgTable28("admins", {
-  id: varchar17("id").primaryKey().default(sql20`gen_random_uuid()`),
-  email: varchar17("email").unique().notNull(),
-  passwordHash: varchar17("password_hash").notNull(),
-  name: varchar17("name", { length: 100 }).notNull(),
-  role: varchar17("role", { length: 20 }).default("cs").notNull(),
-  isActive: boolean16("is_active").default(true),
-  lastLoginAt: timestamp26("last_login_at"),
-  createdAt: timestamp26("created_at").defaultNow(),
-  updatedAt: timestamp26("updated_at").defaultNow()
+import { neon as neon31 } from "@neondatabase/serverless";
+import { drizzle as drizzle31 } from "drizzle-orm/neon-http";
+import { sql as sql21, ilike as ilike3, or as or3, desc as desc6, eq as eq29 } from "drizzle-orm";
+import { pgTable as pgTable29, varchar as varchar18, timestamp as timestamp27, boolean as boolean17, jsonb as jsonb11 } from "drizzle-orm/pg-core";
+import crypto19 from "crypto";
+var admins17 = pgTable29("admins", {
+  id: varchar18("id").primaryKey().default(sql21`gen_random_uuid()`),
+  email: varchar18("email").unique().notNull(),
+  passwordHash: varchar18("password_hash").notNull(),
+  name: varchar18("name", { length: 100 }).notNull(),
+  role: varchar18("role", { length: 20 }).default("cs").notNull(),
+  isActive: boolean17("is_active").default(true),
+  lastLoginAt: timestamp27("last_login_at"),
+  createdAt: timestamp27("created_at").defaultNow(),
+  updatedAt: timestamp27("updated_at").defaultNow()
 });
-var adminLogs10 = pgTable28("admin_logs", {
-  id: varchar17("id").primaryKey().default(sql20`gen_random_uuid()`),
-  adminId: varchar17("admin_id").notNull(),
-  action: varchar17("action", { length: 50 }).notNull(),
-  targetType: varchar17("target_type", { length: 50 }),
-  targetId: varchar17("target_id"),
+var adminLogs10 = pgTable29("admin_logs", {
+  id: varchar18("id").primaryKey().default(sql21`gen_random_uuid()`),
+  adminId: varchar18("admin_id").notNull(),
+  action: varchar18("action", { length: 50 }).notNull(),
+  targetType: varchar18("target_type", { length: 50 }),
+  targetId: varchar18("target_id"),
   details: jsonb11("details"),
-  ipAddress: varchar17("ip_address", { length: 45 }),
-  createdAt: timestamp26("created_at").defaultNow()
+  ipAddress: varchar18("ip_address", { length: 45 }),
+  createdAt: timestamp27("created_at").defaultNow()
 });
-function getDb30() {
+function getDb31() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sqlClient = neon30(databaseUrl);
-  return drizzle30(sqlClient);
+  const sqlClient = neon31(databaseUrl);
+  return drizzle31(sqlClient);
 }
-function verifyToken16(token) {
+function verifyToken17(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
-    const expectedSignature = crypto18.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    const expectedSignature = crypto19.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -8483,31 +8739,31 @@ function verifyToken16(token) {
     return null;
   }
 }
-async function verifyAdminToken14(req) {
+async function verifyAdminToken15(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) return null;
   const token = authHeader.replace("Bearer ", "");
-  const verified = verifyToken16(token);
+  const verified = verifyToken17(token);
   if (!verified) return null;
   try {
-    const db = getDb30();
-    const admin = await db.select().from(admins16).where(eq28(admins16.id, verified.adminId)).limit(1);
+    const db = getDb31();
+    const admin = await db.select().from(admins17).where(eq29(admins17.id, verified.adminId)).limit(1);
     if (admin.length === 0 || !admin[0].isActive) return null;
     return admin[0];
   } catch {
     return null;
   }
 }
-async function handler31(req, res) {
+async function handler32(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const admin = await verifyAdminToken14(req);
+  const admin = await verifyAdminToken15(req);
   if (!admin) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   try {
-    const db = getDb30();
+    const db = getDb31();
     const { search, page = "1", limit = "30" } = req.query;
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, parseInt(limit));
@@ -8515,11 +8771,11 @@ async function handler31(req, res) {
     let whereClause;
     if (search) {
       whereClause = or3(
-        ilike3(admins16.name, `%${search}%`),
+        ilike3(admins17.name, `%${search}%`),
         ilike3(adminLogs10.action, `%${search}%`)
       );
     }
-    const [countResult] = await db.select({ count: sql20`count(*)` }).from(adminLogs10).leftJoin(admins16, eq28(adminLogs10.adminId, admins16.id)).where(whereClause);
+    const [countResult] = await db.select({ count: sql21`count(*)` }).from(adminLogs10).leftJoin(admins17, eq29(adminLogs10.adminId, admins17.id)).where(whereClause);
     const logsList = await db.select({
       id: adminLogs10.id,
       action: adminLogs10.action,
@@ -8529,9 +8785,9 @@ async function handler31(req, res) {
       ipAddress: adminLogs10.ipAddress,
       createdAt: adminLogs10.createdAt,
       adminId: adminLogs10.adminId,
-      adminName: admins16.name,
-      adminEmail: admins16.email
-    }).from(adminLogs10).leftJoin(admins16, eq28(adminLogs10.adminId, admins16.id)).where(whereClause).orderBy(desc6(adminLogs10.createdAt)).limit(limitNum).offset(offset);
+      adminName: admins17.name,
+      adminEmail: admins17.email
+    }).from(adminLogs10).leftJoin(admins17, eq29(adminLogs10.adminId, admins17.id)).where(whereClause).orderBy(desc6(adminLogs10.createdAt)).limit(limitNum).offset(offset);
     return res.status(200).json({
       logs: logsList,
       total: Number(countResult?.count || 0),
@@ -8547,23 +8803,23 @@ async function handler31(req, res) {
 // src/handlers/admin/me.ts
 var me_exports = {};
 __export(me_exports, {
-  default: () => handler32
+  default: () => handler33
 });
-import { neon as neon31 } from "@neondatabase/serverless";
-import { drizzle as drizzle31 } from "drizzle-orm/neon-http";
-import { eq as eq29 } from "drizzle-orm";
-import crypto19 from "crypto";
-function getDb31() {
+import { neon as neon32 } from "@neondatabase/serverless";
+import { drizzle as drizzle32 } from "drizzle-orm/neon-http";
+import { eq as eq30 } from "drizzle-orm";
+import crypto20 from "crypto";
+function getDb32() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sql43 = neon31(databaseUrl);
-  return drizzle31(sql43, { schema: { admins: admins11 } });
+  const sql44 = neon32(databaseUrl);
+  return drizzle32(sql44, { schema: { admins: admins11 } });
 }
-function verifyToken17(token) {
+function verifyToken18(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
-    const expectedSignature = crypto19.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    const expectedSignature = crypto20.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
     if (signature !== expectedSignature) {
       return null;
     }
@@ -8576,7 +8832,7 @@ function verifyToken17(token) {
     return null;
   }
 }
-async function handler32(req, res) {
+async function handler33(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -8585,13 +8841,13 @@ async function handler32(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   const token = authHeader.replace("Bearer ", "");
-  const verified = verifyToken17(token);
+  const verified = verifyToken18(token);
   if (!verified) {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
   try {
-    const db = getDb31();
-    const admin = await db.select().from(admins11).where(eq29(admins11.id, verified.adminId)).limit(1);
+    const db = getDb32();
+    const admin = await db.select().from(admins11).where(eq30(admins11.id, verified.adminId)).limit(1);
     if (admin.length === 0 || !admin[0].isActive) {
       return res.status(401).json({ error: "Admin not found or inactive" });
     }
@@ -8611,21 +8867,21 @@ async function handler32(req, res) {
 // src/handlers/admin/message-copy-requests/index.ts
 var message_copy_requests_exports = {};
 __export(message_copy_requests_exports, {
-  default: () => handler33
+  default: () => handler34
 });
-import { neon as neon32 } from "@neondatabase/serverless";
-import { drizzle as drizzle32 } from "drizzle-orm/neon-http";
-import { sql as sql21 } from "drizzle-orm";
-import crypto20 from "crypto";
-function getDb32() {
+import { neon as neon33 } from "@neondatabase/serverless";
+import { drizzle as drizzle33 } from "drizzle-orm/neon-http";
+import { sql as sql22 } from "drizzle-orm";
+import crypto21 from "crypto";
+function getDb33() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  return drizzle32(neon32(databaseUrl));
+  return drizzle33(neon33(databaseUrl));
 }
-function verifyToken18(token) {
+function verifyToken19(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
-    const expectedSignature = crypto20.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(decoded.data).digest("hex");
+    const expectedSignature = crypto21.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(decoded.data).digest("hex");
     if (decoded.signature !== expectedSignature) return null;
     const payload = JSON.parse(decoded.data);
     if (payload.exp < Date.now()) return null;
@@ -8637,10 +8893,10 @@ function verifyToken18(token) {
 async function verifyAdmin3(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) return null;
-  const verified = verifyToken18(authHeader.replace("Bearer ", ""));
+  const verified = verifyToken19(authHeader.replace("Bearer ", ""));
   if (!verified) return null;
-  const db = getDb32();
-  const result = await db.execute(sql21`
+  const db = getDb33();
+  const result = await db.execute(sql22`
     SELECT id, email, name, role, is_active
     FROM admins
     WHERE id = ${verified.adminId}
@@ -8650,7 +8906,7 @@ async function verifyAdmin3(req) {
   return admin?.is_active ? admin : null;
 }
 async function ensureMessageCopyRequestsTable3(db) {
-  await db.execute(sql21`
+  await db.execute(sql22`
     CREATE TABLE IF NOT EXISTS message_copy_requests (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id varchar NOT NULL REFERENCES users(id),
@@ -8666,9 +8922,9 @@ async function ensureMessageCopyRequestsTable3(db) {
       updated_at timestamp DEFAULT now()
     )
   `);
-  await db.execute(sql21`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_user ON message_copy_requests(user_id)`);
-  await db.execute(sql21`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_status ON message_copy_requests(status)`);
-  await db.execute(sql21`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_created ON message_copy_requests(created_at DESC)`);
+  await db.execute(sql22`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_user ON message_copy_requests(user_id)`);
+  await db.execute(sql22`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_status ON message_copy_requests(status)`);
+  await db.execute(sql22`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_created ON message_copy_requests(created_at DESC)`);
 }
 function mapRequest2(row) {
   return {
@@ -8690,27 +8946,27 @@ function mapRequest2(row) {
     updatedAt: row.updated_at
   };
 }
-async function handler33(req, res) {
+async function handler34(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   const admin = await verifyAdmin3(req);
   if (!admin) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const db = getDb32();
+    const db = getDb33();
     await ensureMessageCopyRequestsTable3(db);
     const search = String(req.query.search || "").trim();
     const status = String(req.query.status || "all");
     const whereParts = [];
     if (status && status !== "all") {
-      whereParts.push(sql21`r.status = ${status}`);
+      whereParts.push(sql22`r.status = ${status}`);
     }
     if (search) {
       const pattern = `%${search}%`;
-      whereParts.push(sql21`(u.email ILIKE ${pattern} OR u.company_name ILIKE ${pattern} OR r.content ILIKE ${pattern})`);
+      whereParts.push(sql22`(u.email ILIKE ${pattern} OR u.company_name ILIKE ${pattern} OR r.content ILIKE ${pattern})`);
     }
-    const whereSql = whereParts.length ? sql21`WHERE ${sql21.join(whereParts, sql21` AND `)}` : sql21``;
+    const whereSql = whereParts.length ? sql22`WHERE ${sql22.join(whereParts, sql22` AND `)}` : sql22``;
     const [requestsResult, countsResult] = await Promise.all([
-      db.execute(sql21`
+      db.execute(sql22`
         SELECT
           r.*,
           u.email AS user_email,
@@ -8727,7 +8983,7 @@ async function handler33(req, res) {
           r.created_at DESC
         LIMIT 100
       `),
-      db.execute(sql21`
+      db.execute(sql22`
         SELECT status, count(*)::int AS count
         FROM message_copy_requests
         GROUP BY status
@@ -8749,161 +9005,12 @@ async function handler33(req, res) {
 // src/handlers/admin/refunds/index.ts
 var refunds_exports = {};
 __export(refunds_exports, {
-  default: () => handler34
-});
-import { neon as neon33 } from "@neondatabase/serverless";
-import { drizzle as drizzle33 } from "drizzle-orm/neon-http";
-import { sql as sql22, desc as desc7, eq as eq30, ilike as ilike4, and as and4 } from "drizzle-orm";
-import { pgTable as pgTable29, varchar as varchar18, timestamp as timestamp27, boolean as boolean17, decimal as decimal9, text as text20, jsonb as jsonb12 } from "drizzle-orm/pg-core";
-import crypto21 from "crypto";
-var admins17 = pgTable29("admins", {
-  id: varchar18("id").primaryKey().default(sql22`gen_random_uuid()`),
-  email: varchar18("email").unique().notNull(),
-  passwordHash: varchar18("password_hash").notNull(),
-  name: varchar18("name", { length: 100 }).notNull(),
-  role: varchar18("role", { length: 20 }).default("cs").notNull(),
-  isActive: boolean17("is_active").default(true),
-  lastLoginAt: timestamp27("last_login_at"),
-  createdAt: timestamp27("created_at").defaultNow(),
-  updatedAt: timestamp27("updated_at").defaultNow()
-});
-var users13 = pgTable29("users", {
-  id: varchar18("id").primaryKey().default(sql22`gen_random_uuid()`),
-  email: varchar18("email").unique(),
-  balance: decimal9("balance", { precision: 12, scale: 0 }).default("0"),
-  updatedAt: timestamp27("updated_at").defaultNow()
-});
-var refunds3 = pgTable29("refunds", {
-  id: varchar18("id").primaryKey().default(sql22`gen_random_uuid()`),
-  userId: varchar18("user_id").notNull(),
-  transactionId: varchar18("transaction_id"),
-  amount: decimal9("amount", { precision: 12, scale: 0 }).notNull(),
-  reason: text20("reason").notNull(),
-  status: varchar18("status", { length: 20 }).default("pending").notNull(),
-  adminId: varchar18("admin_id"),
-  adminNote: text20("admin_note"),
-  bankName: varchar18("bank_name", { length: 50 }),
-  accountNumber: varchar18("account_number", { length: 50 }),
-  accountHolder: varchar18("account_holder", { length: 50 }),
-  processedAt: timestamp27("processed_at"),
-  createdAt: timestamp27("created_at").defaultNow(),
-  updatedAt: timestamp27("updated_at").defaultNow()
-});
-var transactions7 = pgTable29("transactions", {
-  id: varchar18("id").primaryKey().default(sql22`gen_random_uuid()`),
-  userId: varchar18("user_id").notNull(),
-  type: varchar18("type", { length: 20 }).notNull(),
-  amount: decimal9("amount", { precision: 12, scale: 0 }).notNull(),
-  balanceAfter: decimal9("balance_after", { precision: 12, scale: 0 }),
-  description: text20("description"),
-  paymentMethod: varchar18("payment_method", { length: 50 }),
-  createdAt: timestamp27("created_at").defaultNow()
-});
-var adminLogs11 = pgTable29("admin_logs", {
-  id: varchar18("id").primaryKey().default(sql22`gen_random_uuid()`),
-  adminId: varchar18("admin_id").notNull(),
-  action: varchar18("action", { length: 50 }).notNull(),
-  targetType: varchar18("target_type", { length: 50 }),
-  targetId: varchar18("target_id"),
-  details: jsonb12("details"),
-  ipAddress: varchar18("ip_address", { length: 45 }),
-  createdAt: timestamp27("created_at").defaultNow()
-});
-function getDb33() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  return drizzle33(neon33(databaseUrl));
-}
-function verifyToken19(token) {
-  try {
-    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
-    const { data, signature } = decoded;
-    const expectedSignature = crypto21.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
-    if (signature !== expectedSignature) return null;
-    const payload = JSON.parse(data);
-    if (payload.exp < Date.now()) return null;
-    return { adminId: payload.adminId };
-  } catch {
-    return null;
-  }
-}
-async function verifyAdminToken15(req) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const token = authHeader.replace("Bearer ", "");
-  const verified = verifyToken19(token);
-  if (!verified) return null;
-  try {
-    const db = getDb33();
-    const admin = await db.select().from(admins17).where(eq30(admins17.id, verified.adminId)).limit(1);
-    if (admin.length === 0 || !admin[0].isActive) return null;
-    return admin[0];
-  } catch {
-    return null;
-  }
-}
-async function handler34(req, res) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-  const admin = await verifyAdminToken15(req);
-  if (!admin) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  try {
-    const db = getDb33();
-    const { search, status, page = "1", limit = "20" } = req.query;
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, parseInt(limit));
-    const offset = (pageNum - 1) * limitNum;
-    const conditions = [];
-    if (search) {
-      conditions.push(ilike4(users13.email, `%${search}%`));
-    }
-    if (status && status !== "all") {
-      conditions.push(eq30(refunds3.status, status));
-    }
-    const whereClause = conditions.length > 0 ? and4(...conditions) : void 0;
-    const [pendingCount] = await db.select({ count: sql22`count(*)` }).from(refunds3).where(eq30(refunds3.status, "pending"));
-    const [totalAmountResult] = await db.select({ sum: sql22`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(refunds3).where(eq30(refunds3.status, "completed"));
-    const [countResult] = await db.select({ count: sql22`count(*)` }).from(refunds3).leftJoin(users13, eq30(refunds3.userId, users13.id)).where(whereClause);
-    const list = await db.select({
-      id: refunds3.id,
-      userId: refunds3.userId,
-      amount: refunds3.amount,
-      reason: refunds3.reason,
-      status: refunds3.status,
-      adminNote: refunds3.adminNote,
-      bankName: refunds3.bankName,
-      accountNumber: refunds3.accountNumber,
-      accountHolder: refunds3.accountHolder,
-      processedAt: refunds3.processedAt,
-      createdAt: refunds3.createdAt,
-      userEmail: users13.email
-    }).from(refunds3).leftJoin(users13, eq30(refunds3.userId, users13.id)).where(whereClause).orderBy(desc7(refunds3.createdAt)).limit(limitNum).offset(offset);
-    return res.status(200).json({
-      refunds: list,
-      total: Number(countResult?.count || 0),
-      page: pageNum,
-      limit: limitNum,
-      pendingCount: Number(pendingCount?.count || 0),
-      totalRefunded: Number(totalAmountResult?.sum || 0)
-    });
-  } catch (error) {
-    console.error("[Admin Refunds] Error:", error);
-    return res.status(500).json({ error: "Failed to fetch refunds" });
-  }
-}
-
-// src/handlers/admin/stats.ts
-var stats_exports = {};
-__export(stats_exports, {
   default: () => handler35
 });
 import { neon as neon34 } from "@neondatabase/serverless";
 import { drizzle as drizzle34 } from "drizzle-orm/neon-http";
-import { sql as sql23, eq as eq31, gte as gte3, and as and5 } from "drizzle-orm";
-import { pgTable as pgTable30, varchar as varchar19, timestamp as timestamp28, decimal as decimal10, boolean as boolean18, integer as integer16 } from "drizzle-orm/pg-core";
+import { sql as sql23, desc as desc7, eq as eq31, ilike as ilike4, and as and4 } from "drizzle-orm";
+import { pgTable as pgTable30, varchar as varchar19, timestamp as timestamp28, boolean as boolean18, decimal as decimal9, text as text20, jsonb as jsonb12 } from "drizzle-orm/pg-core";
 import crypto22 from "crypto";
 var admins18 = pgTable30("admins", {
   id: varchar19("id").primaryKey().default(sql23`gen_random_uuid()`),
@@ -8916,30 +9023,52 @@ var admins18 = pgTable30("admins", {
   createdAt: timestamp28("created_at").defaultNow(),
   updatedAt: timestamp28("updated_at").defaultNow()
 });
-var users14 = pgTable30("users", {
+var users13 = pgTable30("users", {
   id: varchar19("id").primaryKey().default(sql23`gen_random_uuid()`),
   email: varchar19("email").unique(),
-  balance: decimal10("balance", { precision: 12, scale: 0 }).default("0"),
-  createdAt: timestamp28("created_at").defaultNow()
+  balance: decimal9("balance", { precision: 12, scale: 0 }).default("0"),
+  updatedAt: timestamp28("updated_at").defaultNow()
 });
-var campaigns14 = pgTable30("campaigns", {
+var refunds3 = pgTable30("refunds", {
   id: varchar19("id").primaryKey().default(sql23`gen_random_uuid()`),
-  status: varchar19("status", { length: 20 }).default("temp_registered").notNull(),
-  sentCount: integer16("sent_count").default(0),
-  createdAt: timestamp28("created_at").defaultNow()
+  userId: varchar19("user_id").notNull(),
+  transactionId: varchar19("transaction_id"),
+  amount: decimal9("amount", { precision: 12, scale: 0 }).notNull(),
+  reason: text20("reason").notNull(),
+  status: varchar19("status", { length: 20 }).default("pending").notNull(),
+  adminId: varchar19("admin_id"),
+  adminNote: text20("admin_note"),
+  bankName: varchar19("bank_name", { length: 50 }),
+  accountNumber: varchar19("account_number", { length: 50 }),
+  accountHolder: varchar19("account_holder", { length: 50 }),
+  processedAt: timestamp28("processed_at"),
+  createdAt: timestamp28("created_at").defaultNow(),
+  updatedAt: timestamp28("updated_at").defaultNow()
 });
-var transactions8 = pgTable30("transactions", {
+var transactions7 = pgTable30("transactions", {
   id: varchar19("id").primaryKey().default(sql23`gen_random_uuid()`),
   userId: varchar19("user_id").notNull(),
   type: varchar19("type", { length: 20 }).notNull(),
-  amount: decimal10("amount", { precision: 12, scale: 0 }).notNull(),
+  amount: decimal9("amount", { precision: 12, scale: 0 }).notNull(),
+  balanceAfter: decimal9("balance_after", { precision: 12, scale: 0 }),
+  description: text20("description"),
+  paymentMethod: varchar19("payment_method", { length: 50 }),
+  createdAt: timestamp28("created_at").defaultNow()
+});
+var adminLogs11 = pgTable30("admin_logs", {
+  id: varchar19("id").primaryKey().default(sql23`gen_random_uuid()`),
+  adminId: varchar19("admin_id").notNull(),
+  action: varchar19("action", { length: 50 }).notNull(),
+  targetType: varchar19("target_type", { length: 50 }),
+  targetId: varchar19("target_id"),
+  details: jsonb12("details"),
+  ipAddress: varchar19("ip_address", { length: 45 }),
   createdAt: timestamp28("created_at").defaultNow()
 });
 function getDb34() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sqlClient = neon34(databaseUrl);
-  return drizzle34(sqlClient);
+  return drizzle34(neon34(databaseUrl));
 }
 function verifyToken20(token) {
   try {
@@ -8979,43 +9108,58 @@ async function handler35(req, res) {
   }
   try {
     const db = getDb34();
-    const today = /* @__PURE__ */ new Date();
-    today.setHours(0, 0, 0, 0);
-    const [totalUsersResult] = await db.select({ count: sql23`count(*)` }).from(users14);
-    const totalUsers = Number(totalUsersResult?.count || 0);
-    const [newUsersTodayResult] = await db.select({ count: sql23`count(*)` }).from(users14).where(gte3(users14.createdAt, today));
-    const newUsersToday = Number(newUsersTodayResult?.count || 0);
-    const [activeCampaignsResult] = await db.select({ count: sql23`count(*)` }).from(campaigns14).where(eq31(campaigns14.status, "running"));
-    const activeCampaigns = Number(activeCampaignsResult?.count || 0);
-    const [revenueTodayResult] = await db.select({ sum: sql23`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(transactions8).where(and5(eq31(transactions8.type, "charge"), gte3(transactions8.createdAt, today)));
-    const revenueToday = Number(revenueTodayResult?.sum || 0);
-    const [totalRevenueResult] = await db.select({ sum: sql23`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(transactions8).where(eq31(transactions8.type, "charge"));
-    const totalRevenue = Number(totalRevenueResult?.sum || 0);
-    const [totalSentResult] = await db.select({ sum: sql23`COALESCE(SUM(sent_count), 0)` }).from(campaigns14);
-    const totalSent = Number(totalSentResult?.sum || 0);
+    const { search, status, page = "1", limit = "20" } = req.query;
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, parseInt(limit));
+    const offset = (pageNum - 1) * limitNum;
+    const conditions = [];
+    if (search) {
+      conditions.push(ilike4(users13.email, `%${search}%`));
+    }
+    if (status && status !== "all") {
+      conditions.push(eq31(refunds3.status, status));
+    }
+    const whereClause = conditions.length > 0 ? and4(...conditions) : void 0;
+    const [pendingCount] = await db.select({ count: sql23`count(*)` }).from(refunds3).where(eq31(refunds3.status, "pending"));
+    const [totalAmountResult] = await db.select({ sum: sql23`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(refunds3).where(eq31(refunds3.status, "completed"));
+    const [countResult] = await db.select({ count: sql23`count(*)` }).from(refunds3).leftJoin(users13, eq31(refunds3.userId, users13.id)).where(whereClause);
+    const list = await db.select({
+      id: refunds3.id,
+      userId: refunds3.userId,
+      amount: refunds3.amount,
+      reason: refunds3.reason,
+      status: refunds3.status,
+      adminNote: refunds3.adminNote,
+      bankName: refunds3.bankName,
+      accountNumber: refunds3.accountNumber,
+      accountHolder: refunds3.accountHolder,
+      processedAt: refunds3.processedAt,
+      createdAt: refunds3.createdAt,
+      userEmail: users13.email
+    }).from(refunds3).leftJoin(users13, eq31(refunds3.userId, users13.id)).where(whereClause).orderBy(desc7(refunds3.createdAt)).limit(limitNum).offset(offset);
     return res.status(200).json({
-      totalUsers,
-      newUsersToday,
-      activeCampaigns,
-      revenueToday,
-      totalRevenue,
-      totalSent
+      refunds: list,
+      total: Number(countResult?.count || 0),
+      page: pageNum,
+      limit: limitNum,
+      pendingCount: Number(pendingCount?.count || 0),
+      totalRefunded: Number(totalAmountResult?.sum || 0)
     });
   } catch (error) {
-    console.error("[Admin Stats] Error:", error);
-    return res.status(500).json({ error: "Failed to fetch stats" });
+    console.error("[Admin Refunds] Error:", error);
+    return res.status(500).json({ error: "Failed to fetch refunds" });
   }
 }
 
-// src/handlers/admin/tax-invoices.ts
-var tax_invoices_exports = {};
-__export(tax_invoices_exports, {
+// src/handlers/admin/stats.ts
+var stats_exports = {};
+__export(stats_exports, {
   default: () => handler36
 });
 import { neon as neon35 } from "@neondatabase/serverless";
 import { drizzle as drizzle35 } from "drizzle-orm/neon-http";
-import { sql as sql24, desc as desc8, eq as eq32, ilike as ilike5, gte as gte4, and as and6 } from "drizzle-orm";
-import { pgTable as pgTable31, varchar as varchar20, timestamp as timestamp29, boolean as boolean19, decimal as decimal11, text as text22 } from "drizzle-orm/pg-core";
+import { sql as sql24, eq as eq32, gte as gte3, and as and5 } from "drizzle-orm";
+import { pgTable as pgTable31, varchar as varchar20, timestamp as timestamp29, decimal as decimal10, boolean as boolean19, integer as integer16 } from "drizzle-orm/pg-core";
 import crypto23 from "crypto";
 var admins19 = pgTable31("admins", {
   id: varchar20("id").primaryKey().default(sql24`gen_random_uuid()`),
@@ -9028,32 +9172,30 @@ var admins19 = pgTable31("admins", {
   createdAt: timestamp29("created_at").defaultNow(),
   updatedAt: timestamp29("updated_at").defaultNow()
 });
-var users15 = pgTable31("users", {
+var users14 = pgTable31("users", {
   id: varchar20("id").primaryKey().default(sql24`gen_random_uuid()`),
   email: varchar20("email").unique(),
-  companyName: varchar20("company_name")
+  balance: decimal10("balance", { precision: 12, scale: 0 }).default("0"),
+  createdAt: timestamp29("created_at").defaultNow()
 });
-var taxInvoices2 = pgTable31("tax_invoices", {
+var campaigns14 = pgTable31("campaigns", {
+  id: varchar20("id").primaryKey().default(sql24`gen_random_uuid()`),
+  status: varchar20("status", { length: 20 }).default("temp_registered").notNull(),
+  sentCount: integer16("sent_count").default(0),
+  createdAt: timestamp29("created_at").defaultNow()
+});
+var transactions8 = pgTable31("transactions", {
   id: varchar20("id").primaryKey().default(sql24`gen_random_uuid()`),
   userId: varchar20("user_id").notNull(),
-  transactionId: varchar20("transaction_id"),
-  invoiceNumber: varchar20("invoice_number", { length: 50 }).unique(),
-  issueDate: timestamp29("issue_date").notNull(),
-  amount: decimal11("amount", { precision: 12, scale: 0 }).notNull(),
-  taxAmount: decimal11("tax_amount", { precision: 12, scale: 0 }).notNull(),
-  totalAmount: decimal11("total_amount", { precision: 12, scale: 0 }).notNull(),
-  buyerBusinessNumber: varchar20("buyer_business_number", { length: 20 }),
-  buyerCompanyName: varchar20("buyer_company_name", { length: 100 }),
-  buyerEmail: varchar20("buyer_email", { length: 100 }),
-  status: varchar20("status", { length: 20 }).default("issued").notNull(),
-  pdfUrl: text22("pdf_url"),
-  createdAt: timestamp29("created_at").defaultNow(),
-  updatedAt: timestamp29("updated_at").defaultNow()
+  type: varchar20("type", { length: 20 }).notNull(),
+  amount: decimal10("amount", { precision: 12, scale: 0 }).notNull(),
+  createdAt: timestamp29("created_at").defaultNow()
 });
 function getDb35() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  return drizzle35(neon35(databaseUrl));
+  const sqlClient = neon35(databaseUrl);
+  return drizzle35(sqlClient);
 }
 function verifyToken21(token) {
   try {
@@ -9093,60 +9235,43 @@ async function handler36(req, res) {
   }
   try {
     const db = getDb35();
-    const { search, page = "1", limit = "20" } = req.query;
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, parseInt(limit));
-    const offset = (pageNum - 1) * limitNum;
-    const conditions = [];
-    if (search) {
-      conditions.push(ilike5(users15.email, `%${search}%`));
-    }
-    const whereClause = conditions.length > 0 ? and6(...conditions) : void 0;
-    const monthStart = /* @__PURE__ */ new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
-    const [monthlyCountResult] = await db.select({ count: sql24`count(*)` }).from(taxInvoices2).where(gte4(taxInvoices2.issueDate, monthStart));
-    const [monthlyAmountResult] = await db.select({ sum: sql24`COALESCE(SUM(CAST(total_amount AS DECIMAL)), 0)` }).from(taxInvoices2).where(gte4(taxInvoices2.issueDate, monthStart));
-    const [countResult] = await db.select({ count: sql24`count(*)` }).from(taxInvoices2).leftJoin(users15, eq32(taxInvoices2.userId, users15.id)).where(whereClause);
-    const list = await db.select({
-      id: taxInvoices2.id,
-      invoiceNumber: taxInvoices2.invoiceNumber,
-      issueDate: taxInvoices2.issueDate,
-      amount: taxInvoices2.amount,
-      taxAmount: taxInvoices2.taxAmount,
-      totalAmount: taxInvoices2.totalAmount,
-      buyerBusinessNumber: taxInvoices2.buyerBusinessNumber,
-      buyerCompanyName: taxInvoices2.buyerCompanyName,
-      buyerEmail: taxInvoices2.buyerEmail,
-      status: taxInvoices2.status,
-      pdfUrl: taxInvoices2.pdfUrl,
-      createdAt: taxInvoices2.createdAt,
-      userId: taxInvoices2.userId,
-      userEmail: users15.email
-    }).from(taxInvoices2).leftJoin(users15, eq32(taxInvoices2.userId, users15.id)).where(whereClause).orderBy(desc8(taxInvoices2.issueDate)).limit(limitNum).offset(offset);
+    const today = /* @__PURE__ */ new Date();
+    today.setHours(0, 0, 0, 0);
+    const [totalUsersResult] = await db.select({ count: sql24`count(*)` }).from(users14);
+    const totalUsers = Number(totalUsersResult?.count || 0);
+    const [newUsersTodayResult] = await db.select({ count: sql24`count(*)` }).from(users14).where(gte3(users14.createdAt, today));
+    const newUsersToday = Number(newUsersTodayResult?.count || 0);
+    const [activeCampaignsResult] = await db.select({ count: sql24`count(*)` }).from(campaigns14).where(eq32(campaigns14.status, "running"));
+    const activeCampaigns = Number(activeCampaignsResult?.count || 0);
+    const [revenueTodayResult] = await db.select({ sum: sql24`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(transactions8).where(and5(eq32(transactions8.type, "charge"), gte3(transactions8.createdAt, today)));
+    const revenueToday = Number(revenueTodayResult?.sum || 0);
+    const [totalRevenueResult] = await db.select({ sum: sql24`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(transactions8).where(eq32(transactions8.type, "charge"));
+    const totalRevenue = Number(totalRevenueResult?.sum || 0);
+    const [totalSentResult] = await db.select({ sum: sql24`COALESCE(SUM(sent_count), 0)` }).from(campaigns14);
+    const totalSent = Number(totalSentResult?.sum || 0);
     return res.status(200).json({
-      taxInvoices: list,
-      total: Number(countResult?.count || 0),
-      page: pageNum,
-      limit: limitNum,
-      monthlyCount: Number(monthlyCountResult?.count || 0),
-      monthlyAmount: Number(monthlyAmountResult?.sum || 0)
+      totalUsers,
+      newUsersToday,
+      activeCampaigns,
+      revenueToday,
+      totalRevenue,
+      totalSent
     });
   } catch (error) {
-    console.error("[Admin Tax Invoices] Error:", error);
-    return res.status(500).json({ error: "Failed to fetch tax invoices" });
+    console.error("[Admin Stats] Error:", error);
+    return res.status(500).json({ error: "Failed to fetch stats" });
   }
 }
 
-// src/handlers/admin/transactions.ts
-var transactions_exports = {};
-__export(transactions_exports, {
+// src/handlers/admin/tax-invoices.ts
+var tax_invoices_exports = {};
+__export(tax_invoices_exports, {
   default: () => handler37
 });
 import { neon as neon36 } from "@neondatabase/serverless";
 import { drizzle as drizzle36 } from "drizzle-orm/neon-http";
-import { sql as sql25, ilike as ilike6, eq as eq33, gte as gte5, and as and7, desc as desc9 } from "drizzle-orm";
-import { pgTable as pgTable32, varchar as varchar21, timestamp as timestamp30, decimal as decimal12, boolean as boolean20, text as text23 } from "drizzle-orm/pg-core";
+import { sql as sql25, desc as desc8, eq as eq33, ilike as ilike5, gte as gte4, and as and6 } from "drizzle-orm";
+import { pgTable as pgTable32, varchar as varchar21, timestamp as timestamp30, boolean as boolean20, decimal as decimal11, text as text22 } from "drizzle-orm/pg-core";
 import crypto24 from "crypto";
 var admins20 = pgTable32("admins", {
   id: varchar21("id").primaryKey().default(sql25`gen_random_uuid()`),
@@ -9159,25 +9284,32 @@ var admins20 = pgTable32("admins", {
   createdAt: timestamp30("created_at").defaultNow(),
   updatedAt: timestamp30("updated_at").defaultNow()
 });
-var users16 = pgTable32("users", {
+var users15 = pgTable32("users", {
   id: varchar21("id").primaryKey().default(sql25`gen_random_uuid()`),
-  email: varchar21("email").unique()
+  email: varchar21("email").unique(),
+  companyName: varchar21("company_name")
 });
-var transactions9 = pgTable32("transactions", {
+var taxInvoices2 = pgTable32("tax_invoices", {
   id: varchar21("id").primaryKey().default(sql25`gen_random_uuid()`),
   userId: varchar21("user_id").notNull(),
-  type: varchar21("type", { length: 20 }).notNull(),
-  amount: decimal12("amount", { precision: 12, scale: 0 }).notNull(),
-  balanceAfter: decimal12("balance_after", { precision: 12, scale: 0 }),
-  description: text23("description"),
-  paymentMethod: varchar21("payment_method", { length: 50 }),
-  createdAt: timestamp30("created_at").defaultNow()
+  transactionId: varchar21("transaction_id"),
+  invoiceNumber: varchar21("invoice_number", { length: 50 }).unique(),
+  issueDate: timestamp30("issue_date").notNull(),
+  amount: decimal11("amount", { precision: 12, scale: 0 }).notNull(),
+  taxAmount: decimal11("tax_amount", { precision: 12, scale: 0 }).notNull(),
+  totalAmount: decimal11("total_amount", { precision: 12, scale: 0 }).notNull(),
+  buyerBusinessNumber: varchar21("buyer_business_number", { length: 20 }),
+  buyerCompanyName: varchar21("buyer_company_name", { length: 100 }),
+  buyerEmail: varchar21("buyer_email", { length: 100 }),
+  status: varchar21("status", { length: 20 }).default("issued").notNull(),
+  pdfUrl: text22("pdf_url"),
+  createdAt: timestamp30("created_at").defaultNow(),
+  updatedAt: timestamp30("updated_at").defaultNow()
 });
 function getDb36() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sqlClient = neon36(databaseUrl);
-  return drizzle36(sqlClient);
+  return drizzle36(neon36(databaseUrl));
 }
 function verifyToken22(token) {
   try {
@@ -9217,60 +9349,60 @@ async function handler37(req, res) {
   }
   try {
     const db = getDb36();
-    const { search, type, page = "1", limit = "20" } = req.query;
+    const { search, page = "1", limit = "20" } = req.query;
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, parseInt(limit));
     const offset = (pageNum - 1) * limitNum;
-    const today = /* @__PURE__ */ new Date();
-    today.setHours(0, 0, 0, 0);
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const [todayChargeResult] = await db.select({ sum: sql25`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(transactions9).where(and7(eq33(transactions9.type, "charge"), gte5(transactions9.createdAt, today)));
-    const [todayUsageResult] = await db.select({ sum: sql25`COALESCE(ABS(SUM(CAST(amount AS DECIMAL))), 0)` }).from(transactions9).where(and7(eq33(transactions9.type, "usage"), gte5(transactions9.createdAt, today)));
-    const [monthlyTotalResult] = await db.select({ sum: sql25`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(transactions9).where(and7(eq33(transactions9.type, "charge"), gte5(transactions9.createdAt, monthStart)));
     const conditions = [];
     if (search) {
-      conditions.push(ilike6(users16.email, `%${search}%`));
+      conditions.push(ilike5(users15.email, `%${search}%`));
     }
-    if (type && type !== "all") {
-      conditions.push(eq33(transactions9.type, type));
-    }
-    const whereClause = conditions.length > 0 ? and7(...conditions) : void 0;
-    const [countResult] = await db.select({ count: sql25`count(*)` }).from(transactions9).leftJoin(users16, eq33(transactions9.userId, users16.id)).where(whereClause);
-    const transactionsList = await db.select({
-      id: transactions9.id,
-      type: transactions9.type,
-      amount: transactions9.amount,
-      balanceAfter: transactions9.balanceAfter,
-      description: transactions9.description,
-      paymentMethod: transactions9.paymentMethod,
-      createdAt: transactions9.createdAt,
-      userId: transactions9.userId,
-      userEmail: users16.email
-    }).from(transactions9).leftJoin(users16, eq33(transactions9.userId, users16.id)).where(whereClause).orderBy(desc9(transactions9.createdAt)).limit(limitNum).offset(offset);
+    const whereClause = conditions.length > 0 ? and6(...conditions) : void 0;
+    const monthStart = /* @__PURE__ */ new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const [monthlyCountResult] = await db.select({ count: sql25`count(*)` }).from(taxInvoices2).where(gte4(taxInvoices2.issueDate, monthStart));
+    const [monthlyAmountResult] = await db.select({ sum: sql25`COALESCE(SUM(CAST(total_amount AS DECIMAL)), 0)` }).from(taxInvoices2).where(gte4(taxInvoices2.issueDate, monthStart));
+    const [countResult] = await db.select({ count: sql25`count(*)` }).from(taxInvoices2).leftJoin(users15, eq33(taxInvoices2.userId, users15.id)).where(whereClause);
+    const list = await db.select({
+      id: taxInvoices2.id,
+      invoiceNumber: taxInvoices2.invoiceNumber,
+      issueDate: taxInvoices2.issueDate,
+      amount: taxInvoices2.amount,
+      taxAmount: taxInvoices2.taxAmount,
+      totalAmount: taxInvoices2.totalAmount,
+      buyerBusinessNumber: taxInvoices2.buyerBusinessNumber,
+      buyerCompanyName: taxInvoices2.buyerCompanyName,
+      buyerEmail: taxInvoices2.buyerEmail,
+      status: taxInvoices2.status,
+      pdfUrl: taxInvoices2.pdfUrl,
+      createdAt: taxInvoices2.createdAt,
+      userId: taxInvoices2.userId,
+      userEmail: users15.email
+    }).from(taxInvoices2).leftJoin(users15, eq33(taxInvoices2.userId, users15.id)).where(whereClause).orderBy(desc8(taxInvoices2.issueDate)).limit(limitNum).offset(offset);
     return res.status(200).json({
-      transactions: transactionsList,
+      taxInvoices: list,
       total: Number(countResult?.count || 0),
       page: pageNum,
       limit: limitNum,
-      todayCharge: Number(todayChargeResult?.sum || 0),
-      todayUsage: Number(todayUsageResult?.sum || 0),
-      monthlyTotal: Number(monthlyTotalResult?.sum || 0)
+      monthlyCount: Number(monthlyCountResult?.count || 0),
+      monthlyAmount: Number(monthlyAmountResult?.sum || 0)
     });
   } catch (error) {
-    console.error("[Admin Transactions] Error:", error);
-    return res.status(500).json({ error: "Failed to fetch transactions" });
+    console.error("[Admin Tax Invoices] Error:", error);
+    return res.status(500).json({ error: "Failed to fetch tax invoices" });
   }
 }
 
-// src/handlers/admin/users/index.ts
-var users_exports = {};
-__export(users_exports, {
+// src/handlers/admin/transactions.ts
+var transactions_exports = {};
+__export(transactions_exports, {
   default: () => handler38
 });
 import { neon as neon37 } from "@neondatabase/serverless";
 import { drizzle as drizzle37 } from "drizzle-orm/neon-http";
-import { sql as sql26, ilike as ilike7, or as or5, desc as desc10, eq as eq34 } from "drizzle-orm";
-import { pgTable as pgTable33, varchar as varchar22, timestamp as timestamp31, decimal as decimal13, boolean as boolean21 } from "drizzle-orm/pg-core";
+import { sql as sql26, ilike as ilike6, eq as eq34, gte as gte5, and as and7, desc as desc9 } from "drizzle-orm";
+import { pgTable as pgTable33, varchar as varchar22, timestamp as timestamp31, decimal as decimal12, boolean as boolean21, text as text23 } from "drizzle-orm/pg-core";
 import crypto25 from "crypto";
 var admins21 = pgTable33("admins", {
   id: varchar22("id").primaryKey().default(sql26`gen_random_uuid()`),
@@ -9283,22 +9415,19 @@ var admins21 = pgTable33("admins", {
   createdAt: timestamp31("created_at").defaultNow(),
   updatedAt: timestamp31("updated_at").defaultNow()
 });
-var users17 = pgTable33("users", {
+var users16 = pgTable33("users", {
   id: varchar22("id").primaryKey().default(sql26`gen_random_uuid()`),
-  email: varchar22("email").unique(),
-  firstName: varchar22("first_name"),
-  lastName: varchar22("last_name"),
-  profileImageUrl: varchar22("profile_image_url"),
-  companyName: varchar22("company_name"),
-  businessNumber: varchar22("business_number"),
-  phone: varchar22("phone"),
-  balance: decimal13("balance", { precision: 12, scale: 0 }).default("0"),
-  stripeCustomerId: varchar22("stripe_customer_id"),
-  isVerified: boolean21("is_verified").default(false),
-  isMaster: boolean21("is_master").default(false),
-  masterResetAt: timestamp31("master_reset_at"),
-  createdAt: timestamp31("created_at").defaultNow(),
-  updatedAt: timestamp31("updated_at").defaultNow()
+  email: varchar22("email").unique()
+});
+var transactions9 = pgTable33("transactions", {
+  id: varchar22("id").primaryKey().default(sql26`gen_random_uuid()`),
+  userId: varchar22("user_id").notNull(),
+  type: varchar22("type", { length: 20 }).notNull(),
+  amount: decimal12("amount", { precision: 12, scale: 0 }).notNull(),
+  balanceAfter: decimal12("balance_after", { precision: 12, scale: 0 }),
+  description: text23("description"),
+  paymentMethod: varchar22("payment_method", { length: 50 }),
+  createdAt: timestamp31("created_at").defaultNow()
 });
 function getDb37() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -9344,6 +9473,133 @@ async function handler38(req, res) {
   }
   try {
     const db = getDb37();
+    const { search, type, page = "1", limit = "20" } = req.query;
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, parseInt(limit));
+    const offset = (pageNum - 1) * limitNum;
+    const today = /* @__PURE__ */ new Date();
+    today.setHours(0, 0, 0, 0);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const [todayChargeResult] = await db.select({ sum: sql26`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(transactions9).where(and7(eq34(transactions9.type, "charge"), gte5(transactions9.createdAt, today)));
+    const [todayUsageResult] = await db.select({ sum: sql26`COALESCE(ABS(SUM(CAST(amount AS DECIMAL))), 0)` }).from(transactions9).where(and7(eq34(transactions9.type, "usage"), gte5(transactions9.createdAt, today)));
+    const [monthlyTotalResult] = await db.select({ sum: sql26`COALESCE(SUM(CAST(amount AS DECIMAL)), 0)` }).from(transactions9).where(and7(eq34(transactions9.type, "charge"), gte5(transactions9.createdAt, monthStart)));
+    const conditions = [];
+    if (search) {
+      conditions.push(ilike6(users16.email, `%${search}%`));
+    }
+    if (type && type !== "all") {
+      conditions.push(eq34(transactions9.type, type));
+    }
+    const whereClause = conditions.length > 0 ? and7(...conditions) : void 0;
+    const [countResult] = await db.select({ count: sql26`count(*)` }).from(transactions9).leftJoin(users16, eq34(transactions9.userId, users16.id)).where(whereClause);
+    const transactionsList = await db.select({
+      id: transactions9.id,
+      type: transactions9.type,
+      amount: transactions9.amount,
+      balanceAfter: transactions9.balanceAfter,
+      description: transactions9.description,
+      paymentMethod: transactions9.paymentMethod,
+      createdAt: transactions9.createdAt,
+      userId: transactions9.userId,
+      userEmail: users16.email
+    }).from(transactions9).leftJoin(users16, eq34(transactions9.userId, users16.id)).where(whereClause).orderBy(desc9(transactions9.createdAt)).limit(limitNum).offset(offset);
+    return res.status(200).json({
+      transactions: transactionsList,
+      total: Number(countResult?.count || 0),
+      page: pageNum,
+      limit: limitNum,
+      todayCharge: Number(todayChargeResult?.sum || 0),
+      todayUsage: Number(todayUsageResult?.sum || 0),
+      monthlyTotal: Number(monthlyTotalResult?.sum || 0)
+    });
+  } catch (error) {
+    console.error("[Admin Transactions] Error:", error);
+    return res.status(500).json({ error: "Failed to fetch transactions" });
+  }
+}
+
+// src/handlers/admin/users/index.ts
+var users_exports = {};
+__export(users_exports, {
+  default: () => handler39
+});
+import { neon as neon38 } from "@neondatabase/serverless";
+import { drizzle as drizzle38 } from "drizzle-orm/neon-http";
+import { sql as sql27, ilike as ilike7, or as or5, desc as desc10, eq as eq35 } from "drizzle-orm";
+import { pgTable as pgTable34, varchar as varchar23, timestamp as timestamp32, decimal as decimal13, boolean as boolean22 } from "drizzle-orm/pg-core";
+import crypto26 from "crypto";
+var admins22 = pgTable34("admins", {
+  id: varchar23("id").primaryKey().default(sql27`gen_random_uuid()`),
+  email: varchar23("email").unique().notNull(),
+  passwordHash: varchar23("password_hash").notNull(),
+  name: varchar23("name", { length: 100 }).notNull(),
+  role: varchar23("role", { length: 20 }).default("cs").notNull(),
+  isActive: boolean22("is_active").default(true),
+  lastLoginAt: timestamp32("last_login_at"),
+  createdAt: timestamp32("created_at").defaultNow(),
+  updatedAt: timestamp32("updated_at").defaultNow()
+});
+var users17 = pgTable34("users", {
+  id: varchar23("id").primaryKey().default(sql27`gen_random_uuid()`),
+  email: varchar23("email").unique(),
+  firstName: varchar23("first_name"),
+  lastName: varchar23("last_name"),
+  profileImageUrl: varchar23("profile_image_url"),
+  companyName: varchar23("company_name"),
+  businessNumber: varchar23("business_number"),
+  phone: varchar23("phone"),
+  balance: decimal13("balance", { precision: 12, scale: 0 }).default("0"),
+  stripeCustomerId: varchar23("stripe_customer_id"),
+  isVerified: boolean22("is_verified").default(false),
+  isMaster: boolean22("is_master").default(false),
+  masterResetAt: timestamp32("master_reset_at"),
+  createdAt: timestamp32("created_at").defaultNow(),
+  updatedAt: timestamp32("updated_at").defaultNow()
+});
+function getDb38() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL not configured");
+  const sqlClient = neon38(databaseUrl);
+  return drizzle38(sqlClient);
+}
+function verifyToken24(token) {
+  try {
+    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
+    const { data, signature } = decoded;
+    const expectedSignature = crypto26.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    if (signature !== expectedSignature) return null;
+    const payload = JSON.parse(data);
+    if (payload.exp < Date.now()) return null;
+    return { adminId: payload.adminId };
+  } catch {
+    return null;
+  }
+}
+async function verifyAdminToken20(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.replace("Bearer ", "");
+  const verified = verifyToken24(token);
+  if (!verified) return null;
+  try {
+    const db = getDb38();
+    const admin = await db.select().from(admins22).where(eq35(admins22.id, verified.adminId)).limit(1);
+    if (admin.length === 0 || !admin[0].isActive) return null;
+    return admin[0];
+  } catch {
+    return null;
+  }
+}
+async function handler39(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+  const admin = await verifyAdminToken20(req);
+  if (!admin) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    const db = getDb38();
     const { search, page = "1", limit = "20" } = req.query;
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, parseInt(limit));
@@ -9355,7 +9611,7 @@ async function handler38(req, res) {
         ilike7(users17.companyName, `%${search}%`)
       );
     }
-    const [countResult] = await db.select({ count: sql26`count(*)` }).from(users17).where(whereClause);
+    const [countResult] = await db.select({ count: sql27`count(*)` }).from(users17).where(whereClause);
     const usersList = await db.select().from(users17).where(whereClause).orderBy(desc10(users17.createdAt)).limit(limitNum).offset(offset);
     return res.status(200).json({
       users: usersList,
@@ -9372,35 +9628,35 @@ async function handler38(req, res) {
 // src/handlers/agencies/list.ts
 var list_exports = {};
 __export(list_exports, {
-  default: () => handler39
+  default: () => handler40
 });
-import { neon as neon38 } from "@neondatabase/serverless";
-import { drizzle as drizzle38 } from "drizzle-orm/neon-http";
-import { eq as eq35, sql as sql27 } from "drizzle-orm";
-import { pgTable as pgTable34, varchar as varchar23, timestamp as timestamp32, boolean as boolean22 } from "drizzle-orm/pg-core";
-var agencies4 = pgTable34("agencies", {
-  id: varchar23("id").primaryKey().default(sql27`gen_random_uuid()`),
-  userId: varchar23("user_id").notNull(),
-  name: varchar23("name", { length: 200 }).notNull(),
-  isActive: boolean22("is_active").default(true),
-  createdAt: timestamp32("created_at").defaultNow()
+import { neon as neon39 } from "@neondatabase/serverless";
+import { drizzle as drizzle39 } from "drizzle-orm/neon-http";
+import { eq as eq36, sql as sql28 } from "drizzle-orm";
+import { pgTable as pgTable35, varchar as varchar24, timestamp as timestamp33, boolean as boolean23 } from "drizzle-orm/pg-core";
+var agencies4 = pgTable35("agencies", {
+  id: varchar24("id").primaryKey().default(sql28`gen_random_uuid()`),
+  userId: varchar24("user_id").notNull(),
+  name: varchar24("name", { length: 200 }).notNull(),
+  isActive: boolean23("is_active").default(true),
+  createdAt: timestamp33("created_at").defaultNow()
 });
-function getDb38() {
+function getDb39() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sqlClient = neon38(databaseUrl);
-  return drizzle38(sqlClient);
+  const sqlClient = neon39(databaseUrl);
+  return drizzle39(sqlClient);
 }
-async function handler39(req, res) {
+async function handler40(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
   try {
-    const db = getDb38();
+    const db = getDb39();
     const activeAgencies = await db.select({
       id: agencies4.id,
       name: agencies4.name
-    }).from(agencies4).where(eq35(agencies4.isActive, true));
+    }).from(agencies4).where(eq36(agencies4.isActive, true));
     return res.status(200).json({
       agencies: activeAgencies
     });
@@ -9413,39 +9669,39 @@ async function handler39(req, res) {
 // src/handlers/agency/login.ts
 var login_exports2 = {};
 __export(login_exports2, {
-  default: () => handler40
+  default: () => handler41
 });
 import { createClient as createClient14 } from "@supabase/supabase-js";
-import { neon as neon39 } from "@neondatabase/serverless";
-import { drizzle as drizzle39 } from "drizzle-orm/neon-http";
-import { eq as eq36, sql as sql28 } from "drizzle-orm";
-import { pgTable as pgTable35, varchar as varchar24, timestamp as timestamp33, boolean as boolean23 } from "drizzle-orm/pg-core";
-import crypto26 from "crypto";
-var users18 = pgTable35("users", {
-  id: varchar24("id").primaryKey().default(sql28`gen_random_uuid()`),
-  email: varchar24("email").unique(),
-  companyName: varchar24("company_name"),
-  isAgency: boolean23("is_agency").default(false),
-  agencyId: varchar24("agency_id"),
-  createdAt: timestamp33("created_at").defaultNow(),
-  updatedAt: timestamp33("updated_at").defaultNow()
+import { neon as neon40 } from "@neondatabase/serverless";
+import { drizzle as drizzle40 } from "drizzle-orm/neon-http";
+import { eq as eq37, sql as sql29 } from "drizzle-orm";
+import { pgTable as pgTable36, varchar as varchar25, timestamp as timestamp34, boolean as boolean24 } from "drizzle-orm/pg-core";
+import crypto27 from "crypto";
+var users18 = pgTable36("users", {
+  id: varchar25("id").primaryKey().default(sql29`gen_random_uuid()`),
+  email: varchar25("email").unique(),
+  companyName: varchar25("company_name"),
+  isAgency: boolean24("is_agency").default(false),
+  agencyId: varchar25("agency_id"),
+  createdAt: timestamp34("created_at").defaultNow(),
+  updatedAt: timestamp34("updated_at").defaultNow()
 });
-var agencies5 = pgTable35("agencies", {
-  id: varchar24("id").primaryKey().default(sql28`gen_random_uuid()`),
-  userId: varchar24("user_id").notNull(),
-  name: varchar24("name", { length: 200 }).notNull(),
-  contactName: varchar24("contact_name", { length: 100 }),
-  contactPhone: varchar24("contact_phone", { length: 20 }),
-  contactEmail: varchar24("contact_email", { length: 200 }),
-  isActive: boolean23("is_active").default(true),
-  createdAt: timestamp33("created_at").defaultNow(),
-  updatedAt: timestamp33("updated_at").defaultNow()
+var agencies5 = pgTable36("agencies", {
+  id: varchar25("id").primaryKey().default(sql29`gen_random_uuid()`),
+  userId: varchar25("user_id").notNull(),
+  name: varchar25("name", { length: 200 }).notNull(),
+  contactName: varchar25("contact_name", { length: 100 }),
+  contactPhone: varchar25("contact_phone", { length: 20 }),
+  contactEmail: varchar25("contact_email", { length: 200 }),
+  isActive: boolean24("is_active").default(true),
+  createdAt: timestamp34("created_at").defaultNow(),
+  updatedAt: timestamp34("updated_at").defaultNow()
 });
-function getDb39() {
+function getDb40() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sqlClient = neon39(databaseUrl);
-  return drizzle39(sqlClient);
+  const sqlClient = neon40(databaseUrl);
+  return drizzle40(sqlClient);
 }
 function getSupabaseAdmin13() {
   const url = process.env.SUPABASE_URL;
@@ -9464,10 +9720,10 @@ function createAgencyToken(agencyId, userId, email, agencyName) {
     iat: Date.now()
   };
   const data = JSON.stringify(payload);
-  const signature = crypto26.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+  const signature = crypto27.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
   return Buffer.from(JSON.stringify({ data, signature })).toString("base64");
 }
-async function handler40(req, res) {
+async function handler41(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -9484,15 +9740,15 @@ async function handler40(req, res) {
     if (authError || !authData.user) {
       return res.status(401).json({ error: "\uC774\uBA54\uC77C \uB610\uB294 \uBE44\uBC00\uBC88\uD638\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4" });
     }
-    const db = getDb39();
-    const [user] = await db.select().from(users18).where(eq36(users18.id, authData.user.id));
+    const db = getDb40();
+    const [user] = await db.select().from(users18).where(eq37(users18.id, authData.user.id));
     if (!user) {
       return res.status(401).json({ error: "\uB4F1\uB85D\uB41C \uC0AC\uC6A9\uC790\uAC00 \uC544\uB2D9\uB2C8\uB2E4" });
     }
     if (!user.isAgency) {
       return res.status(403).json({ error: "\uB300\uD589\uC0AC \uACC4\uC815\uC774 \uC544\uB2D9\uB2C8\uB2E4. \uC77C\uBC18 \uB85C\uADF8\uC778\uC744 \uC774\uC6A9\uD574\uC8FC\uC138\uC694." });
     }
-    const [agency] = await db.select().from(agencies5).where(eq36(agencies5.userId, user.id));
+    const [agency] = await db.select().from(agencies5).where(eq37(agencies5.userId, user.id));
     if (!agency || !agency.isActive) {
       return res.status(403).json({ error: "\uBE44\uD65C\uC131\uD654\uB41C \uB300\uD589\uC0AC \uACC4\uC815\uC785\uB2C8\uB2E4" });
     }
@@ -9521,59 +9777,59 @@ async function handler40(req, res) {
 // src/handlers/agency/stats.ts
 var stats_exports2 = {};
 __export(stats_exports2, {
-  default: () => handler41
+  default: () => handler42
 });
-import { neon as neon40 } from "@neondatabase/serverless";
-import { drizzle as drizzle40 } from "drizzle-orm/neon-http";
-import { eq as eq37, and as and9, gte as gte6, lte as lte3, sql as sql29, inArray } from "drizzle-orm";
-import { pgTable as pgTable36, varchar as varchar25, timestamp as timestamp34, boolean as boolean24, decimal as decimal14, integer as integer17, text as text24 } from "drizzle-orm/pg-core";
-import crypto27 from "crypto";
-var users19 = pgTable36("users", {
-  id: varchar25("id").primaryKey().default(sql29`gen_random_uuid()`),
-  email: varchar25("email").unique(),
-  companyName: varchar25("company_name"),
-  isAgency: boolean24("is_agency").default(false),
-  agencyId: varchar25("agency_id"),
+import { neon as neon41 } from "@neondatabase/serverless";
+import { drizzle as drizzle41 } from "drizzle-orm/neon-http";
+import { eq as eq38, and as and9, gte as gte6, lte as lte3, sql as sql30, inArray } from "drizzle-orm";
+import { pgTable as pgTable37, varchar as varchar26, timestamp as timestamp35, boolean as boolean25, decimal as decimal14, integer as integer17, text as text24 } from "drizzle-orm/pg-core";
+import crypto28 from "crypto";
+var users19 = pgTable37("users", {
+  id: varchar26("id").primaryKey().default(sql30`gen_random_uuid()`),
+  email: varchar26("email").unique(),
+  companyName: varchar26("company_name"),
+  isAgency: boolean25("is_agency").default(false),
+  agencyId: varchar26("agency_id"),
   balance: decimal14("balance", { precision: 12, scale: 0 }).default("0"),
-  createdAt: timestamp34("created_at").defaultNow(),
-  updatedAt: timestamp34("updated_at").defaultNow()
+  createdAt: timestamp35("created_at").defaultNow(),
+  updatedAt: timestamp35("updated_at").defaultNow()
 });
-var agencies6 = pgTable36("agencies", {
-  id: varchar25("id").primaryKey().default(sql29`gen_random_uuid()`),
-  userId: varchar25("user_id").notNull(),
-  name: varchar25("name", { length: 200 }).notNull(),
-  isActive: boolean24("is_active").default(true),
-  createdAt: timestamp34("created_at").defaultNow()
+var agencies6 = pgTable37("agencies", {
+  id: varchar26("id").primaryKey().default(sql30`gen_random_uuid()`),
+  userId: varchar26("user_id").notNull(),
+  name: varchar26("name", { length: 200 }).notNull(),
+  isActive: boolean25("is_active").default(true),
+  createdAt: timestamp35("created_at").defaultNow()
 });
-var campaigns15 = pgTable36("campaigns", {
-  id: varchar25("id").primaryKey().default(sql29`gen_random_uuid()`),
-  userId: varchar25("user_id").notNull(),
-  name: varchar25("name", { length: 200 }).notNull(),
-  status: varchar25("status", { length: 20 }).default("temp_registered").notNull(),
+var campaigns15 = pgTable37("campaigns", {
+  id: varchar26("id").primaryKey().default(sql30`gen_random_uuid()`),
+  userId: varchar26("user_id").notNull(),
+  name: varchar26("name", { length: 200 }).notNull(),
+  status: varchar26("status", { length: 20 }).default("temp_registered").notNull(),
   statusCode: integer17("status_code").default(0).notNull(),
   budget: decimal14("budget", { precision: 12, scale: 0 }).notNull(),
-  createdAt: timestamp34("created_at").defaultNow(),
-  updatedAt: timestamp34("updated_at").defaultNow()
+  createdAt: timestamp35("created_at").defaultNow(),
+  updatedAt: timestamp35("updated_at").defaultNow()
 });
-var transactions10 = pgTable36("transactions", {
-  id: varchar25("id").primaryKey().default(sql29`gen_random_uuid()`),
-  userId: varchar25("user_id").notNull(),
-  type: varchar25("type", { length: 20 }).notNull(),
+var transactions10 = pgTable37("transactions", {
+  id: varchar26("id").primaryKey().default(sql30`gen_random_uuid()`),
+  userId: varchar26("user_id").notNull(),
+  type: varchar26("type", { length: 20 }).notNull(),
   amount: decimal14("amount", { precision: 12, scale: 0 }).notNull(),
   description: text24("description"),
-  createdAt: timestamp34("created_at").defaultNow()
+  createdAt: timestamp35("created_at").defaultNow()
 });
-function getDb40() {
+function getDb41() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sqlClient = neon40(databaseUrl);
-  return drizzle40(sqlClient);
+  const sqlClient = neon41(databaseUrl);
+  return drizzle41(sqlClient);
 }
 function verifyAgencyToken(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
-    const expectedSignature = crypto27.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    const expectedSignature = crypto28.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -9589,8 +9845,8 @@ async function verifyAgency(req) {
   const verified = verifyAgencyToken(token);
   if (!verified) return null;
   try {
-    const db = getDb40();
-    const [agency] = await db.select().from(agencies6).where(eq37(agencies6.id, verified.agencyId));
+    const db = getDb41();
+    const [agency] = await db.select().from(agencies6).where(eq38(agencies6.id, verified.agencyId));
     if (!agency || !agency.isActive) return null;
     return { agency, userId: verified.userId };
   } catch {
@@ -9602,7 +9858,7 @@ function calculateCommissionRate(totalSpend) {
   if (totalSpend >= 5e7) return 15;
   return 10;
 }
-async function handler41(req, res) {
+async function handler42(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -9611,9 +9867,9 @@ async function handler41(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   const { agency } = verified;
-  const db = getDb40();
+  const db = getDb41();
   try {
-    const subAccounts = await db.select().from(users19).where(eq37(users19.agencyId, agency.id));
+    const subAccounts = await db.select().from(users19).where(eq38(users19.agencyId, agency.id));
     const subAccountIds = subAccounts.map((u) => u.id);
     if (subAccountIds.length === 0) {
       return res.status(200).json({
@@ -9631,7 +9887,7 @@ async function handler41(req, res) {
     const usageTransactions = await db.select().from(transactions10).where(
       and9(
         inArray(transactions10.userId, subAccountIds),
-        eq37(transactions10.type, "usage"),
+        eq38(transactions10.type, "usage"),
         gte6(transactions10.createdAt, startOfMonth),
         lte3(transactions10.createdAt, endOfMonth)
       )
@@ -9662,15 +9918,15 @@ async function handler41(req, res) {
 // src/handlers/auth/user.ts
 var user_exports = {};
 __export(user_exports, {
-  default: () => handler42
+  default: () => handler43
 });
 import { createClient as createClient15 } from "@supabase/supabase-js";
-import { neon as neon41 } from "@neondatabase/serverless";
-import { drizzle as drizzle41 } from "drizzle-orm/neon-http";
-import { eq as eq38 } from "drizzle-orm";
-import { pgTable as pgTable37, text as text25, timestamp as timestamp35 } from "drizzle-orm/pg-core";
-import crypto28 from "crypto";
-var users20 = pgTable37("users", {
+import { neon as neon42 } from "@neondatabase/serverless";
+import { drizzle as drizzle42 } from "drizzle-orm/neon-http";
+import { eq as eq39 } from "drizzle-orm";
+import { pgTable as pgTable38, text as text25, timestamp as timestamp36 } from "drizzle-orm/pg-core";
+import crypto29 from "crypto";
+var users20 = pgTable38("users", {
   id: text25("id").primaryKey(),
   email: text25("email"),
   firstName: text25("first_name"),
@@ -9678,16 +9934,16 @@ var users20 = pgTable37("users", {
   profileImageUrl: text25("profile_image_url"),
   balance: text25("balance").default("0").notNull(),
   stripeCustomerId: text25("stripe_customer_id"),
-  createdAt: timestamp35("created_at").defaultNow(),
-  updatedAt: timestamp35("updated_at").defaultNow()
+  createdAt: timestamp36("created_at").defaultNow(),
+  updatedAt: timestamp36("updated_at").defaultNow()
 });
-function getDb41() {
+function getDb42() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     throw new Error("DATABASE_URL is not set");
   }
-  const sql43 = neon41(dbUrl);
-  return drizzle41(sql43);
+  const sql44 = neon42(dbUrl);
+  return drizzle42(sql44);
 }
 function getSupabaseAdmin14() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -9706,7 +9962,7 @@ function verifyImpersonateToken9(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
-    const expectedSignature = crypto28.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    const expectedSignature = crypto29.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -9752,7 +10008,7 @@ async function verifyAuth11(req) {
     return null;
   }
 }
-async function handler42(req, res) {
+async function handler43(req, res) {
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -9764,8 +10020,8 @@ async function handler42(req, res) {
     if (!auth) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    const db = getDb41();
-    const result = await db.select().from(users20).where(eq38(users20.id, auth.userId));
+    const db = getDb42();
+    const result = await db.select().from(users20).where(eq39(users20.id, auth.userId));
     let user = result[0];
     if (!user) {
       console.log("User not found, creating new user:", auth.userId, auth.email);
@@ -9791,7 +10047,7 @@ async function handler42(req, res) {
 // src/handlers/bizchat/ai.ts
 var ai_exports = {};
 __export(ai_exports, {
-  default: () => handler43
+  default: () => handler44
 });
 import { createClient as createClient16 } from "@supabase/supabase-js";
 import { createHmac as createHmac9 } from "crypto";
@@ -9884,7 +10140,7 @@ async function requestGounInspection(campaignId, useProduction = false) {
 async function getGounInspectionResult(campaignId, useProduction = false) {
   return callBizChatAPI2("/api/v1/ai/goun/inspect/result", "POST", { cmpnId: campaignId }, useProduction);
 }
-async function handler43(req, res) {
+async function handler44(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -10032,7 +10288,7 @@ async function handler43(req, res) {
 // src/handlers/bizchat/ats.ts
 var ats_exports = {};
 __export(ats_exports, {
-  default: () => handler44
+  default: () => handler45
 });
 import { createClient as createClient17 } from "@supabase/supabase-js";
 import { createHmac as createHmac10 } from "crypto";
@@ -10188,7 +10444,7 @@ async function callBizChatAPI3(endpoint, method = "POST", body, useProduction = 
   }
   return { status: response.status, data };
 }
-async function handler44(req, res) {
+async function handler45(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -10300,19 +10556,19 @@ async function handler44(req, res) {
 // src/handlers/bizchat/campaigns.ts
 var campaigns_exports2 = {};
 __export(campaigns_exports2, {
-  default: () => handler45
+  default: () => handler46
 });
 import { createClient as createClient18 } from "@supabase/supabase-js";
-import { neon as neon42, neonConfig as neonConfig13 } from "@neondatabase/serverless";
+import { neon as neon43, neonConfig as neonConfig13 } from "@neondatabase/serverless";
 import { createHmac as createHmac11 } from "crypto";
-import { drizzle as drizzle42 } from "drizzle-orm/neon-http";
-import { eq as eq39 } from "drizzle-orm";
-import { pgTable as pgTable38, text as text26, integer as integer19, timestamp as timestamp36, jsonb as jsonb13 } from "drizzle-orm/pg-core";
+import { drizzle as drizzle43 } from "drizzle-orm/neon-http";
+import { eq as eq40 } from "drizzle-orm";
+import { pgTable as pgTable39, text as text26, integer as integer19, timestamp as timestamp37, jsonb as jsonb13 } from "drizzle-orm/pg-core";
 neonConfig13.fetchConnectionCache = true;
 var BIZCHAT_DEV_URL6 = process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443";
 var BIZCHAT_PROD_URL6 = process.env.BIZCHAT_PROD_API_URL || "https://gw.bizchat1.co.kr";
 var CALLBACK_BASE_URL2 = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://wepickbizchat-new.vercel.app";
-var campaigns16 = pgTable38("campaigns", {
+var campaigns16 = pgTable39("campaigns", {
   id: text26("id").primaryKey(),
   userId: text26("user_id").notNull(),
   name: text26("name").notNull(),
@@ -10331,11 +10587,11 @@ var campaigns16 = pgTable38("campaigns", {
   settleCnt: integer19("settle_cnt").default(0),
   targetCount: integer19("target_count").default(0),
   budget: text26("budget"),
-  atsSndStartDate: timestamp36("ats_snd_start_date"),
-  scheduledAt: timestamp36("scheduled_at"),
-  updatedAt: timestamp36("updated_at").defaultNow()
+  atsSndStartDate: timestamp37("ats_snd_start_date"),
+  scheduledAt: timestamp37("scheduled_at"),
+  updatedAt: timestamp37("updated_at").defaultNow()
 });
-var messages3 = pgTable38("messages", {
+var messages3 = pgTable39("messages", {
   id: text26("id").primaryKey(),
   campaignId: text26("campaign_id").notNull(),
   title: text26("title"),
@@ -10349,10 +10605,10 @@ var messages3 = pgTable38("messages", {
   lmsImageFileId: text26("lms_image_file_id"),
   lmsUrlLinks: jsonb13("lms_url_links")
 });
-function getDb42() {
+function getDb43() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle42(neon42(dbUrl));
+  return drizzle43(neon43(dbUrl));
 }
 function getSupabaseAdmin17() {
   const url = process.env.SUPABASE_URL;
@@ -10900,7 +11156,7 @@ function detectProductionEnvironment(req) {
   if (process.env.NODE_ENV === "production") return true;
   return false;
 }
-async function handler45(req, res) {
+async function handler46(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -10911,7 +11167,7 @@ async function handler45(req, res) {
   if (!auth) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  const db = getDb42();
+  const db = getDb43();
   const useProduction = detectProductionEnvironment(req);
   console.log(`[BizChat] Environment: ${useProduction ? "PRODUCTION" : "DEVELOPMENT"} (VERCEL_ENV=${process.env.VERCEL_ENV}, NODE_ENV=${process.env.NODE_ENV})`);
   if (req.method === "POST") {
@@ -10923,7 +11179,7 @@ async function handler45(req, res) {
         }
         const bizchatIds = req.body.campaignIds;
         for (const bizchatId of bizchatIds) {
-          const campaignCheck = await db.select().from(campaigns16).where(eq39(campaigns16.bizchatCampaignId, bizchatId));
+          const campaignCheck = await db.select().from(campaigns16).where(eq40(campaigns16.bizchatCampaignId, bizchatId));
           if (campaignCheck.length === 0) {
             return res.status(404).json({
               error: `Campaign with BizChat ID ${bizchatId} not found`
@@ -10999,7 +11255,7 @@ async function handler45(req, res) {
       if (!campaignId) {
         return res.status(400).json({ error: "campaignId is required" });
       }
-      const campaignResult = await db.select().from(campaigns16).where(eq39(campaigns16.id, campaignId));
+      const campaignResult = await db.select().from(campaigns16).where(eq40(campaigns16.id, campaignId));
       if (campaignResult.length === 0) {
         return res.status(404).json({ error: "Campaign not found" });
       }
@@ -11007,7 +11263,7 @@ async function handler45(req, res) {
       if (campaign.userId !== auth.userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      const messageResult = await db.select().from(messages3).where(eq39(messages3.campaignId, campaignId));
+      const messageResult = await db.select().from(messages3).where(eq40(messages3.campaignId, campaignId));
       const message = messageResult[0];
       switch (action) {
         case "create": {
@@ -11033,7 +11289,7 @@ async function handler45(req, res) {
               // 임시등록
               status: "temp_registered",
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq39(campaigns16.id, campaignId));
+            }).where(eq40(campaigns16.id, campaignId));
           }
           return res.status(200).json({
             success: true,
@@ -11071,7 +11327,7 @@ async function handler45(req, res) {
               bizchatError: result.data
             });
           }
-          await db.update(campaigns16).set({ updatedAt: /* @__PURE__ */ new Date() }).where(eq39(campaigns16.id, campaignId));
+          await db.update(campaigns16).set({ updatedAt: /* @__PURE__ */ new Date() }).where(eq40(campaigns16.id, campaignId));
           return res.status(200).json({
             success: true,
             action: "update",
@@ -11098,7 +11354,7 @@ async function handler45(req, res) {
             // 승인요청
             status: "approval_requested",
             updatedAt: /* @__PURE__ */ new Date()
-          }).where(eq39(campaigns16.id, campaignId));
+          }).where(eq40(campaigns16.id, campaignId));
           return res.status(200).json({
             success: true,
             action: "approve",
@@ -11195,7 +11451,7 @@ async function handler45(req, res) {
               statusCode: 25,
               status: "cancelled",
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq39(campaigns16.id, campaignId));
+            }).where(eq40(campaigns16.id, campaignId));
           }
           return res.status(200).json({
             success: result.data.code === "S000001",
@@ -11213,7 +11469,7 @@ async function handler45(req, res) {
               statusCode: 35,
               status: "stopped",
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq39(campaigns16.id, campaignId));
+            }).where(eq40(campaigns16.id, campaignId));
           }
           return res.status(200).json({
             success: result.data.code === "S000001",
@@ -11372,7 +11628,7 @@ async function handler45(req, res) {
       if (!campaignId || typeof campaignId !== "string") {
         return res.status(400).json({ error: "campaignId query parameter is required" });
       }
-      const campaignResult = await db.select().from(campaigns16).where(eq39(campaigns16.id, campaignId));
+      const campaignResult = await db.select().from(campaigns16).where(eq40(campaigns16.id, campaignId));
       if (campaignResult.length === 0) {
         return res.status(404).json({ error: "Campaign not found" });
       }
@@ -11414,7 +11670,7 @@ async function handler45(req, res) {
 // src/handlers/bizchat/file.ts
 var file_exports = {};
 __export(file_exports, {
-  default: () => handler46
+  default: () => handler47
 });
 import { createClient as createClient19 } from "@supabase/supabase-js";
 import FormData from "form-data";
@@ -11464,7 +11720,7 @@ async function verifyAuth15(req) {
 function generateTid5() {
   return Date.now().toString();
 }
-async function handler46(req, res) {
+async function handler47(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -11558,7 +11814,7 @@ async function handler46(req, res) {
 // src/handlers/bizchat/mdn-upload.ts
 var mdn_upload_exports = {};
 __export(mdn_upload_exports, {
-  default: () => handler47
+  default: () => handler48
 });
 import { createClient as createClient20 } from "@supabase/supabase-js";
 import { createHmac as createHmac13 } from "crypto";
@@ -11616,7 +11872,7 @@ function detectProductionEnvironment2(req) {
   if (process.env.NODE_ENV === "production") return true;
   return false;
 }
-async function handler47(req, res) {
+async function handler48(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -11710,7 +11966,7 @@ async function handler47(req, res) {
 // src/handlers/bizchat/sender.ts
 var sender_exports = {};
 __export(sender_exports, {
-  default: () => handler48
+  default: () => handler49
 });
 import { createClient as createClient21 } from "@supabase/supabase-js";
 import { createHmac as createHmac14 } from "crypto";
@@ -11791,7 +12047,7 @@ async function callBizChatAPI5(endpoint, method = "POST", body, useProduction = 
   }
   return { status: response.status, data };
 }
-async function handler48(req, res) {
+async function handler49(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -11927,27 +12183,27 @@ async function handler48(req, res) {
 // src/handlers/bizchat/stats.ts
 var stats_exports3 = {};
 __export(stats_exports3, {
-  default: () => handler49
+  default: () => handler50
 });
 import { createClient as createClient22 } from "@supabase/supabase-js";
-import { neon as neon43, neonConfig as neonConfig14 } from "@neondatabase/serverless";
+import { neon as neon44, neonConfig as neonConfig14 } from "@neondatabase/serverless";
 import { createHmac as createHmac15 } from "crypto";
-import { drizzle as drizzle43 } from "drizzle-orm/neon-http";
-import { eq as eq40 } from "drizzle-orm";
-import { pgTable as pgTable39, text as text27, integer as integer20 } from "drizzle-orm/pg-core";
+import { drizzle as drizzle44 } from "drizzle-orm/neon-http";
+import { eq as eq41 } from "drizzle-orm";
+import { pgTable as pgTable40, text as text27, integer as integer20 } from "drizzle-orm/pg-core";
 neonConfig14.fetchConnectionCache = true;
 var BIZCHAT_DEV_URL10 = process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443";
 var BIZCHAT_PROD_URL10 = process.env.BIZCHAT_PROD_API_URL || "https://gw.bizchat1.co.kr";
-var campaigns17 = pgTable39("campaigns", {
+var campaigns17 = pgTable40("campaigns", {
   id: text27("id").primaryKey(),
   userId: text27("user_id").notNull(),
   bizchatCampaignId: text27("bizchat_campaign_id"),
   statusCode: integer20("status_code").default(0)
 });
-function getDb43() {
+function getDb44() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle43(neon43(dbUrl));
+  return drizzle44(neon44(dbUrl));
 }
 function getSupabaseAdmin21() {
   const url = process.env.SUPABASE_URL;
@@ -12022,7 +12278,7 @@ async function fetchCampaignStats(bizchatCampaignId) {
   }
   return response.json();
 }
-async function handler49(req, res) {
+async function handler50(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -12034,13 +12290,13 @@ async function handler49(req, res) {
     if (!user) {
       return res.status(401).json({ success: false, error: "\uC778\uC99D\uC774 \uD544\uC694\uD569\uB2C8\uB2E4" });
     }
-    const db = getDb43();
+    const db = getDb44();
     if (req.method === "GET") {
       const { campaignId } = req.query;
       if (!campaignId || typeof campaignId !== "string") {
         return res.status(400).json({ success: false, error: "\uCEA0\uD398\uC778 ID\uAC00 \uD544\uC694\uD569\uB2C8\uB2E4" });
       }
-      const [campaign] = await db.select().from(campaigns17).where(eq40(campaigns17.id, campaignId)).limit(1);
+      const [campaign] = await db.select().from(campaigns17).where(eq41(campaigns17.id, campaignId)).limit(1);
       if (!campaign) {
         return res.status(404).json({ success: false, error: "\uCEA0\uD398\uC778\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4" });
       }
@@ -12077,7 +12333,7 @@ async function handler49(req, res) {
         if (!campaignId) {
           return res.status(400).json({ success: false, error: "\uCEA0\uD398\uC778 ID\uAC00 \uD544\uC694\uD569\uB2C8\uB2E4" });
         }
-        const [campaign] = await db.select().from(campaigns17).where(eq40(campaigns17.id, campaignId)).limit(1);
+        const [campaign] = await db.select().from(campaigns17).where(eq41(campaigns17.id, campaignId)).limit(1);
         if (!campaign) {
           return res.status(404).json({ success: false, error: "\uCEA0\uD398\uC778\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4" });
         }
@@ -12123,7 +12379,7 @@ async function handler49(req, res) {
 // src/handlers/bizchat/template.ts
 var template_exports = {};
 __export(template_exports, {
-  default: () => handler50
+  default: () => handler51
 });
 import { createClient as createClient23 } from "@supabase/supabase-js";
 import { createHmac as createHmac16 } from "crypto";
@@ -12204,7 +12460,7 @@ async function callBizChatAPI6(endpoint, method = "POST", body, useProduction = 
   }
   return { status: response.status, data };
 }
-async function handler50(req, res) {
+async function handler51(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -12373,7 +12629,7 @@ async function handler50(req, res) {
 // src/handlers/bizchat/test.ts
 var test_exports = {};
 __export(test_exports, {
-  default: () => handler51
+  default: () => handler52
 });
 var BIZCHAT_DEV_URL12 = process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443";
 var BIZCHAT_PROD_URL12 = process.env.BIZCHAT_PROD_API_URL || "https://gw.bizchat1.co.kr";
@@ -12428,7 +12684,7 @@ async function getCampaignList2(useProduction = false) {
 async function getAtsMetaFilter(useProduction = false) {
   return callBizChatAPI7("/api/v1/ats/meta/filter", "POST", {}, useProduction);
 }
-async function handler51(req, res) {
+async function handler52(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -12496,16 +12752,16 @@ async function handler51(req, res) {
 // src/handlers/campaigns/[id].ts
 var id_exports2 = {};
 __export(id_exports2, {
-  default: () => handler52
+  default: () => handler53
 });
 import { createClient as createClient24 } from "@supabase/supabase-js";
-import { neon as neon44, neonConfig as neonConfig15 } from "@neondatabase/serverless";
-import { drizzle as drizzle44 } from "drizzle-orm/neon-http";
-import { eq as eq41 } from "drizzle-orm";
-import { pgTable as pgTable40, text as text28, integer as integer21, timestamp as timestamp37, numeric as numeric3, jsonb as jsonb14 } from "drizzle-orm/pg-core";
+import { neon as neon45, neonConfig as neonConfig15 } from "@neondatabase/serverless";
+import { drizzle as drizzle45 } from "drizzle-orm/neon-http";
+import { eq as eq42 } from "drizzle-orm";
+import { pgTable as pgTable41, text as text28, integer as integer21, timestamp as timestamp38, numeric as numeric3, jsonb as jsonb14 } from "drizzle-orm/pg-core";
 import { createHmac as createHmac17 } from "crypto";
 neonConfig15.fetchConnectionCache = true;
-var campaigns18 = pgTable40("campaigns", {
+var campaigns18 = pgTable41("campaigns", {
   id: text28("id").primaryKey(),
   userId: text28("user_id").notNull(),
   name: text28("name").notNull(),
@@ -12520,8 +12776,8 @@ var campaigns18 = pgTable40("campaigns", {
   clickCount: integer21("click_count"),
   budget: numeric3("budget"),
   costPerMessage: numeric3("cost_per_message"),
-  scheduledAt: timestamp37("scheduled_at"),
-  completedAt: timestamp37("completed_at"),
+  scheduledAt: timestamp38("scheduled_at"),
+  completedAt: timestamp38("completed_at"),
   rejectionReason: text28("rejection_reason"),
   bizchatCampaignId: text28("bizchat_campaign_id"),
   rcvType: integer21("rcv_type").default(0),
@@ -12535,18 +12791,18 @@ var campaigns18 = pgTable40("campaigns", {
   settleCnt: integer21("settle_cnt").default(0),
   mdnFileId: text28("mdn_file_id"),
   // Maptics 지오펜스 발송 관련 필드
-  atsSndStartDate: timestamp37("ats_snd_start_date"),
-  collStartDate: timestamp37("coll_start_date"),
-  collEndDate: timestamp37("coll_end_date"),
-  collSndDate: timestamp37("coll_snd_date"),
+  atsSndStartDate: timestamp38("ats_snd_start_date"),
+  collStartDate: timestamp38("coll_start_date"),
+  collEndDate: timestamp38("coll_end_date"),
+  collSndDate: timestamp38("coll_snd_date"),
   sndGeofenceId: integer21("snd_geofence_id"),
   rtStartHhmm: text28("rt_start_hhmm"),
   rtEndHhmm: text28("rt_end_hhmm"),
   sndDayDiv: integer21("snd_day_div"),
-  createdAt: timestamp37("created_at").defaultNow(),
-  updatedAt: timestamp37("updated_at").defaultNow()
+  createdAt: timestamp38("created_at").defaultNow(),
+  updatedAt: timestamp38("updated_at").defaultNow()
 });
-var messages4 = pgTable40("messages", {
+var messages4 = pgTable41("messages", {
   id: text28("id").primaryKey(),
   campaignId: text28("campaign_id").notNull(),
   title: text28("title"),
@@ -12561,7 +12817,7 @@ var messages4 = pgTable40("messages", {
   lmsImageFileId: text28("lms_image_file_id"),
   lmsUrlLinks: jsonb14("lms_url_links")
 });
-var targeting3 = pgTable40("targeting", {
+var targeting3 = pgTable41("targeting", {
   id: text28("id").primaryKey(),
   campaignId: text28("campaign_id").notNull(),
   gender: text28("gender"),
@@ -12579,9 +12835,9 @@ var targeting3 = pgTable40("targeting", {
   geofenceIds: text28("geofence_ids").array(),
   atsQuery: text28("ats_query"),
   estimatedCount: integer21("estimated_count"),
-  createdAt: timestamp37("created_at").defaultNow()
+  createdAt: timestamp38("created_at").defaultNow()
 });
-var reports3 = pgTable40("reports", {
+var reports3 = pgTable41("reports", {
   id: text28("id").primaryKey(),
   campaignId: text28("campaign_id").notNull(),
   sentCount: integer21("sent_count").default(0),
@@ -12591,13 +12847,13 @@ var reports3 = pgTable40("reports", {
   clickCount: integer21("click_count").default(0),
   optOutCount: integer21("opt_out_count").default(0),
   conversionRate: numeric3("conversion_rate"),
-  createdAt: timestamp37("created_at").defaultNow(),
-  updatedAt: timestamp37("updated_at").defaultNow()
+  createdAt: timestamp38("created_at").defaultNow(),
+  updatedAt: timestamp38("updated_at").defaultNow()
 });
-function getDb44() {
+function getDb45() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle44(neon44(dbUrl));
+  return drizzle45(neon45(dbUrl));
 }
 function getSupabaseAdmin23() {
   const url = process.env.SUPABASE_URL;
@@ -12641,23 +12897,23 @@ async function verifyAuth20(req) {
     return null;
   }
 }
-async function handler52(req, res) {
+async function handler53(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   const auth = await verifyAuth20(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   const { id } = req.query;
   if (typeof id !== "string") return res.status(400).json({ error: "Invalid campaign ID" });
-  const db = getDb44();
+  const db = getDb45();
   const userId = auth.userId;
   if (req.method === "GET") {
     try {
-      const campaignResult = await db.select().from(campaigns18).where(eq41(campaigns18.id, id));
+      const campaignResult = await db.select().from(campaigns18).where(eq42(campaigns18.id, id));
       const campaign = campaignResult[0];
       if (!campaign) return res.status(404).json({ error: "Campaign not found" });
       if (campaign.userId !== userId) return res.status(403).json({ error: "Access denied" });
-      const messageResult = await db.select().from(messages4).where(eq41(messages4.campaignId, id));
-      const targetingResult = await db.select().from(targeting3).where(eq41(targeting3.campaignId, id));
-      const reportResult = await db.select().from(reports3).where(eq41(reports3.campaignId, id));
+      const messageResult = await db.select().from(messages4).where(eq42(messages4.campaignId, id));
+      const targetingResult = await db.select().from(targeting3).where(eq42(targeting3.campaignId, id));
+      const reportResult = await db.select().from(reports3).where(eq42(reports3.campaignId, id));
       return res.status(200).json({
         ...campaign,
         message: messageResult[0],
@@ -12671,11 +12927,11 @@ async function handler52(req, res) {
   }
   if (req.method === "PATCH") {
     try {
-      const campaignResult = await db.select().from(campaigns18).where(eq41(campaigns18.id, id));
+      const campaignResult = await db.select().from(campaigns18).where(eq42(campaigns18.id, id));
       const campaign = campaignResult[0];
       if (!campaign) return res.status(404).json({ error: "Campaign not found" });
       if (campaign.userId !== userId) return res.status(403).json({ error: "Access denied" });
-      const messageResult = await db.select().from(messages4).where(eq41(messages4.campaignId, id));
+      const messageResult = await db.select().from(messages4).where(eq42(messages4.campaignId, id));
       const message = messageResult[0];
       const updateData = { ...req.body, updatedAt: /* @__PURE__ */ new Date() };
       const dateFields = ["scheduledAt", "atsSndStartDate", "completedAt", "collStartDate", "collEndDate", "collSndDate"];
@@ -12699,7 +12955,7 @@ async function handler52(req, res) {
       if (updateData.sndMosu !== void 0) {
         console.log("[Campaign PATCH] sndMosu value:", updateData.sndMosu);
       }
-      const updatedResult = await db.update(campaigns18).set(updateData).where(eq41(campaigns18.id, id)).returning();
+      const updatedResult = await db.update(campaigns18).set(updateData).where(eq42(campaigns18.id, id)).returning();
       const updatedCampaign = updatedResult[0];
       const bizchatId = campaign.bizchatCampaignId;
       const isSimulation = bizchatId?.startsWith("SIM_");
@@ -12727,7 +12983,7 @@ async function handler52(req, res) {
             if (messageUpdate.lmsImageFileId !== void 0) messageUpdateData.lmsImageFileId = messageUpdate.lmsImageFileId;
             if (messageUpdate.lmsUrlLinks !== void 0) messageUpdateData.lmsUrlLinks = messageUpdate.lmsUrlLinks;
             if (Object.keys(messageUpdateData).length > 0 && message) {
-              await db.update(messages4).set(messageUpdateData).where(eq41(messages4.campaignId, id));
+              await db.update(messages4).set(messageUpdateData).where(eq42(messages4.campaignId, id));
               currentMessage = { ...message, ...messageUpdateData };
             }
           }
@@ -12794,7 +13050,7 @@ async function handler52(req, res) {
               atsSndStartDate: new Date(effectiveAtsSndStartDate),
               scheduledAt: new Date(effectiveAtsSndStartDate),
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq41(campaigns18.id, id));
+            }).where(eq42(campaigns18.id, id));
           }
           const existingMms = existingBizchatData?.mms;
           const existingFileInfo = existingMms?.fileInfo;
@@ -12974,7 +13230,7 @@ async function handler52(req, res) {
   }
   if (req.method === "DELETE") {
     try {
-      const campaignResult = await db.select().from(campaigns18).where(eq41(campaigns18.id, id));
+      const campaignResult = await db.select().from(campaigns18).where(eq42(campaigns18.id, id));
       const campaign = campaignResult[0];
       if (!campaign) return res.status(404).json({ error: "Campaign not found" });
       if (campaign.userId !== userId) return res.status(403).json({ error: "Access denied" });
@@ -13016,10 +13272,10 @@ async function handler52(req, res) {
       } else if (isSimulation) {
         console.log(`[DELETE] Skipping BizChat API call for simulation campaign: ${bizchatId}`);
       }
-      await db.delete(messages4).where(eq41(messages4.campaignId, id));
-      await db.delete(targeting3).where(eq41(targeting3.campaignId, id));
-      await db.delete(reports3).where(eq41(reports3.campaignId, id));
-      await db.delete(campaigns18).where(eq41(campaigns18.id, id));
+      await db.delete(messages4).where(eq42(messages4.campaignId, id));
+      await db.delete(targeting3).where(eq42(targeting3.campaignId, id));
+      await db.delete(reports3).where(eq42(reports3.campaignId, id));
+      await db.delete(campaigns18).where(eq42(campaigns18.id, id));
       return res.status(200).json({ success: true });
     } catch (error) {
       console.error("Error deleting campaign:", error);
@@ -13032,64 +13288,64 @@ async function handler52(req, res) {
 // src/handlers/campaigns/test-create.ts
 var test_create_exports = {};
 __export(test_create_exports, {
-  default: () => handler53
+  default: () => handler54
 });
 import { createClient as createClient25 } from "@supabase/supabase-js";
-import { neon as neon45, neonConfig as neonConfig16 } from "@neondatabase/serverless";
-import { drizzle as drizzle45 } from "drizzle-orm/neon-http";
-import { pgTable as pgTable41, text as text29, integer as integer22, timestamp as timestamp38, decimal as decimal15, varchar as varchar26 } from "drizzle-orm/pg-core";
-import { sql as sql30 } from "drizzle-orm";
+import { neon as neon46, neonConfig as neonConfig16 } from "@neondatabase/serverless";
+import { drizzle as drizzle46 } from "drizzle-orm/neon-http";
+import { pgTable as pgTable42, text as text29, integer as integer22, timestamp as timestamp39, decimal as decimal15, varchar as varchar27 } from "drizzle-orm/pg-core";
+import { sql as sql31 } from "drizzle-orm";
 neonConfig16.fetchConnectionCache = true;
 var BIZCHAT_DEV_URL13 = process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443";
 var BIZCHAT_PROD_URL13 = process.env.BIZCHAT_PROD_API_URL || "https://gw.bizchat1.co.kr";
 var CALLBACK_BASE_URL3 = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://wepickbizchat-new.vercel.app";
-var campaigns19 = pgTable41("campaigns", {
-  id: varchar26("id").primaryKey().default(sql30`gen_random_uuid()`),
-  userId: varchar26("user_id").notNull(),
-  templateId: varchar26("template_id"),
-  name: varchar26("name", { length: 200 }).notNull(),
-  tgtCompanyName: varchar26("tgt_company_name", { length: 100 }),
+var campaigns19 = pgTable42("campaigns", {
+  id: varchar27("id").primaryKey().default(sql31`gen_random_uuid()`),
+  userId: varchar27("user_id").notNull(),
+  templateId: varchar27("template_id"),
+  name: varchar27("name", { length: 200 }).notNull(),
+  tgtCompanyName: varchar27("tgt_company_name", { length: 100 }),
   statusCode: integer22("status_code").default(0).notNull(),
-  status: varchar26("status", { length: 20 }).default("temp_registered").notNull(),
-  messageType: varchar26("message_type", { length: 10 }).notNull(),
+  status: varchar27("status", { length: 20 }).default("temp_registered").notNull(),
+  messageType: varchar27("message_type", { length: 10 }).notNull(),
   rcvType: integer22("rcv_type").default(0),
   billingType: integer22("billing_type").default(0),
-  sndNum: varchar26("snd_num", { length: 20 }),
+  sndNum: varchar27("snd_num", { length: 20 }),
   sndGoalCnt: integer22("snd_goal_cnt"),
   sndMosu: integer22("snd_mosu"),
   settleCnt: integer22("settle_cnt").default(0),
-  mdnFileId: varchar26("mdn_file_id", { length: 50 }),
-  atsSndStartDate: timestamp38("ats_snd_start_date"),
+  mdnFileId: varchar27("mdn_file_id", { length: 50 }),
+  atsSndStartDate: timestamp39("ats_snd_start_date"),
   targetCount: integer22("target_count").default(0).notNull(),
   sentCount: integer22("sent_count").default(0),
   successCount: integer22("success_count").default(0),
   clickCount: integer22("click_count").default(0),
   budget: decimal15("budget", { precision: 12, scale: 0 }).notNull(),
-  bizchatCampaignId: varchar26("bizchat_campaign_id", { length: 100 }),
-  scheduledAt: timestamp38("scheduled_at"),
-  updatedAt: timestamp38("updated_at").defaultNow()
+  bizchatCampaignId: varchar27("bizchat_campaign_id", { length: 100 }),
+  scheduledAt: timestamp39("scheduled_at"),
+  updatedAt: timestamp39("updated_at").defaultNow()
 });
-var templates6 = pgTable41("templates", {
-  id: varchar26("id").primaryKey(),
-  userId: varchar26("user_id").notNull(),
-  name: varchar26("name", { length: 200 }).notNull(),
-  messageType: varchar26("message_type", { length: 10 }).notNull(),
-  title: varchar26("title", { length: 60 }),
+var templates6 = pgTable42("templates", {
+  id: varchar27("id").primaryKey(),
+  userId: varchar27("user_id").notNull(),
+  name: varchar27("name", { length: 200 }).notNull(),
+  messageType: varchar27("message_type", { length: 10 }).notNull(),
+  title: varchar27("title", { length: 60 }),
   content: text29("content").notNull(),
   imageUrl: text29("image_url"),
-  imageFileId: varchar26("image_file_id", { length: 100 })
+  imageFileId: varchar27("image_file_id", { length: 100 })
 });
-var messages5 = pgTable41("messages", {
-  id: varchar26("id").primaryKey().default(sql30`gen_random_uuid()`),
-  campaignId: varchar26("campaign_id").notNull(),
-  title: varchar26("title", { length: 60 }),
+var messages5 = pgTable42("messages", {
+  id: varchar27("id").primaryKey().default(sql31`gen_random_uuid()`),
+  campaignId: varchar27("campaign_id").notNull(),
+  title: varchar27("title", { length: 60 }),
   content: text29("content").notNull(),
   imageUrl: text29("image_url")
 });
-function getDb45() {
+function getDb46() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle45(neon45(dbUrl));
+  return drizzle46(neon46(dbUrl));
 }
 function getSupabaseAdmin24() {
   const url = process.env.SUPABASE_URL;
@@ -13153,7 +13409,7 @@ async function callBizChatAPI8(endpoint, method = "POST", body, useProduction = 
   }
   return { status: response.status, data };
 }
-async function handler53(req, res) {
+async function handler54(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -13184,9 +13440,9 @@ async function handler53(req, res) {
         error: "Missing required fields: name, templateId, sndNum, mdnFileId"
       });
     }
-    const db = getDb45();
+    const db = getDb46();
     const useProduction = detectProductionEnvironment3(req);
-    const templateResult = await db.select().from(templates6).where(sql30`${templates6.id} = ${templateId}`);
+    const templateResult = await db.select().from(templates6).where(sql31`${templates6.id} = ${templateId}`);
     if (templateResult.length === 0) {
       return res.status(404).json({ error: "Template not found" });
     }
@@ -13285,30 +13541,30 @@ async function handler53(req, res) {
 // src/handlers/credits/estimate.ts
 var estimate_exports = {};
 __export(estimate_exports, {
-  default: () => handler54
+  default: () => handler55
 });
-import { neon as neon46 } from "@neondatabase/serverless";
-import { drizzle as drizzle46 } from "drizzle-orm/neon-http";
-import { sql as sql31 } from "drizzle-orm";
+import { neon as neon47 } from "@neondatabase/serverless";
+import { drizzle as drizzle47 } from "drizzle-orm/neon-http";
+import { sql as sql32 } from "drizzle-orm";
 import { z } from "zod";
-function getDb46() {
+function getDb47() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  return drizzle46(neon46(databaseUrl));
+  return drizzle47(neon47(databaseUrl));
 }
 var estimateSchema = z.object({
   targetCount: z.number().int().min(0),
   templateCount: z.number().int().min(1).default(1)
 });
-async function handler54(req, res) {
+async function handler55(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const auth = await verifyUserAuth(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
     const body = estimateSchema.parse(req.body || {});
-    const db = getDb46();
-    const result = await db.execute(sql31`
+    const db = getDb47();
+    const result = await db.execute(sql32`
       SELECT
         COALESCE((
           SELECT SUM(remaining_credits)::integer
@@ -13356,9 +13612,9 @@ async function handler54(req, res) {
 // src/handlers/credits/policy.ts
 var policy_exports = {};
 __export(policy_exports, {
-  default: () => handler55
+  default: () => handler56
 });
-async function handler55(req, res) {
+async function handler56(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   const auth = await verifyUserAuth(req);
@@ -13373,15 +13629,15 @@ async function handler55(req, res) {
 // src/handlers/credits/summary.ts
 var summary_exports = {};
 __export(summary_exports, {
-  default: () => handler56
+  default: () => handler57
 });
-import { neon as neon47 } from "@neondatabase/serverless";
-import { drizzle as drizzle47 } from "drizzle-orm/neon-http";
-import { sql as sql32 } from "drizzle-orm";
-function getDb47() {
+import { neon as neon48 } from "@neondatabase/serverless";
+import { drizzle as drizzle48 } from "drizzle-orm/neon-http";
+import { sql as sql33 } from "drizzle-orm";
+function getDb48() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  return drizzle47(neon47(databaseUrl));
+  return drizzle48(neon48(databaseUrl));
 }
 function mapGrant2(row) {
   return {
@@ -13421,27 +13677,27 @@ function getRefundableAmountKrw(lot) {
   }
   return Math.floor(CREDIT_PRODUCTS[productType].priceKrw / lot.originalCredits * lot.remainingCredits);
 }
-async function handler56(req, res) {
+async function handler57(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   const auth = await verifyUserAuth(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const db = getDb47();
+    const db = getDb48();
     const [userResult, grantsResult, ledgerResult, recentLedgerResult] = await Promise.all([
-      db.execute(sql32`SELECT balance FROM users WHERE id = ${auth.userId} LIMIT 1`),
-      db.execute(sql32`
+      db.execute(sql33`SELECT balance FROM users WHERE id = ${auth.userId} LIMIT 1`),
+      db.execute(sql33`
         SELECT *
         FROM credit_grants
         WHERE user_id = ${auth.userId}
         ORDER BY expires_at ASC, created_at ASC
       `),
-      db.execute(sql32`
+      db.execute(sql33`
         SELECT *
         FROM credit_ledger
         WHERE user_id = ${auth.userId}
       `),
-      db.execute(sql32`
+      db.execute(sql33`
         SELECT *
         FROM credit_ledger
         WHERE user_id = ${auth.userId}
@@ -13507,15 +13763,15 @@ async function handler56(req, res) {
 // src/handlers/dashboard/stats.ts
 var stats_exports4 = {};
 __export(stats_exports4, {
-  default: () => handler57
+  default: () => handler58
 });
 import { createClient as createClient26 } from "@supabase/supabase-js";
-import { neon as neon48 } from "@neondatabase/serverless";
-import { drizzle as drizzle48 } from "drizzle-orm/neon-http";
-import { eq as eq42 } from "drizzle-orm";
-import { pgTable as pgTable42, text as text30, integer as integer23, timestamp as timestamp39, numeric as numeric4 } from "drizzle-orm/pg-core";
-import crypto29 from "crypto";
-var campaigns20 = pgTable42("campaigns", {
+import { neon as neon49 } from "@neondatabase/serverless";
+import { drizzle as drizzle49 } from "drizzle-orm/neon-http";
+import { eq as eq43 } from "drizzle-orm";
+import { pgTable as pgTable43, text as text30, integer as integer23, timestamp as timestamp40, numeric as numeric4 } from "drizzle-orm/pg-core";
+import crypto30 from "crypto";
+var campaigns20 = pgTable43("campaigns", {
   id: text30("id").primaryKey(),
   userId: text30("user_id").notNull(),
   name: text30("name").notNull(),
@@ -13528,11 +13784,11 @@ var campaigns20 = pgTable42("campaigns", {
   sentCount: integer23("sent_count"),
   successCount: integer23("success_count"),
   clickCount: integer23("click_count"),
-  completedAt: timestamp39("completed_at"),
-  createdAt: timestamp39("created_at").defaultNow(),
-  updatedAt: timestamp39("updated_at").defaultNow()
+  completedAt: timestamp40("completed_at"),
+  createdAt: timestamp40("created_at").defaultNow(),
+  updatedAt: timestamp40("updated_at").defaultNow()
 });
-var reports4 = pgTable42("reports", {
+var reports4 = pgTable43("reports", {
   id: text30("id").primaryKey(),
   campaignId: text30("campaign_id").notNull(),
   sentCount: integer23("sent_count").default(0),
@@ -13541,15 +13797,15 @@ var reports4 = pgTable42("reports", {
   failedCount: integer23("failed_count").default(0),
   clickCount: integer23("click_count").default(0),
   optOutCount: integer23("opt_out_count").default(0),
-  createdAt: timestamp39("created_at").defaultNow()
+  createdAt: timestamp40("created_at").defaultNow()
 });
-function getDb48() {
+function getDb49() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     throw new Error("DATABASE_URL is not set");
   }
-  const sql43 = neon48(dbUrl);
-  return drizzle48(sql43);
+  const sql44 = neon49(dbUrl);
+  return drizzle49(sql44);
 }
 function getSupabaseAdmin25() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -13568,7 +13824,7 @@ function verifyImpersonateToken19(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
-    const expectedSignature = crypto29.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    const expectedSignature = crypto30.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -13608,7 +13864,7 @@ async function verifyAuth22(req) {
     return null;
   }
 }
-async function handler57(req, res) {
+async function handler58(req, res) {
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -13620,8 +13876,8 @@ async function handler57(req, res) {
     if (!auth) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    const db = getDb48();
-    const userCampaigns = await db.select().from(campaigns20).where(eq42(campaigns20.userId, auth.userId));
+    const db = getDb49();
+    const userCampaigns = await db.select().from(campaigns20).where(eq43(campaigns20.userId, auth.userId));
     let totalSent = 0;
     let totalSuccess = 0;
     let totalClicks = 0;
@@ -13633,7 +13889,7 @@ async function handler57(req, res) {
       totalSent += campaign.sentCount || 0;
       totalSuccess += campaign.successCount || 0;
       totalClicks += campaign.clickCount || 0;
-      const reportResult = await db.select().from(reports4).where(eq42(reports4.campaignId, campaign.id));
+      const reportResult = await db.select().from(reports4).where(eq43(reports4.campaignId, campaign.id));
       const report = reportResult[0];
       if (report) {
         totalSent += report.sentCount || 0;
@@ -13656,24 +13912,81 @@ async function handler57(req, res) {
   }
 }
 
+// src/handlers/events/index.ts
+var events_exports = {};
+__export(events_exports, {
+  default: () => handler59
+});
+import { neon as neon50 } from "@neondatabase/serverless";
+import { drizzle as drizzle50 } from "drizzle-orm/neon-http";
+function getDb50() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL not configured");
+  return drizzle50(neon50(databaseUrl));
+}
+function getClientIp7(req) {
+  const forwardedFor = req.headers["x-forwarded-for"];
+  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+    return forwardedFor.split(",")[0]?.trim().slice(0, 45);
+  }
+  return String(req.socket?.remoteAddress || "").slice(0, 45);
+}
+function normalizeBody(req) {
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return {};
+    }
+  }
+  return req.body || {};
+}
+async function handler59(req, res) {
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  try {
+    const raw = normalizeBody(req);
+    const parsed = insertEventLogSchema.parse({
+      userId: typeof raw.userId === "string" && raw.userId ? raw.userId : void 0,
+      anonymousId: typeof raw.anonymousId === "string" ? raw.anonymousId.slice(0, 120) : void 0,
+      eventName: String(raw.eventName || "").slice(0, 100),
+      funnelStep: typeof raw.funnelStep === "string" ? raw.funnelStep.slice(0, 80) : void 0,
+      pagePath: typeof raw.pagePath === "string" ? raw.pagePath.slice(0, 1e3) : void 0,
+      referrer: typeof raw.referrer === "string" ? raw.referrer.slice(0, 1e3) : void 0,
+      campaignId: typeof raw.campaignId === "string" && raw.campaignId ? raw.campaignId : void 0,
+      templateId: typeof raw.templateId === "string" && raw.templateId ? raw.templateId : void 0,
+      productType: typeof raw.productType === "string" ? raw.productType.slice(0, 30) : void 0,
+      metadata: raw.metadata && typeof raw.metadata === "object" && !Array.isArray(raw.metadata) ? raw.metadata : void 0,
+      userAgent: String(req.headers["user-agent"] || "").slice(0, 1e3),
+      ipAddress: getClientIp7(req)
+    });
+    if (!parsed.eventName) return res.status(400).json({ error: "eventName is required" });
+    await getDb50().insert(eventLogs).values(parsed);
+    return res.status(204).end();
+  } catch (error) {
+    console.error("[Events] Error:", error);
+    return res.status(204).end();
+  }
+}
+
 // src/handlers/kispg/auth.ts
 var auth_exports = {};
 __export(auth_exports, {
-  default: () => handler58
+  default: () => handler60
 });
 import { createClient as createClient27 } from "@supabase/supabase-js";
-import { neon as neon49, neonConfig as neonConfig17 } from "@neondatabase/serverless";
-import { drizzle as drizzle49 } from "drizzle-orm/neon-http";
-import { sql as sql33 } from "drizzle-orm";
+import { neon as neon51, neonConfig as neonConfig17 } from "@neondatabase/serverless";
+import { drizzle as drizzle51 } from "drizzle-orm/neon-http";
+import { sql as sql34 } from "drizzle-orm";
 import { createHash, randomBytes } from "crypto";
 neonConfig17.fetchConnectionCache = true;
-function getDb49() {
+function getDb51() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle49(neon49(dbUrl));
+  return drizzle51(neon51(dbUrl));
 }
 async function ensurePaymentOrdersTable(db) {
-  await db.execute(sql33`
+  await db.execute(sql34`
     CREATE TABLE IF NOT EXISTS payment_orders (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
       provider varchar(30) NOT NULL,
@@ -13688,8 +14001,8 @@ async function ensurePaymentOrdersTable(db) {
       updated_at timestamp DEFAULT now()
     )
   `);
-  await db.execute(sql33`CREATE INDEX IF NOT EXISTS idx_payment_orders_user ON payment_orders(user_id)`);
-  await db.execute(sql33`CREATE INDEX IF NOT EXISTS idx_payment_orders_reference ON payment_orders(payment_reference)`);
+  await db.execute(sql34`CREATE INDEX IF NOT EXISTS idx_payment_orders_user ON payment_orders(user_id)`);
+  await db.execute(sql34`CREATE INDEX IF NOT EXISTS idx_payment_orders_reference ON payment_orders(payment_reference)`);
 }
 function getSupabaseAdmin26() {
   const url = process.env.SUPABASE_URL;
@@ -13724,11 +14037,11 @@ function isCreditProductType(value) {
   return typeof value === "string" && value in CREDIT_PRODUCTS;
 }
 function generateOrderNo(_userId, productType) {
-  const timestamp56 = Date.now().toString().slice(-10);
+  const timestamp57 = Date.now().toString().slice(-10);
   const nonce = randomBytes(4).toString("hex");
-  return productType ? `BC${timestamp56}_${nonce}_${productType}` : `BC${timestamp56}_${nonce}`;
+  return productType ? `BC${timestamp57}_${nonce}_${productType}` : `BC${timestamp57}_${nonce}`;
 }
-async function handler58(req, res) {
+async function handler60(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -13749,7 +14062,7 @@ async function handler58(req, res) {
       return res.status(400).json({ error: "\uC0C1\uD488 \uAE08\uC561\uC774 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4" });
     }
     if (process.env.CREDIT_MODE_ENABLED === "true" && creditProduct?.productType === "light") {
-      const db2 = getDb49();
+      const db2 = getDb51();
       if (await hasLightCreditGrantInCurrentKstMonthForServerless(db2, auth.userId)) {
         return res.status(400).json({ error: "\uB77C\uC774\uD2B8 \uCDA9\uC804\uC740 \uB9E4\uC6D4 1\uD68C\uB9CC \uAD6C\uB9E4\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" });
       }
@@ -13763,9 +14076,9 @@ async function handler58(req, res) {
     const ordNo = generateOrderNo(auth.userId, creditProduct?.productType);
     const goodsAmt = amount.toString();
     const encData = generateEncData(mid, ediDate, goodsAmt, merchantKey);
-    const db = getDb49();
+    const db = getDb51();
     await ensurePaymentOrdersTable(db);
-    await db.execute(sql33`
+    await db.execute(sql34`
       INSERT INTO payment_orders (
         provider,
         order_no,
@@ -13850,22 +14163,22 @@ async function handler58(req, res) {
 // src/handlers/kispg/callback.ts
 var callback_exports = {};
 __export(callback_exports, {
-  default: () => handler59
+  default: () => handler61
 });
-import { neon as neon50, neonConfig as neonConfig18 } from "@neondatabase/serverless";
-import { drizzle as drizzle50 } from "drizzle-orm/neon-http";
-import { sql as sql34 } from "drizzle-orm";
-import { pgTable as pgTable43, text as text31, timestamp as timestamp40, numeric as numeric5 } from "drizzle-orm/pg-core";
+import { neon as neon52, neonConfig as neonConfig18 } from "@neondatabase/serverless";
+import { drizzle as drizzle52 } from "drizzle-orm/neon-http";
+import { sql as sql35 } from "drizzle-orm";
+import { pgTable as pgTable44, text as text31, timestamp as timestamp41, numeric as numeric5 } from "drizzle-orm/pg-core";
 import { createHash as createHash2 } from "crypto";
 neonConfig18.fetchConnectionCache = true;
-var users21 = pgTable43("users", {
+var users21 = pgTable44("users", {
   id: text31("id").primaryKey(),
   email: text31("email"),
   balance: numeric5("balance", { precision: 12, scale: 2 }).default("0").notNull(),
-  updatedAt: timestamp40("updated_at").defaultNow()
+  updatedAt: timestamp41("updated_at").defaultNow()
 });
-var transactions11 = pgTable43("transactions", {
-  id: text31("id").primaryKey().default(sql34`gen_random_uuid()`),
+var transactions11 = pgTable44("transactions", {
+  id: text31("id").primaryKey().default(sql35`gen_random_uuid()`),
   userId: text31("user_id").notNull(),
   type: text31("type").notNull(),
   amount: numeric5("amount", { precision: 12, scale: 0 }).notNull(),
@@ -13873,18 +14186,18 @@ var transactions11 = pgTable43("transactions", {
   description: text31("description"),
   paymentMethod: text31("payment_method"),
   stripeSessionId: text31("stripe_session_id"),
-  createdAt: timestamp40("created_at").defaultNow()
+  createdAt: timestamp41("created_at").defaultNow()
 });
 function isCreditProductType2(value) {
   return typeof value === "string" && value in CREDIT_PRODUCTS;
 }
-function getDb50() {
+function getDb52() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle50(neon50(dbUrl));
+  return drizzle52(neon52(dbUrl));
 }
 async function ensurePaymentOrdersTable2(db) {
-  await db.execute(sql34`
+  await db.execute(sql35`
     CREATE TABLE IF NOT EXISTS payment_orders (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
       provider varchar(30) NOT NULL,
@@ -13899,8 +14212,8 @@ async function ensurePaymentOrdersTable2(db) {
       updated_at timestamp DEFAULT now()
     )
   `);
-  await db.execute(sql34`CREATE INDEX IF NOT EXISTS idx_payment_orders_user ON payment_orders(user_id)`);
-  await db.execute(sql34`CREATE INDEX IF NOT EXISTS idx_payment_orders_reference ON payment_orders(payment_reference)`);
+  await db.execute(sql35`CREATE INDEX IF NOT EXISTS idx_payment_orders_user ON payment_orders(user_id)`);
+  await db.execute(sql35`CREATE INDEX IF NOT EXISTS idx_payment_orders_reference ON payment_orders(payment_reference)`);
 }
 function generateEncData2(mid, ediDate, goodsAmt, merchantKey) {
   const data = mid + ediDate + goodsAmt + merchantKey;
@@ -13917,7 +14230,7 @@ function parseFormBody(body) {
   }
   return body || {};
 }
-async function handler59(req, res) {
+async function handler61(req, res) {
   if (req.method !== "POST" && req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -13959,10 +14272,10 @@ async function handler59(req, res) {
       errorUrl.searchParams.set("message", "Invalid payment callback data");
       return res.redirect(302, errorUrl.toString());
     }
-    const db = getDb50();
+    const db = getDb52();
     await ensurePaymentOrdersTable2(db);
     const paymentReference = `kispg:${tid}`;
-    const orderResult = await db.execute(sql34`
+    const orderResult = await db.execute(sql35`
       SELECT *
       FROM payment_orders
       WHERE provider = 'kispg'
@@ -13983,7 +14296,7 @@ async function handler59(req, res) {
       errorUrl.searchParams.set("message", "\uACB0\uC81C \uAE08\uC561\uC774 \uC8FC\uBB38 \uC815\uBCF4\uC640 \uC77C\uCE58\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4");
       return res.redirect(302, errorUrl.toString());
     }
-    const [existingTransaction] = await db.select().from(transactions11).where(sql34`${transactions11.stripeSessionId} = ${paymentReference} OR ${transactions11.description} LIKE ${`%${tid}%`}`).limit(1);
+    const [existingTransaction] = await db.select().from(transactions11).where(sql35`${transactions11.stripeSessionId} = ${paymentReference} OR ${transactions11.description} LIKE ${`%${tid}%`}`).limit(1);
     console.log("[KISPG Callback] Auth callback received - tid:", tid, "amt:", amt);
     const userId = String(order.user_id);
     const productType = isCreditProductType2(order.product_type) ? order.product_type : null;
@@ -14042,7 +14355,7 @@ async function handler59(req, res) {
       });
       if (grantResult.lightLimitBlocked) {
         console.error("[KISPG Callback] CRITICAL: payment captured but light grant blocked, manual refund required", { tid, ordNo, userId, amount });
-        await db.execute(sql34`
+        await db.execute(sql35`
           UPDATE payment_orders
           SET
             status = 'paid_grant_blocked',
@@ -14061,7 +14374,7 @@ async function handler59(req, res) {
       }
       console.log("[KISPG Callback] Credits granted or already present:", userId, product.productType, product.credits);
     }
-    const creditResult = await db.execute(sql34`
+    const creditResult = await db.execute(sql35`
       WITH target_user AS (
         SELECT id, COALESCE(balance, 0) AS balance
         FROM users
@@ -14123,7 +14436,7 @@ async function handler59(req, res) {
     if (!creditRow?.already_processed && (!creditRow?.transaction_inserted || !creditRow?.balance_updated)) {
       throw new Error("Failed to credit KISPG payment");
     }
-    await db.execute(sql34`
+    await db.execute(sql35`
       UPDATE payment_orders
       SET
         status = 'paid',
@@ -14152,7 +14465,7 @@ async function handler59(req, res) {
 // src/handlers/maptics/geofences.ts
 var geofences_exports = {};
 __export(geofences_exports, {
-  default: () => handler60
+  default: () => handler62
 });
 import { z as z2 } from "zod";
 
@@ -14181,7 +14494,7 @@ function verifyImpersonateToken20(token) {
     return null;
   }
 }
-function verifyAdminToken20(token) {
+function verifyAdminToken21(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
@@ -14208,7 +14521,7 @@ async function verifyAuth24(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) return null;
   const token = authHeader.replace("Bearer ", "");
-  const admin = verifyAdminToken20(token);
+  const admin = verifyAdminToken21(token);
   if (admin) {
     return { userId: `admin:${admin.adminId}`, email: "" };
   }
@@ -14341,11 +14654,11 @@ async function listGeofences() {
 }
 
 // src/handlers/maptics/geofences.ts
-import { neon as neon51 } from "@neondatabase/serverless";
-import { drizzle as drizzle51 } from "drizzle-orm/neon-http";
-import { eq as eq43, and as and10, desc as desc11 } from "drizzle-orm";
-import { pgTable as pgTable44, text as text32, integer as integer24, timestamp as timestamp41, boolean as boolean25, numeric as numeric6 } from "drizzle-orm/pg-core";
-var geofences3 = pgTable44("geofences", {
+import { neon as neon53 } from "@neondatabase/serverless";
+import { drizzle as drizzle53 } from "drizzle-orm/neon-http";
+import { eq as eq44, and as and10, desc as desc11 } from "drizzle-orm";
+import { pgTable as pgTable45, text as text32, integer as integer24, timestamp as timestamp42, boolean as boolean26, numeric as numeric6 } from "drizzle-orm/pg-core";
+var geofences3 = pgTable45("geofences", {
   id: text32("id").primaryKey(),
   userId: text32("user_id").notNull(),
   bizchatGeofenceId: text32("bizchat_geofence_id"),
@@ -14354,14 +14667,14 @@ var geofences3 = pgTable44("geofences", {
   latitude: numeric6("latitude"),
   longitude: numeric6("longitude"),
   radius: integer24("radius").default(500),
-  isActive: boolean25("is_active").default(true),
-  createdAt: timestamp41("created_at").defaultNow(),
-  updatedAt: timestamp41("updated_at").defaultNow()
+  isActive: boolean26("is_active").default(true),
+  createdAt: timestamp42("created_at").defaultNow(),
+  updatedAt: timestamp42("updated_at").defaultNow()
 });
-function getDb51() {
+function getDb53() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle51(neon51(dbUrl));
+  return drizzle53(neon53(dbUrl));
 }
 var geofenceTargetSchema = z2.object({
   gender: z2.number().min(0).max(2),
@@ -14387,7 +14700,7 @@ var updateGeofenceSchema = z2.object({
 var deleteGeofenceSchema = z2.object({
   targetId: z2.number()
 });
-async function handler60(req, res) {
+async function handler62(req, res) {
   const auth = await verifyAuth24(req);
   if (!auth) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -14397,10 +14710,10 @@ async function handler60(req, res) {
       console.log(`[Geofence List] Fetching geofences for user: ${auth.userId}`);
       const bizchatGeofences = await listGeofences();
       console.log(`[Geofence List] BizChat returned ${bizchatGeofences.length} geofences`);
-      const db = getDb51();
+      const db = getDb53();
       const localGeofences = await db.select().from(geofences3).where(and10(
-        eq43(geofences3.userId, auth.userId),
-        eq43(geofences3.isActive, true)
+        eq44(geofences3.userId, auth.userId),
+        eq44(geofences3.isActive, true)
       )).orderBy(desc11(geofences3.createdAt));
       console.log(`[Geofence List] Local DB has ${localGeofences.length} geofences`);
       const result = bizchatGeofences.map((bg) => {
@@ -14462,9 +14775,9 @@ async function handler60(req, res) {
 // src/handlers/maptics/poi.ts
 var poi_exports = {};
 __export(poi_exports, {
-  default: () => handler61
+  default: () => handler63
 });
-async function handler61(req, res) {
+async function handler63(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -14493,18 +14806,18 @@ async function handler61(req, res) {
 // src/handlers/message-copy-requests/index.ts
 var message_copy_requests_exports2 = {};
 __export(message_copy_requests_exports2, {
-  default: () => handler62
+  default: () => handler64
 });
-import { neon as neon52 } from "@neondatabase/serverless";
-import { drizzle as drizzle52 } from "drizzle-orm/neon-http";
-import { sql as sql35 } from "drizzle-orm";
-function getDb52() {
+import { neon as neon54 } from "@neondatabase/serverless";
+import { drizzle as drizzle54 } from "drizzle-orm/neon-http";
+import { sql as sql36 } from "drizzle-orm";
+function getDb54() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  return drizzle52(neon52(databaseUrl));
+  return drizzle54(neon54(databaseUrl));
 }
 async function ensureMessageCopyRequestsTable4(db) {
-  await db.execute(sql35`
+  await db.execute(sql36`
     CREATE TABLE IF NOT EXISTS message_copy_requests (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id varchar NOT NULL REFERENCES users(id),
@@ -14520,9 +14833,9 @@ async function ensureMessageCopyRequestsTable4(db) {
       updated_at timestamp DEFAULT now()
     )
   `);
-  await db.execute(sql35`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_user ON message_copy_requests(user_id)`);
-  await db.execute(sql35`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_status ON message_copy_requests(status)`);
-  await db.execute(sql35`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_created ON message_copy_requests(created_at DESC)`);
+  await db.execute(sql36`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_user ON message_copy_requests(user_id)`);
+  await db.execute(sql36`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_status ON message_copy_requests(status)`);
+  await db.execute(sql36`CREATE INDEX IF NOT EXISTS idx_message_copy_requests_created ON message_copy_requests(created_at DESC)`);
 }
 function mapRequest3(row) {
   return {
@@ -14544,7 +14857,7 @@ function mapRequest3(row) {
     updatedAt: row.updated_at
   };
 }
-async function handler62(req, res) {
+async function handler64(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET" && req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -14552,10 +14865,10 @@ async function handler62(req, res) {
   const auth = await verifyUserAuth(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const db = getDb52();
+    const db = getDb54();
     await ensureMessageCopyRequestsTable4(db);
     if (req.method === "GET") {
-      const result = await db.execute(sql35`
+      const result = await db.execute(sql36`
         SELECT
           r.*,
           u.email AS user_email,
@@ -14583,7 +14896,7 @@ async function handler62(req, res) {
     if (content.length > 2e3) {
       return res.status(400).json({ error: "\uC694\uCCAD \uB0B4\uC6A9\uC740 2,000\uC790 \uC774\uD558\uB85C \uC785\uB825\uD574\uC8FC\uC138\uC694" });
     }
-    const inserted = await db.execute(sql35`
+    const inserted = await db.execute(sql36`
       INSERT INTO message_copy_requests (user_id, content, status, created_at, updated_at)
       VALUES (${auth.userId}, ${content}, 'reviewing', now(), now())
       RETURNING *
@@ -14606,10 +14919,10 @@ async function handler62(req, res) {
 // src/handlers/profile/password.ts
 var password_exports = {};
 __export(password_exports, {
-  default: () => handler63
+  default: () => handler65
 });
 import { createClient as createClient29 } from "@supabase/supabase-js";
-import crypto30 from "crypto";
+import crypto31 from "crypto";
 function getSupabaseAdmin28() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -14627,7 +14940,7 @@ function verifyImpersonateToken21(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
-    const expectedSignature = crypto30.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    const expectedSignature = crypto31.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -14666,7 +14979,7 @@ async function verifyAuth25(req) {
     return null;
   }
 }
-async function handler63(req, res) {
+async function handler65(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Impersonate-Token, X-Impersonate-User-Id");
@@ -14706,44 +15019,44 @@ async function handler63(req, res) {
 // src/handlers/recommended-templates/[id].ts
 var id_exports3 = {};
 __export(id_exports3, {
-  default: () => handler64
+  default: () => handler66
 });
-import { neon as neon53 } from "@neondatabase/serverless";
-import { drizzle as drizzle53 } from "drizzle-orm/neon-http";
-import { eq as eq44 } from "drizzle-orm";
-import { sql as sql36 } from "drizzle-orm";
-import { pgTable as pgTable45, text as text33, varchar as varchar28, timestamp as timestamp42, integer as integer25, boolean as boolean26, jsonb as jsonb15 } from "drizzle-orm/pg-core";
-var recommendedTemplates2 = pgTable45("recommended_templates", {
-  id: varchar28("id").primaryKey().default(sql36`gen_random_uuid()`),
-  name: varchar28("name", { length: 200 }).notNull(),
-  category: varchar28("category", { length: 50 }).notNull(),
-  purpose: varchar28("purpose", { length: 50 }).notNull(),
-  version: varchar28("version", { length: 20 }),
-  titleTemplate: varchar28("title_template", { length: 60 }),
-  lmsTitleTemplate: varchar28("lms_title_template", { length: 60 }),
+import { neon as neon55 } from "@neondatabase/serverless";
+import { drizzle as drizzle55 } from "drizzle-orm/neon-http";
+import { eq as eq45 } from "drizzle-orm";
+import { sql as sql37 } from "drizzle-orm";
+import { pgTable as pgTable46, text as text33, varchar as varchar29, timestamp as timestamp43, integer as integer25, boolean as boolean27, jsonb as jsonb15 } from "drizzle-orm/pg-core";
+var recommendedTemplates2 = pgTable46("recommended_templates", {
+  id: varchar29("id").primaryKey().default(sql37`gen_random_uuid()`),
+  name: varchar29("name", { length: 200 }).notNull(),
+  category: varchar29("category", { length: 50 }).notNull(),
+  purpose: varchar29("purpose", { length: 50 }).notNull(),
+  version: varchar29("version", { length: 20 }),
+  titleTemplate: varchar29("title_template", { length: 60 }),
+  lmsTitleTemplate: varchar29("lms_title_template", { length: 60 }),
   contentTemplate: text33("content_template").notNull(),
   lmsContentTemplate: text33("lms_content_template"),
   // RCS 메시지의 안드로이드용 LMS 대체 텍스트 템플릿
   variableSchema: jsonb15("variable_schema").$type(),
   defaultImageUrl: text33("default_image_url"),
-  messageType: varchar28("message_type", { length: 10 }).default("RCS"),
+  messageType: varchar29("message_type", { length: 10 }).default("RCS"),
   rcsType: integer25("rcs_type").default(4),
   urlLinks: jsonb15("url_links").$type(),
   buttons: jsonb15("buttons").$type(),
-  isActive: boolean26("is_active").default(true),
+  isActive: boolean27("is_active").default(true),
   sortOrder: integer25("sort_order").default(0),
   targetingConfig: jsonb15("targeting_config"),
-  sourceTemplateId: varchar28("source_template_id"),
-  createdAt: timestamp42("created_at").defaultNow(),
-  updatedAt: timestamp42("updated_at").defaultNow()
+  sourceTemplateId: varchar29("source_template_id"),
+  createdAt: timestamp43("created_at").defaultNow(),
+  updatedAt: timestamp43("updated_at").defaultNow()
 });
-function getDb53() {
+function getDb55() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL is not set");
   }
-  const client = neon53(databaseUrl);
-  return drizzle53(client);
+  const client = neon55(databaseUrl);
+  return drizzle55(client);
 }
 function replaceVariables(template, variables) {
   let result = template;
@@ -14757,7 +15070,7 @@ function replaceVariables(template, variables) {
   }
   return result;
 }
-async function handler64(req, res) {
+async function handler66(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, PATCH, DELETE, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -14768,10 +15081,10 @@ async function handler64(req, res) {
   if (typeof id !== "string") {
     return res.status(400).json({ error: "Invalid template ID" });
   }
-  const db = getDb53();
+  const db = getDb55();
   try {
     if (req.method === "GET") {
-      const [template] = await db.select().from(recommendedTemplates2).where(eq44(recommendedTemplates2.id, id));
+      const [template] = await db.select().from(recommendedTemplates2).where(eq45(recommendedTemplates2.id, id));
       if (!template) {
         return res.status(404).json({
           success: false,
@@ -14785,7 +15098,7 @@ async function handler64(req, res) {
     }
     if (req.method === "POST") {
       const { variableValues } = req.body;
-      const [template] = await db.select().from(recommendedTemplates2).where(eq44(recommendedTemplates2.id, id));
+      const [template] = await db.select().from(recommendedTemplates2).where(eq45(recommendedTemplates2.id, id));
       if (!template) {
         return res.status(404).json({
           success: false,
@@ -14815,7 +15128,7 @@ async function handler64(req, res) {
       delete updateData.advancedTargetingState;
       delete updateData.basicTargetingState;
       updateData.updatedAt = /* @__PURE__ */ new Date();
-      const [updated] = await db.update(recommendedTemplates2).set(updateData).where(eq44(recommendedTemplates2.id, id)).returning();
+      const [updated] = await db.update(recommendedTemplates2).set(updateData).where(eq45(recommendedTemplates2.id, id)).returning();
       if (!updated) {
         return res.status(404).json({
           success: false,
@@ -14828,7 +15141,7 @@ async function handler64(req, res) {
       });
     }
     if (req.method === "DELETE") {
-      const [deleted] = await db.delete(recommendedTemplates2).where(eq44(recommendedTemplates2.id, id)).returning();
+      const [deleted] = await db.delete(recommendedTemplates2).where(eq45(recommendedTemplates2.id, id)).returning();
       if (!deleted) {
         return res.status(404).json({
           success: false,
@@ -14854,7 +15167,7 @@ async function handler64(req, res) {
 // src/handlers/recommended-templates/filters.ts
 var filters_exports = {};
 __export(filters_exports, {
-  default: () => handler65
+  default: () => handler67
 });
 var RECOMMENDED_CATEGORIES = [
   { value: "commerce", label: "\uCEE4\uBA38\uC2A4/\uC1FC\uD551" },
@@ -14879,7 +15192,7 @@ var RECOMMENDED_PURPOSES = [
   { value: "special_product", label: "\uD2B9\uAC00\uC0C1\uD488 \uC548\uB0B4" },
   { value: "consultation", label: "\uC0C1\uB2F4\uC2E0\uCCAD\uC720\uB3C4" }
 ];
-async function handler65(req, res) {
+async function handler67(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -14899,26 +15212,26 @@ async function handler65(req, res) {
 // src/handlers/stripe/checkout.ts
 var checkout_exports = {};
 __export(checkout_exports, {
-  default: () => handler66
+  default: () => handler68
 });
 import { createClient as createClient30 } from "@supabase/supabase-js";
-import { neon as neon54, neonConfig as neonConfig19 } from "@neondatabase/serverless";
-import { drizzle as drizzle54 } from "drizzle-orm/neon-http";
-import { eq as eq45 } from "drizzle-orm";
-import { pgTable as pgTable46, text as text34, timestamp as timestamp43 } from "drizzle-orm/pg-core";
+import { neon as neon56, neonConfig as neonConfig19 } from "@neondatabase/serverless";
+import { drizzle as drizzle56 } from "drizzle-orm/neon-http";
+import { eq as eq46 } from "drizzle-orm";
+import { pgTable as pgTable47, text as text34, timestamp as timestamp44 } from "drizzle-orm/pg-core";
 import Stripe from "stripe";
 neonConfig19.fetchConnectionCache = true;
-var users22 = pgTable46("users", {
+var users22 = pgTable47("users", {
   id: text34("id").primaryKey(),
   email: text34("email"),
   balance: text34("balance").default("0").notNull(),
   stripeCustomerId: text34("stripe_customer_id"),
-  updatedAt: timestamp43("updated_at").defaultNow()
+  updatedAt: timestamp44("updated_at").defaultNow()
 });
-function getDb54() {
+function getDb56() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle54(neon54(dbUrl));
+  return drizzle56(neon56(dbUrl));
 }
 function getSupabaseAdmin29() {
   const url = process.env.SUPABASE_URL;
@@ -14940,7 +15253,7 @@ async function verifyAuth26(req) {
 function isCreditProductType3(value) {
   return typeof value === "string" && value in CREDIT_PRODUCTS;
 }
-async function handler66(req, res) {
+async function handler68(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (process.env.ENABLE_STRIPE_PAYMENTS !== "true") {
@@ -14949,8 +15262,8 @@ async function handler66(req, res) {
   try {
     const auth = await verifyAuth26(req);
     if (!auth) return res.status(401).json({ error: "Unauthorized" });
-    const db = getDb54();
-    const userResult = await db.select().from(users22).where(eq45(users22.id, auth.userId));
+    const db = getDb56();
+    const userResult = await db.select().from(users22).where(eq46(users22.id, auth.userId));
     let user = userResult[0];
     if (!user) {
       const insertResult = await db.insert(users22).values({
@@ -14991,7 +15304,7 @@ async function handler66(req, res) {
       await db.update(users22).set({
         stripeCustomerId: customerId,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq45(users22.id, user.id));
+      }).where(eq46(users22.id, user.id));
     }
     const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : process.env.REPLIT_DOMAINS?.split(",")[0] ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}` : "http://localhost:5000";
     const session = await stripe.checkout.sessions.create({
@@ -15033,9 +15346,9 @@ async function handler66(req, res) {
 // src/handlers/stripe/config.ts
 var config_exports = {};
 __export(config_exports, {
-  default: () => handler67
+  default: () => handler69
 });
-async function handler67(req, res) {
+async function handler69(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -15058,19 +15371,19 @@ async function handler67(req, res) {
 var webhook_exports = {};
 __export(webhook_exports, {
   config: () => config,
-  default: () => handler68
+  default: () => handler70
 });
-import { neon as neon55, neonConfig as neonConfig20 } from "@neondatabase/serverless";
-import { drizzle as drizzle55 } from "drizzle-orm/neon-http";
-import { sql as sql37 } from "drizzle-orm";
-import { pgTable as pgTable47, text as text35, timestamp as timestamp44 } from "drizzle-orm/pg-core";
+import { neon as neon57, neonConfig as neonConfig20 } from "@neondatabase/serverless";
+import { drizzle as drizzle57 } from "drizzle-orm/neon-http";
+import { sql as sql38 } from "drizzle-orm";
+import { pgTable as pgTable48, text as text35, timestamp as timestamp45 } from "drizzle-orm/pg-core";
 import Stripe2 from "stripe";
 neonConfig20.fetchConnectionCache = true;
-var users23 = pgTable47("users", {
+var users23 = pgTable48("users", {
   id: text35("id").primaryKey(),
   balance: text35("balance").default("0").notNull()
 });
-var transactions12 = pgTable47("transactions", {
+var transactions12 = pgTable48("transactions", {
   id: text35("id").primaryKey(),
   userId: text35("user_id").notNull(),
   type: text35("type").notNull(),
@@ -15078,12 +15391,12 @@ var transactions12 = pgTable47("transactions", {
   balanceAfter: text35("balance_after"),
   description: text35("description"),
   stripeSessionId: text35("stripe_session_id"),
-  createdAt: timestamp44("created_at").defaultNow()
+  createdAt: timestamp45("created_at").defaultNow()
 });
-function getDb55() {
+function getDb57() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle55(neon55(dbUrl));
+  return drizzle57(neon57(dbUrl));
 }
 function isCreditProductType4(value) {
   return typeof value === "string" && value in CREDIT_PRODUCTS;
@@ -15100,7 +15413,7 @@ async function buffer(readable) {
   }
   return Buffer.concat(chunks);
 }
-async function handler68(req, res) {
+async function handler70(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (process.env.ENABLE_STRIPE_PAYMENTS !== "true") {
@@ -15132,10 +15445,10 @@ async function handler68(req, res) {
       const amount = parseInt(session.metadata?.amount || "0");
       const productType = isCreditProductType4(session.metadata?.productType) ? session.metadata.productType : null;
       if (userId && amount > 0) {
-        const db = getDb55();
+        const db = getDb57();
         const creditModeProduct = process.env.CREDIT_MODE_ENABLED === "true" && productType;
         if (creditModeProduct) {
-          const userCheck = await db.execute(sql37`
+          const userCheck = await db.execute(sql38`
             SELECT id, COALESCE(balance, '0')::numeric AS balance
             FROM users
             WHERE id = ${userId}
@@ -15173,7 +15486,7 @@ async function handler68(req, res) {
           if (!grantResult.success && !grantResult.alreadyProcessed) {
             throw new Error(`Failed to grant Stripe credits for session ${session.id}: ${grantResult.error}`);
           }
-          await db.execute(sql37`
+          await db.execute(sql38`
             WITH target_user AS (
               SELECT id, COALESCE(balance, '0')::numeric AS balance
               FROM users
@@ -15222,7 +15535,7 @@ async function handler68(req, res) {
           console.log(`Successfully processed Stripe session ${session.id} for user ${userId}`);
           return res.status(200).json({ received: true });
         }
-        const chargeResult = await db.execute(sql37`
+        const chargeResult = await db.execute(sql38`
           WITH target_user AS (
             SELECT id, COALESCE(balance, '0')::numeric AS balance
             FROM users
@@ -15327,7 +15640,7 @@ async function handler68(req, res) {
 // src/handlers/targeting/estimate.ts
 var estimate_exports2 = {};
 __export(estimate_exports2, {
-  default: () => handler69
+  default: () => handler71
 });
 import { createClient as createClient31 } from "@supabase/supabase-js";
 import { createHmac as createHmac19 } from "crypto";
@@ -15629,7 +15942,7 @@ async function callATSMosuAPI2(mosuQuery) {
     return { estimatedCount: 5e5 };
   }
 }
-async function handler69(req, res) {
+async function handler71(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -15681,16 +15994,16 @@ async function handler69(req, res) {
 // src/handlers/templates/[id].ts
 var id_exports4 = {};
 __export(id_exports4, {
-  default: () => handler70
+  default: () => handler72
 });
 import { createClient as createClient32 } from "@supabase/supabase-js";
-import { neon as neon56 } from "@neondatabase/serverless";
-import { drizzle as drizzle56 } from "drizzle-orm/neon-http";
-import { eq as eq46 } from "drizzle-orm";
-import { pgTable as pgTable48, text as text36, integer as integer26, timestamp as timestamp45, jsonb as jsonb16 } from "drizzle-orm/pg-core";
+import { neon as neon58 } from "@neondatabase/serverless";
+import { drizzle as drizzle58 } from "drizzle-orm/neon-http";
+import { eq as eq47 } from "drizzle-orm";
+import { pgTable as pgTable49, text as text36, integer as integer26, timestamp as timestamp46, jsonb as jsonb16 } from "drizzle-orm/pg-core";
 import { z as z3 } from "zod";
 import { createHmac as createHmac20 } from "crypto";
-var templates7 = pgTable48("templates", {
+var templates7 = pgTable49("templates", {
   id: text36("id").primaryKey(),
   userId: text36("user_id").notNull(),
   name: text36("name").notNull(),
@@ -15708,16 +16021,16 @@ var templates7 = pgTable48("templates", {
   lmsImageFileId: text36("lms_image_file_id"),
   lmsUrlLinks: jsonb16("lms_url_links"),
   status: text36("status").default("draft"),
-  submittedAt: timestamp45("submitted_at"),
-  reviewedAt: timestamp45("reviewed_at"),
+  submittedAt: timestamp46("submitted_at"),
+  reviewedAt: timestamp46("reviewed_at"),
   rejectionReason: text36("rejection_reason"),
-  createdAt: timestamp45("created_at").defaultNow(),
-  updatedAt: timestamp45("updated_at").defaultNow()
+  createdAt: timestamp46("created_at").defaultNow(),
+  updatedAt: timestamp46("updated_at").defaultNow()
 });
-function getDb56() {
+function getDb58() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle56(neon56(dbUrl));
+  return drizzle58(neon58(dbUrl));
 }
 function getSupabaseAdmin31() {
   const url = process.env.SUPABASE_URL;
@@ -15788,17 +16101,17 @@ var updateTemplateSchema = z3.object({
     reward: z3.number().optional()
   }).optional().nullable()
 });
-async function handler70(req, res) {
+async function handler72(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   const auth = await verifyAuth28(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   const { id } = req.query;
   if (typeof id !== "string") return res.status(400).json({ error: "Invalid template ID" });
-  const db = getDb56();
+  const db = getDb58();
   const userId = auth.userId;
   if (req.method === "GET") {
     try {
-      const result = await db.select().from(templates7).where(eq46(templates7.id, id));
+      const result = await db.select().from(templates7).where(eq47(templates7.id, id));
       const template = result[0];
       if (!template) return res.status(404).json({ error: "Template not found" });
       if (template.userId !== userId) return res.status(403).json({ error: "Access denied" });
@@ -15810,7 +16123,7 @@ async function handler70(req, res) {
   }
   if (req.method === "PATCH") {
     try {
-      const result = await db.select().from(templates7).where(eq46(templates7.id, id));
+      const result = await db.select().from(templates7).where(eq47(templates7.id, id));
       const template = result[0];
       if (!template) return res.status(404).json({ error: "Template not found" });
       if (template.userId !== userId) return res.status(403).json({ error: "Access denied" });
@@ -15842,7 +16155,7 @@ async function handler70(req, res) {
         updateData.lmsImageFileId = null;
         updateData.lmsUrlLinks = null;
       }
-      const updated = await db.update(templates7).set(updateData).where(eq46(templates7.id, id)).returning();
+      const updated = await db.update(templates7).set(updateData).where(eq47(templates7.id, id)).returning();
       return res.status(200).json(updated[0]);
     } catch (error) {
       if (error instanceof z3.ZodError) return res.status(400).json({ error: "Invalid template data", details: error.errors });
@@ -15852,12 +16165,12 @@ async function handler70(req, res) {
   }
   if (req.method === "DELETE") {
     try {
-      const result = await db.select().from(templates7).where(eq46(templates7.id, id));
+      const result = await db.select().from(templates7).where(eq47(templates7.id, id));
       const template = result[0];
       if (!template) return res.status(404).json({ error: "Template not found" });
       if (template.userId !== userId) return res.status(403).json({ error: "Access denied" });
       if (template.status === "pending") return res.status(400).json({ error: "Cannot delete template under review" });
-      await db.delete(templates7).where(eq46(templates7.id, id));
+      await db.delete(templates7).where(eq47(templates7.id, id));
       return res.status(200).json({ success: true });
     } catch (error) {
       console.error("Error deleting template:", error);
@@ -15867,7 +16180,7 @@ async function handler70(req, res) {
   if (req.method === "POST") {
     const { action, reason } = req.body || {};
     try {
-      const result = await db.select().from(templates7).where(eq46(templates7.id, id));
+      const result = await db.select().from(templates7).where(eq47(templates7.id, id));
       const template = result[0];
       if (!template) return res.status(404).json({ error: "Template not found" });
       if (template.userId !== userId) return res.status(403).json({ error: "Access denied" });
@@ -15878,7 +16191,7 @@ async function handler70(req, res) {
         const updated = await db.update(templates7).set({
           status: "pending",
           submittedAt: /* @__PURE__ */ new Date()
-        }).where(eq46(templates7.id, id)).returning();
+        }).where(eq47(templates7.id, id)).returning();
         return res.status(200).json(updated[0]);
       }
       if (action === "approve") {
@@ -15888,7 +16201,7 @@ async function handler70(req, res) {
         const updated = await db.update(templates7).set({
           status: "approved",
           reviewedAt: /* @__PURE__ */ new Date()
-        }).where(eq46(templates7.id, id)).returning();
+        }).where(eq47(templates7.id, id)).returning();
         return res.status(200).json(updated[0]);
       }
       if (action === "reject") {
@@ -15899,7 +16212,7 @@ async function handler70(req, res) {
           status: "rejected",
           rejectionReason: reason || "\uAC80\uC218 \uAE30\uC900\uC5D0 \uBD80\uD569\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
           reviewedAt: /* @__PURE__ */ new Date()
-        }).where(eq46(templates7.id, id)).returning();
+        }).where(eq47(templates7.id, id)).returning();
         return res.status(200).json(updated[0]);
       }
       return res.status(400).json({ error: "Invalid action. Use submit, approve, or reject" });
@@ -15914,15 +16227,15 @@ async function handler70(req, res) {
 // src/handlers/templates/approved.ts
 var approved_exports = {};
 __export(approved_exports, {
-  default: () => handler71
+  default: () => handler73
 });
 import { createClient as createClient33 } from "@supabase/supabase-js";
-import { neon as neon57, neonConfig as neonConfig21 } from "@neondatabase/serverless";
-import { drizzle as drizzle57 } from "drizzle-orm/neon-http";
-import { and as and11, eq as eq47, desc as desc12, or as or6 } from "drizzle-orm";
-import { pgTable as pgTable49, text as text37, timestamp as timestamp46 } from "drizzle-orm/pg-core";
+import { neon as neon59, neonConfig as neonConfig21 } from "@neondatabase/serverless";
+import { drizzle as drizzle59 } from "drizzle-orm/neon-http";
+import { and as and11, eq as eq48, desc as desc12, or as or6 } from "drizzle-orm";
+import { pgTable as pgTable50, text as text37, timestamp as timestamp47 } from "drizzle-orm/pg-core";
 neonConfig21.fetchConnectionCache = true;
-var templates8 = pgTable49("templates", {
+var templates8 = pgTable50("templates", {
   id: text37("id").primaryKey(),
   userId: text37("user_id").notNull(),
   name: text37("name").notNull(),
@@ -15932,12 +16245,12 @@ var templates8 = pgTable49("templates", {
   content: text37("content").notNull(),
   imageUrl: text37("image_url"),
   status: text37("status").default("draft"),
-  createdAt: timestamp46("created_at").defaultNow()
+  createdAt: timestamp47("created_at").defaultNow()
 });
-function getDb57() {
+function getDb59() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle57(neon57(dbUrl));
+  return drizzle59(neon59(dbUrl));
 }
 function getSupabaseAdmin32() {
   const url = process.env.SUPABASE_URL;
@@ -15956,15 +16269,15 @@ async function verifyAuth29(req) {
     return null;
   }
 }
-async function handler71(req, res) {
+async function handler73(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   const auth = await verifyAuth29(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const db = getDb57();
+    const db = getDb59();
     const SYSTEM_USER_ID = "system";
-    const result = await db.select().from(templates8).where(and11(or6(eq47(templates8.userId, auth.userId), eq47(templates8.userId, SYSTEM_USER_ID)), eq47(templates8.status, "approved"))).orderBy(desc12(templates8.createdAt));
+    const result = await db.select().from(templates8).where(and11(or6(eq48(templates8.userId, auth.userId), eq48(templates8.userId, SYSTEM_USER_ID)), eq48(templates8.status, "approved"))).orderBy(desc12(templates8.createdAt));
     return res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching templates:", error);
@@ -15975,21 +16288,21 @@ async function handler71(req, res) {
 // src/handlers/transactions/charge.ts
 var charge_exports = {};
 __export(charge_exports, {
-  default: () => handler72
+  default: () => handler74
 });
 import { createClient as createClient34 } from "@supabase/supabase-js";
-import { neon as neon58, neonConfig as neonConfig22 } from "@neondatabase/serverless";
-import { drizzle as drizzle58 } from "drizzle-orm/neon-http";
-import { eq as eq48 } from "drizzle-orm";
-import { pgTable as pgTable50, text as text38, timestamp as timestamp47 } from "drizzle-orm/pg-core";
+import { neon as neon60, neonConfig as neonConfig22 } from "@neondatabase/serverless";
+import { drizzle as drizzle60 } from "drizzle-orm/neon-http";
+import { eq as eq49 } from "drizzle-orm";
+import { pgTable as pgTable51, text as text38, timestamp as timestamp48 } from "drizzle-orm/pg-core";
 import { randomUUID as randomUUID2, createHmac as createHmac21 } from "crypto";
 neonConfig22.fetchConnectionCache = true;
-var users24 = pgTable50("users", {
+var users24 = pgTable51("users", {
   id: text38("id").primaryKey(),
   email: text38("email"),
   balance: text38("balance").default("0").notNull()
 });
-var transactions13 = pgTable50("transactions", {
+var transactions13 = pgTable51("transactions", {
   id: text38("id").primaryKey(),
   userId: text38("user_id").notNull(),
   type: text38("type").notNull(),
@@ -15997,12 +16310,12 @@ var transactions13 = pgTable50("transactions", {
   balanceAfter: text38("balance_after"),
   description: text38("description"),
   paymentMethod: text38("payment_method"),
-  createdAt: timestamp47("created_at").defaultNow()
+  createdAt: timestamp48("created_at").defaultNow()
 });
-function getDb58() {
+function getDb60() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle58(neon58(dbUrl));
+  return drizzle60(neon60(dbUrl));
 }
 function getSupabaseAdmin33() {
   const url = process.env.SUPABASE_URL;
@@ -16044,7 +16357,7 @@ async function verifyAuth30(req) {
     return null;
   }
 }
-async function handler72(req, res) {
+async function handler74(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const allowDirectCharge = process.env.NODE_ENV !== "production" && process.env.ENABLE_DIRECT_CHARGE === "true";
@@ -16056,8 +16369,8 @@ async function handler72(req, res) {
   const auth = await verifyAuth30(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const db = getDb58();
-    const userResult = await db.select().from(users24).where(eq48(users24.id, auth.userId));
+    const db = getDb60();
+    const userResult = await db.select().from(users24).where(eq49(users24.id, auth.userId));
     const user = userResult[0];
     if (!user) return res.status(404).json({ error: "User not found" });
     const { amount, paymentMethod } = req.body;
@@ -16075,7 +16388,7 @@ async function handler72(req, res) {
       description: "\uC794\uC561 \uCDA9\uC804",
       paymentMethod: paymentMethod || "card"
     }).returning();
-    await db.update(users24).set({ balance: newBalance.toString() }).where(eq48(users24.id, auth.userId));
+    await db.update(users24).set({ balance: newBalance.toString() }).where(eq49(users24.id, auth.userId));
     return res.status(201).json(transaction[0]);
   } catch (error) {
     console.error("Error processing charge:", error);
@@ -16086,39 +16399,39 @@ async function handler72(req, res) {
 // src/handlers/announcements/index.ts
 var announcements_exports2 = {};
 __export(announcements_exports2, {
-  default: () => handler73
+  default: () => handler75
 });
-import { neon as neon59 } from "@neondatabase/serverless";
-import { drizzle as drizzle59 } from "drizzle-orm/neon-http";
-import { eq as eq49, sql as sql38, desc as desc13, lte as lte4, gte as gte7, or as or7, isNull, and as and12 } from "drizzle-orm";
-import { pgTable as pgTable51, varchar as varchar29, text as text39, timestamp as timestamp48, boolean as boolean27 } from "drizzle-orm/pg-core";
-var announcements4 = pgTable51("announcements", {
-  id: varchar29("id").primaryKey().default(sql38`gen_random_uuid()`),
-  title: varchar29("title", { length: 200 }).notNull(),
+import { neon as neon61 } from "@neondatabase/serverless";
+import { drizzle as drizzle61 } from "drizzle-orm/neon-http";
+import { eq as eq50, sql as sql39, desc as desc13, lte as lte4, gte as gte7, or as or7, isNull, and as and12 } from "drizzle-orm";
+import { pgTable as pgTable52, varchar as varchar30, text as text39, timestamp as timestamp49, boolean as boolean28 } from "drizzle-orm/pg-core";
+var announcements4 = pgTable52("announcements", {
+  id: varchar30("id").primaryKey().default(sql39`gen_random_uuid()`),
+  title: varchar30("title", { length: 200 }).notNull(),
   content: text39("content").notNull(),
-  category: varchar29("category", { length: 50 }).default("general").notNull(),
-  isPublished: boolean27("is_published").default(true),
-  isPinned: boolean27("is_pinned").default(false),
-  publishedAt: timestamp48("published_at"),
-  expiresAt: timestamp48("expires_at"),
-  createdAt: timestamp48("created_at").defaultNow()
+  category: varchar30("category", { length: 50 }).default("general").notNull(),
+  isPublished: boolean28("is_published").default(true),
+  isPinned: boolean28("is_pinned").default(false),
+  publishedAt: timestamp49("published_at"),
+  expiresAt: timestamp49("expires_at"),
+  createdAt: timestamp49("created_at").defaultNow()
 });
-function getDb59() {
+function getDb61() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  const sqlClient = neon59(databaseUrl);
-  return drizzle59(sqlClient);
+  const sqlClient = neon61(databaseUrl);
+  return drizzle61(sqlClient);
 }
-async function handler73(req, res) {
+async function handler75(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
   try {
-    const db = getDb59();
+    const db = getDb61();
     const now = /* @__PURE__ */ new Date();
     const activeAnnouncements = await db.select().from(announcements4).where(
       and12(
-        eq49(announcements4.isPublished, true),
+        eq50(announcements4.isPublished, true),
         or7(isNull(announcements4.publishedAt), lte4(announcements4.publishedAt, now)),
         or7(isNull(announcements4.expiresAt), gte7(announcements4.expiresAt, now))
       )
@@ -16133,13 +16446,13 @@ async function handler73(req, res) {
 // src/handlers/campaigns/index.ts
 var campaigns_exports3 = {};
 __export(campaigns_exports3, {
-  default: () => handler74
+  default: () => handler76
 });
 import { createClient as createClient35 } from "@supabase/supabase-js";
-import { neon as neon60 } from "@neondatabase/serverless";
-import { drizzle as drizzle60 } from "drizzle-orm/neon-http";
-import { desc as desc14, eq as eq50, inArray as inArray2, sql as sql39 } from "drizzle-orm";
-import { pgTable as pgTable52, text as text40, integer as integer27, timestamp as timestamp49, numeric as numeric7, jsonb as jsonb17 } from "drizzle-orm/pg-core";
+import { neon as neon62 } from "@neondatabase/serverless";
+import { drizzle as drizzle62 } from "drizzle-orm/neon-http";
+import { desc as desc14, eq as eq51, inArray as inArray2, sql as sql40 } from "drizzle-orm";
+import { pgTable as pgTable53, text as text40, integer as integer27, timestamp as timestamp50, numeric as numeric7, jsonb as jsonb17 } from "drizzle-orm/pg-core";
 import { z as z4 } from "zod";
 import { randomUUID as randomUUID3, createHmac as createHmac22 } from "crypto";
 var BIZCHAT_DEV_URL16 = process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443";
@@ -16199,12 +16512,12 @@ async function callATSMosuAPI3(filterPayload, useProduction = false) {
   }
 }
 var CALLBACK_BASE_URL4 = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://wepickbizchat-new.vercel.app";
-var users25 = pgTable52("users", {
+var users25 = pgTable53("users", {
   id: text40("id").primaryKey(),
   email: text40("email"),
   balance: numeric7("balance").default("0").notNull()
 });
-var campaigns21 = pgTable52("campaigns", {
+var campaigns21 = pgTable53("campaigns", {
   id: text40("id").primaryKey(),
   userId: text40("user_id").notNull(),
   name: text40("name").notNull(),
@@ -16228,23 +16541,23 @@ var campaigns21 = pgTable52("campaigns", {
   successCount: integer27("success_count"),
   budget: numeric7("budget"),
   costPerMessage: numeric7("cost_per_message"),
-  scheduledAt: timestamp49("scheduled_at"),
+  scheduledAt: timestamp50("scheduled_at"),
   creationMode: text40("creation_mode"),
   recommendedTemplateId: text40("recommended_template_id"),
   variableValues: jsonb17("variable_values"),
   // Maptics 지오펜스 발송 관련 필드
-  atsSndStartDate: timestamp49("ats_snd_start_date"),
-  collStartDate: timestamp49("coll_start_date"),
-  collEndDate: timestamp49("coll_end_date"),
-  collSndDate: timestamp49("coll_snd_date"),
+  atsSndStartDate: timestamp50("ats_snd_start_date"),
+  collStartDate: timestamp50("coll_start_date"),
+  collEndDate: timestamp50("coll_end_date"),
+  collSndDate: timestamp50("coll_snd_date"),
   sndGeofenceId: integer27("snd_geofence_id"),
   rtStartHhmm: text40("rt_start_hhmm"),
   rtEndHhmm: text40("rt_end_hhmm"),
   sndDayDiv: integer27("snd_day_div"),
-  createdAt: timestamp49("created_at").defaultNow(),
-  updatedAt: timestamp49("updated_at").defaultNow()
+  createdAt: timestamp50("created_at").defaultNow(),
+  updatedAt: timestamp50("updated_at").defaultNow()
 });
-var messages6 = pgTable52("messages", {
+var messages6 = pgTable53("messages", {
   id: text40("id").primaryKey(),
   campaignId: text40("campaign_id").notNull(),
   title: text40("title"),
@@ -16261,9 +16574,9 @@ var messages6 = pgTable52("messages", {
   lmsImageFileId: text40("lms_image_file_id"),
   lmsUrlLinks: jsonb17("lms_url_links"),
   // { list: string[], reward?: number }
-  createdAt: timestamp49("created_at").defaultNow()
+  createdAt: timestamp50("created_at").defaultNow()
 });
-var targeting4 = pgTable52("targeting", {
+var targeting4 = pgTable53("targeting", {
   id: text40("id").primaryKey(),
   campaignId: text40("campaign_id").notNull(),
   gender: text40("gender"),
@@ -16281,9 +16594,9 @@ var targeting4 = pgTable52("targeting", {
   geofenceIds: text40("geofence_ids").array(),
   atsQuery: text40("ats_query"),
   estimatedCount: integer27("estimated_count"),
-  createdAt: timestamp49("created_at").defaultNow()
+  createdAt: timestamp50("created_at").defaultNow()
 });
-var templates9 = pgTable52("templates", {
+var templates9 = pgTable53("templates", {
   id: text40("id").primaryKey(),
   userId: text40("user_id").notNull(),
   name: text40("name").notNull(),
@@ -16351,16 +16664,16 @@ function buildTargetingSummaryLabel(campaign, campaignTargeting) {
     geofenceCount
   };
 }
-function getDb60() {
+function getDb62() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle60(neon60(dbUrl));
+  return drizzle62(neon62(dbUrl));
 }
 function isCreditModeEnabled2() {
   return process.env.CREDIT_MODE_ENABLED === "true";
 }
 async function getEffectiveAvailableCredits(db, userId, legacyBalance) {
-  const result = await db.execute(sql39`
+  const result = await db.execute(sql40`
     SELECT
       COALESCE((
         SELECT SUM(remaining_credits)::integer
@@ -16900,20 +17213,20 @@ var createCampaignSchema = z4.object({
   recommendedTemplateId: z4.string().optional(),
   variableValues: z4.record(z4.any()).optional()
 });
-async function handler74(req, res) {
+async function handler76(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();
   const auth = await verifyAuth31(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
-  const db = getDb60();
+  const db = getDb62();
   const userId = auth.userId;
   const useProduction = detectProductionEnvironment4(req);
   console.log(`[Campaign] Environment: ${useProduction ? "PRODUCTION" : "DEVELOPMENT"}`);
   if (req.method === "GET") {
     try {
-      const result = await db.select().from(campaigns21).where(eq50(campaigns21.userId, userId)).orderBy(desc14(campaigns21.createdAt));
+      const result = await db.select().from(campaigns21).where(eq51(campaigns21.userId, userId)).orderBy(desc14(campaigns21.createdAt));
       const campaignIds = result.map((campaign) => campaign.id);
       const targetingRows = campaignIds.length > 0 ? await db.select().from(targeting4).where(inArray2(targeting4.campaignId, campaignIds)) : [];
       const targetingByCampaignId = new Map(targetingRows.map((row) => [row.campaignId, row]));
@@ -16929,11 +17242,11 @@ async function handler74(req, res) {
   }
   if (req.method === "POST") {
     try {
-      const userResult = await db.select().from(users25).where(eq50(users25.id, userId));
+      const userResult = await db.select().from(users25).where(eq51(users25.id, userId));
       const user = userResult[0];
       if (!user) return res.status(404).json({ error: "User not found" });
       const data = createCampaignSchema.parse(req.body);
-      const templateResult = await db.select().from(templates9).where(eq50(templates9.id, data.templateId));
+      const templateResult = await db.select().from(templates9).where(eq51(templates9.id, data.templateId));
       const template = templateResult[0];
       if (!template) return res.status(404).json({ error: "Template not found" });
       const SYSTEM_USER_ID = "system";
@@ -17268,7 +17581,7 @@ async function handler74(req, res) {
                 atsSndStartDate
               } : {},
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq50(campaigns21.id, campaignId));
+            }).where(eq51(campaigns21.id, campaignId));
             console.log(`[Campaign] Created in BizChat: ${bizchatCampaignId}`);
             return res.status(201).json({
               ...campaignResult[0],
@@ -17317,15 +17630,15 @@ async function handler74(req, res) {
 // src/handlers/profile/index.ts
 var profile_exports = {};
 __export(profile_exports, {
-  default: () => handler75
+  default: () => handler77
 });
 import { createClient as createClient36 } from "@supabase/supabase-js";
-import { neon as neon61 } from "@neondatabase/serverless";
-import { drizzle as drizzle61 } from "drizzle-orm/neon-http";
-import { eq as eq51 } from "drizzle-orm";
-import { pgTable as pgTable53, text as text41, timestamp as timestamp50, boolean as boolean28 } from "drizzle-orm/pg-core";
-import crypto31 from "crypto";
-var users26 = pgTable53("users", {
+import { neon as neon63 } from "@neondatabase/serverless";
+import { drizzle as drizzle63 } from "drizzle-orm/neon-http";
+import { eq as eq52 } from "drizzle-orm";
+import { pgTable as pgTable54, text as text41, timestamp as timestamp51, boolean as boolean29 } from "drizzle-orm/pg-core";
+import crypto32 from "crypto";
+var users26 = pgTable54("users", {
   id: text41("id").primaryKey(),
   email: text41("email"),
   firstName: text41("first_name"),
@@ -17337,19 +17650,19 @@ var users26 = pgTable53("users", {
   phone: text41("phone"),
   balance: text41("balance").default("0").notNull(),
   stripeCustomerId: text41("stripe_customer_id"),
-  isVerified: boolean28("is_verified").default(false),
-  isMaster: boolean28("is_master").default(false),
-  isAgency: boolean28("is_agency").default(false),
-  createdAt: timestamp50("created_at").defaultNow(),
-  updatedAt: timestamp50("updated_at").defaultNow()
+  isVerified: boolean29("is_verified").default(false),
+  isMaster: boolean29("is_master").default(false),
+  isAgency: boolean29("is_agency").default(false),
+  createdAt: timestamp51("created_at").defaultNow(),
+  updatedAt: timestamp51("updated_at").defaultNow()
 });
-function getDb61() {
+function getDb63() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     throw new Error("DATABASE_URL is not set");
   }
-  const sql43 = neon61(dbUrl);
-  return drizzle61(sql43);
+  const sql44 = neon63(dbUrl);
+  return drizzle63(sql44);
 }
 function getSupabaseAdmin35() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -17368,7 +17681,7 @@ function verifyImpersonateToken26(token) {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
     const { data, signature } = decoded;
-    const expectedSignature = crypto31.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
+    const expectedSignature = crypto32.createHmac("sha256", process.env.ADMIN_JWT_SECRET).update(data).digest("hex");
     if (signature !== expectedSignature) return null;
     const payload = JSON.parse(data);
     if (payload.exp < Date.now()) return null;
@@ -17407,7 +17720,7 @@ async function verifyAuth32(req) {
     return null;
   }
 }
-async function handler75(req, res) {
+async function handler77(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Impersonate-Token, X-Impersonate-User-Id");
@@ -17419,9 +17732,9 @@ async function handler75(req, res) {
     if (!auth) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    const db = getDb61();
+    const db = getDb63();
     if (req.method === "GET") {
-      const result = await db.select().from(users26).where(eq51(users26.id, auth.userId));
+      const result = await db.select().from(users26).where(eq52(users26.id, auth.userId));
       const user = result[0];
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -17439,7 +17752,7 @@ async function handler75(req, res) {
       if (companyName !== void 0) updateData.companyName = companyName;
       if (businessNumber !== void 0) updateData.businessNumber = businessNumber;
       if (representativeName !== void 0) updateData.representativeName = representativeName;
-      const result = await db.update(users26).set(updateData).where(eq51(users26.id, auth.userId)).returning();
+      const result = await db.update(users26).set(updateData).where(eq52(users26.id, auth.userId)).returning();
       if (result.length === 0) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -17455,39 +17768,39 @@ async function handler75(req, res) {
 // src/handlers/recommended-templates/index.ts
 var recommended_templates_exports = {};
 __export(recommended_templates_exports, {
-  default: () => handler76
+  default: () => handler78
 });
 import { createClient as createClient37 } from "@supabase/supabase-js";
-import { neon as neon62 } from "@neondatabase/serverless";
-import { drizzle as drizzle62 } from "drizzle-orm/neon-http";
-import { eq as eq52, and as and13, asc, desc as desc15 } from "drizzle-orm";
-import { sql as sql40 } from "drizzle-orm";
-import { pgTable as pgTable54, text as text42, varchar as varchar31, timestamp as timestamp51, integer as integer28, boolean as boolean29, jsonb as jsonb18 } from "drizzle-orm/pg-core";
-var recommendedTemplates3 = pgTable54("recommended_templates", {
-  id: varchar31("id").primaryKey().default(sql40`gen_random_uuid()`),
-  name: varchar31("name", { length: 200 }).notNull(),
-  category: varchar31("category", { length: 50 }).notNull(),
-  purpose: varchar31("purpose", { length: 50 }).notNull(),
-  version: varchar31("version", { length: 20 }),
-  titleTemplate: varchar31("title_template", { length: 60 }),
-  lmsTitleTemplate: varchar31("lms_title_template", { length: 60 }),
+import { neon as neon64 } from "@neondatabase/serverless";
+import { drizzle as drizzle64 } from "drizzle-orm/neon-http";
+import { eq as eq53, and as and13, asc, desc as desc15 } from "drizzle-orm";
+import { sql as sql41 } from "drizzle-orm";
+import { pgTable as pgTable55, text as text42, varchar as varchar32, timestamp as timestamp52, integer as integer28, boolean as boolean30, jsonb as jsonb18 } from "drizzle-orm/pg-core";
+var recommendedTemplates3 = pgTable55("recommended_templates", {
+  id: varchar32("id").primaryKey().default(sql41`gen_random_uuid()`),
+  name: varchar32("name", { length: 200 }).notNull(),
+  category: varchar32("category", { length: 50 }).notNull(),
+  purpose: varchar32("purpose", { length: 50 }).notNull(),
+  version: varchar32("version", { length: 20 }),
+  titleTemplate: varchar32("title_template", { length: 60 }),
+  lmsTitleTemplate: varchar32("lms_title_template", { length: 60 }),
   contentTemplate: text42("content_template").notNull(),
   lmsContentTemplate: text42("lms_content_template"),
   // RCS 메시지의 안드로이드용 LMS 대체 텍스트 템플릿
   variableSchema: jsonb18("variable_schema").$type(),
   defaultImageUrl: text42("default_image_url"),
-  messageType: varchar31("message_type", { length: 10 }).default("RCS"),
+  messageType: varchar32("message_type", { length: 10 }).default("RCS"),
   rcsType: integer28("rcs_type").default(4),
   urlLinks: jsonb18("url_links").$type(),
   buttons: jsonb18("buttons").$type(),
-  isActive: boolean29("is_active").default(true),
+  isActive: boolean30("is_active").default(true),
   sortOrder: integer28("sort_order").default(0),
   targetingConfig: jsonb18("targeting_config"),
-  sourceTemplateId: varchar31("source_template_id"),
-  createdAt: timestamp51("created_at").defaultNow(),
-  updatedAt: timestamp51("updated_at").defaultNow()
+  sourceTemplateId: varchar32("source_template_id"),
+  createdAt: timestamp52("created_at").defaultNow(),
+  updatedAt: timestamp52("updated_at").defaultNow()
 });
-var templates10 = pgTable54("templates", {
+var templates10 = pgTable55("templates", {
   id: text42("id").primaryKey(),
   userId: text42("user_id").notNull(),
   name: text42("name").notNull(),
@@ -17502,9 +17815,9 @@ var templates10 = pgTable54("templates", {
   urlLinks: jsonb18("url_links"),
   buttons: jsonb18("buttons"),
   status: text42("status").default("draft"),
-  reviewedAt: timestamp51("reviewed_at"),
-  createdAt: timestamp51("created_at").defaultNow(),
-  updatedAt: timestamp51("updated_at").defaultNow()
+  reviewedAt: timestamp52("reviewed_at"),
+  createdAt: timestamp52("created_at").defaultNow(),
+  updatedAt: timestamp52("updated_at").defaultNow()
 });
 var RECOMMENDED_CATEGORIES2 = [
   { value: "commerce", label: "\uCEE4\uBA38\uC2A4/\uC1FC\uD551" },
@@ -17529,13 +17842,13 @@ var RECOMMENDED_PURPOSES2 = [
   { value: "special_product", label: "\uD2B9\uAC00\uC0C1\uD488 \uC548\uB0B4" },
   { value: "consultation", label: "\uC0C1\uB2F4\uC2E0\uCCAD\uC720\uB3C4" }
 ];
-function getDb62() {
+function getDb64() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL is not set");
   }
-  const client = neon62(databaseUrl);
-  return drizzle62(client);
+  const client = neon64(databaseUrl);
+  return drizzle64(client);
 }
 function getSupabaseAdmin36() {
   const url = process.env.SUPABASE_URL;
@@ -17584,14 +17897,14 @@ function mapPrivateTemplate(row) {
     updatedAt: row.updatedAt
   };
 }
-async function handler76(req, res) {
+async function handler78(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
-  const db = getDb62();
+  const db = getDb64();
   try {
     if (req.method === "GET") {
       const { category, purpose, active } = req.query;
@@ -17599,16 +17912,16 @@ async function handler76(req, res) {
       let query = db.select().from(recommendedTemplates3);
       const conditions = [];
       if (category && category !== "all") {
-        conditions.push(eq52(recommendedTemplates3.category, String(category)));
+        conditions.push(eq53(recommendedTemplates3.category, String(category)));
       }
       if (purpose && purpose !== "all") {
-        conditions.push(eq52(recommendedTemplates3.purpose, String(purpose)));
+        conditions.push(eq53(recommendedTemplates3.purpose, String(purpose)));
       }
       if (active !== "false") {
-        conditions.push(eq52(recommendedTemplates3.isActive, true));
+        conditions.push(eq53(recommendedTemplates3.isActive, true));
       }
       const results = conditions.length > 0 ? await db.select().from(recommendedTemplates3).where(and13(...conditions)).orderBy(asc(recommendedTemplates3.sortOrder), desc15(recommendedTemplates3.createdAt)) : await db.select().from(recommendedTemplates3).orderBy(asc(recommendedTemplates3.sortOrder), desc15(recommendedTemplates3.createdAt));
-      const privateTemplates = userId ? await db.select().from(templates10).where(and13(eq52(templates10.userId, userId), eq52(templates10.status, "approved"))).orderBy(desc15(templates10.reviewedAt), desc15(templates10.createdAt)) : [];
+      const privateTemplates = userId ? await db.select().from(templates10).where(and13(eq53(templates10.userId, userId), eq53(templates10.status, "approved"))).orderBy(desc15(templates10.reviewedAt), desc15(templates10.createdAt)) : [];
       return res.status(200).json({
         success: true,
         templates: [...privateTemplates.map(mapPrivateTemplate), ...results],
@@ -17682,40 +17995,40 @@ async function handler76(req, res) {
 // src/handlers/refunds/index.ts
 var refunds_exports2 = {};
 __export(refunds_exports2, {
-  default: () => handler77
+  default: () => handler79
 });
-import { neon as neon63 } from "@neondatabase/serverless";
-import { drizzle as drizzle63 } from "drizzle-orm/neon-http";
-import { sql as sql41, desc as desc16, eq as eq53, and as and14 } from "drizzle-orm";
-import { pgTable as pgTable55, varchar as varchar32, timestamp as timestamp52, decimal as decimal17, text as text43 } from "drizzle-orm/pg-core";
+import { neon as neon65 } from "@neondatabase/serverless";
+import { drizzle as drizzle65 } from "drizzle-orm/neon-http";
+import { sql as sql42, desc as desc16, eq as eq54, and as and14 } from "drizzle-orm";
+import { pgTable as pgTable56, varchar as varchar33, timestamp as timestamp53, decimal as decimal17, text as text43 } from "drizzle-orm/pg-core";
 import { createClient as createClient38 } from "@supabase/supabase-js";
-var users27 = pgTable55("users", {
-  id: varchar32("id").primaryKey().default(sql41`gen_random_uuid()`),
-  email: varchar32("email").unique(),
+var users27 = pgTable56("users", {
+  id: varchar33("id").primaryKey().default(sql42`gen_random_uuid()`),
+  email: varchar33("email").unique(),
   balance: decimal17("balance", { precision: 12, scale: 0 }).default("0")
 });
-var refunds4 = pgTable55("refunds", {
-  id: varchar32("id").primaryKey().default(sql41`gen_random_uuid()`),
-  userId: varchar32("user_id").notNull(),
-  transactionId: varchar32("transaction_id"),
+var refunds4 = pgTable56("refunds", {
+  id: varchar33("id").primaryKey().default(sql42`gen_random_uuid()`),
+  userId: varchar33("user_id").notNull(),
+  transactionId: varchar33("transaction_id"),
   amount: decimal17("amount", { precision: 12, scale: 0 }).notNull(),
   reason: text43("reason").notNull(),
-  status: varchar32("status", { length: 20 }).default("pending").notNull(),
-  adminId: varchar32("admin_id"),
+  status: varchar33("status", { length: 20 }).default("pending").notNull(),
+  adminId: varchar33("admin_id"),
   adminNote: text43("admin_note"),
-  bankName: varchar32("bank_name", { length: 50 }),
-  accountNumber: varchar32("account_number", { length: 50 }),
-  accountHolder: varchar32("account_holder", { length: 50 }),
-  processedAt: timestamp52("processed_at"),
-  createdAt: timestamp52("created_at").defaultNow(),
-  updatedAt: timestamp52("updated_at").defaultNow()
+  bankName: varchar33("bank_name", { length: 50 }),
+  accountNumber: varchar33("account_number", { length: 50 }),
+  accountHolder: varchar33("account_holder", { length: 50 }),
+  processedAt: timestamp53("processed_at"),
+  createdAt: timestamp53("created_at").defaultNow(),
+  updatedAt: timestamp53("updated_at").defaultNow()
 });
-var creditGrants2 = pgTable55("credit_grants", {
-  id: varchar32("id").primaryKey().default(sql41`gen_random_uuid()`),
-  userId: varchar32("user_id").notNull(),
-  productType: varchar32("product_type", { length: 30 }),
+var creditGrants2 = pgTable56("credit_grants", {
+  id: varchar33("id").primaryKey().default(sql42`gen_random_uuid()`),
+  userId: varchar33("user_id").notNull(),
+  productType: varchar33("product_type", { length: 30 }),
   remainingCredits: decimal17("remaining_credits", { precision: 12, scale: 0 }).notNull(),
-  expiresAt: timestamp52("expires_at").notNull()
+  expiresAt: timestamp53("expires_at").notNull()
 });
 var CREDIT_UNIT_PRICE = {
   light: CREDIT_PRODUCTS.light.priceKrw / CREDIT_PRODUCTS.light.credits,
@@ -17723,10 +18036,10 @@ var CREDIT_UNIT_PRICE = {
   booster: CREDIT_PRODUCTS.booster.priceKrw / CREDIT_PRODUCTS.booster.credits,
   enterprise: CREDIT_PRODUCTS.enterprise.priceKrw / CREDIT_PRODUCTS.enterprise.credits
 };
-function getDb63() {
+function getDb65() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  return drizzle63(neon63(databaseUrl));
+  return drizzle65(neon65(databaseUrl));
 }
 async function getAuthenticatedUser(req) {
   const authHeader = req.headers.authorization;
@@ -17740,15 +18053,15 @@ async function getAuthenticatedUser(req) {
   if (error || !user) return null;
   return user;
 }
-async function handler77(req, res) {
+async function handler79(req, res) {
   const user = await getAuthenticatedUser(req);
   if (!user) {
     return res.status(401).json({ error: "\uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4" });
   }
-  const db = getDb63();
+  const db = getDb65();
   if (req.method === "GET") {
     try {
-      const userRefunds = await db.select().from(refunds4).where(eq53(refunds4.userId, user.id)).orderBy(desc16(refunds4.createdAt));
+      const userRefunds = await db.select().from(refunds4).where(eq54(refunds4.userId, user.id)).orderBy(desc16(refunds4.createdAt));
       return res.status(200).json(userRefunds);
     } catch (error) {
       console.error("[Refunds GET] Error:", error);
@@ -17768,7 +18081,7 @@ async function handler77(req, res) {
       if (!bankName || !accountNumber || !accountHolder) {
         return res.status(400).json({ error: "\uACC4\uC88C \uC815\uBCF4\uB97C \uBAA8\uB450 \uC785\uB825\uD574\uC8FC\uC138\uC694" });
       }
-      const [dbUser] = await db.select().from(users27).where(eq53(users27.id, user.id)).limit(1);
+      const [dbUser] = await db.select().from(users27).where(eq54(users27.id, user.id)).limit(1);
       if (!dbUser) {
         return res.status(404).json({ error: "\uC0AC\uC6A9\uC790\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4" });
       }
@@ -17777,9 +18090,9 @@ async function handler77(req, res) {
           remainingCredits: creditGrants2.remainingCredits,
           productType: creditGrants2.productType
         }).from(creditGrants2).where(and14(
-          eq53(creditGrants2.userId, user.id),
-          sql41`${creditGrants2.remainingCredits} > 0`,
-          sql41`${creditGrants2.expiresAt} > ${/* @__PURE__ */ new Date()}`
+          eq54(creditGrants2.userId, user.id),
+          sql42`${creditGrants2.remainingCredits} > 0`,
+          sql42`${creditGrants2.expiresAt} > ${/* @__PURE__ */ new Date()}`
         ));
         const refundableCredits = activeCreditLots.reduce(
           (sum, lot) => sum + Number(lot.remainingCredits || 0),
@@ -17806,7 +18119,7 @@ async function handler77(req, res) {
           return res.status(400).json({ error: "\uD658\uBD88 \uAE08\uC561\uC774 \uD604\uC7AC \uC794\uC561\uBCF4\uB2E4 \uB9CE\uC2B5\uB2C8\uB2E4" });
         }
       }
-      const [pendingRefund] = await db.select().from(refunds4).where(and14(eq53(refunds4.userId, user.id), eq53(refunds4.status, "pending"))).limit(1);
+      const [pendingRefund] = await db.select().from(refunds4).where(and14(eq54(refunds4.userId, user.id), eq54(refunds4.status, "pending"))).limit(1);
       if (pendingRefund) {
         return res.status(400).json({ error: "\uC774\uBBF8 \uCC98\uB9AC \uC911\uC778 \uD658\uBD88 \uC2E0\uCCAD\uC774 \uC788\uC2B5\uB2C8\uB2E4" });
       }
@@ -17835,42 +18148,42 @@ async function handler77(req, res) {
 // src/handlers/tax-invoices/index.ts
 var tax_invoices_exports2 = {};
 __export(tax_invoices_exports2, {
-  default: () => handler78
+  default: () => handler80
 });
-import { neon as neon64 } from "@neondatabase/serverless";
-import { drizzle as drizzle64 } from "drizzle-orm/neon-http";
-import { sql as sql42, desc as desc17, eq as eq54 } from "drizzle-orm";
-import { pgTable as pgTable56, varchar as varchar33, timestamp as timestamp53, decimal as decimal18, text as text44 } from "drizzle-orm/pg-core";
+import { neon as neon66 } from "@neondatabase/serverless";
+import { drizzle as drizzle66 } from "drizzle-orm/neon-http";
+import { sql as sql43, desc as desc17, eq as eq55 } from "drizzle-orm";
+import { pgTable as pgTable57, varchar as varchar34, timestamp as timestamp54, decimal as decimal18, text as text44 } from "drizzle-orm/pg-core";
 import { createClient as createClient39 } from "@supabase/supabase-js";
-var users28 = pgTable56("users", {
-  id: varchar33("id").primaryKey().default(sql42`gen_random_uuid()`),
-  email: varchar33("email").unique(),
-  companyName: varchar33("company_name"),
-  businessNumber: varchar33("business_number")
+var users28 = pgTable57("users", {
+  id: varchar34("id").primaryKey().default(sql43`gen_random_uuid()`),
+  email: varchar34("email").unique(),
+  companyName: varchar34("company_name"),
+  businessNumber: varchar34("business_number")
 });
-var taxInvoices3 = pgTable56("tax_invoices", {
-  id: varchar33("id").primaryKey().default(sql42`gen_random_uuid()`),
-  userId: varchar33("user_id").notNull(),
-  transactionId: varchar33("transaction_id"),
-  invoiceNumber: varchar33("invoice_number", { length: 50 }).unique(),
-  issueDate: timestamp53("issue_date").notNull(),
+var taxInvoices3 = pgTable57("tax_invoices", {
+  id: varchar34("id").primaryKey().default(sql43`gen_random_uuid()`),
+  userId: varchar34("user_id").notNull(),
+  transactionId: varchar34("transaction_id"),
+  invoiceNumber: varchar34("invoice_number", { length: 50 }).unique(),
+  issueDate: timestamp54("issue_date").notNull(),
   amount: decimal18("amount", { precision: 12, scale: 0 }).notNull(),
   taxAmount: decimal18("tax_amount", { precision: 12, scale: 0 }).notNull(),
   totalAmount: decimal18("total_amount", { precision: 12, scale: 0 }).notNull(),
-  buyerBusinessNumber: varchar33("buyer_business_number", { length: 20 }),
-  buyerCompanyName: varchar33("buyer_company_name", { length: 100 }),
-  buyerRepresentative: varchar33("buyer_representative", { length: 50 }),
-  buyerEmail: varchar33("buyer_email", { length: 100 }),
+  buyerBusinessNumber: varchar34("buyer_business_number", { length: 20 }),
+  buyerCompanyName: varchar34("buyer_company_name", { length: 100 }),
+  buyerRepresentative: varchar34("buyer_representative", { length: 50 }),
+  buyerEmail: varchar34("buyer_email", { length: 100 }),
   buyerAddress: text44("buyer_address"),
-  status: varchar33("status", { length: 20 }).default("requested").notNull(),
+  status: varchar34("status", { length: 20 }).default("requested").notNull(),
   pdfUrl: text44("pdf_url"),
-  createdAt: timestamp53("created_at").defaultNow(),
-  updatedAt: timestamp53("updated_at").defaultNow()
+  createdAt: timestamp54("created_at").defaultNow(),
+  updatedAt: timestamp54("updated_at").defaultNow()
 });
-function getDb64() {
+function getDb66() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL not configured");
-  return drizzle64(neon64(databaseUrl));
+  return drizzle66(neon66(databaseUrl));
 }
 async function getAuthenticatedUser2(req) {
   const authHeader = req.headers.authorization;
@@ -17884,15 +18197,15 @@ async function getAuthenticatedUser2(req) {
   if (error || !user) return null;
   return user;
 }
-async function handler78(req, res) {
+async function handler80(req, res) {
   const user = await getAuthenticatedUser2(req);
   if (!user) {
     return res.status(401).json({ error: "\uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4" });
   }
-  const db = getDb64();
+  const db = getDb66();
   if (req.method === "GET") {
     try {
-      const userInvoices = await db.select().from(taxInvoices3).where(eq54(taxInvoices3.userId, user.id)).orderBy(desc17(taxInvoices3.createdAt));
+      const userInvoices = await db.select().from(taxInvoices3).where(eq55(taxInvoices3.userId, user.id)).orderBy(desc17(taxInvoices3.createdAt));
       return res.status(200).json(userInvoices);
     } catch (error) {
       console.error("[TaxInvoices GET] Error:", error);
@@ -17953,13 +18266,13 @@ async function handler78(req, res) {
 // src/handlers/templates/index.ts
 var templates_exports2 = {};
 __export(templates_exports2, {
-  default: () => handler79
+  default: () => handler81
 });
 import { createClient as createClient40 } from "@supabase/supabase-js";
-import { neon as neon65 } from "@neondatabase/serverless";
-import { drizzle as drizzle65 } from "drizzle-orm/neon-http";
-import { eq as eq55, desc as desc18, and as and15, or as or8 } from "drizzle-orm";
-import { pgTable as pgTable57, text as text45, integer as integer29, timestamp as timestamp54, jsonb as jsonb19 } from "drizzle-orm/pg-core";
+import { neon as neon67 } from "@neondatabase/serverless";
+import { drizzle as drizzle67 } from "drizzle-orm/neon-http";
+import { eq as eq56, desc as desc18, and as and15, or as or8 } from "drizzle-orm";
+import { pgTable as pgTable58, text as text45, integer as integer29, timestamp as timestamp55, jsonb as jsonb19 } from "drizzle-orm/pg-core";
 import { z as z5 } from "zod";
 import { randomUUID as randomUUID4, createHmac as createHmac23 } from "crypto";
 var BIZCHAT_DEV_URL17 = process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443";
@@ -17984,7 +18297,7 @@ function bizChatStatusToLocal(bizChatStatus) {
       return "draft";
   }
 }
-var templates11 = pgTable57("templates", {
+var templates11 = pgTable58("templates", {
   id: text45("id").primaryKey(),
   userId: text45("user_id").notNull(),
   name: text45("name").notNull(),
@@ -18002,19 +18315,19 @@ var templates11 = pgTable57("templates", {
   lmsImageFileId: text45("lms_image_file_id"),
   lmsUrlLinks: jsonb19("lms_url_links"),
   status: text45("status").default("draft"),
-  submittedAt: timestamp54("submitted_at"),
-  reviewedAt: timestamp54("reviewed_at"),
+  submittedAt: timestamp55("submitted_at"),
+  reviewedAt: timestamp55("reviewed_at"),
   rejectionReason: text45("rejection_reason"),
-  createdAt: timestamp54("created_at").defaultNow(),
-  updatedAt: timestamp54("updated_at").defaultNow()
+  createdAt: timestamp55("created_at").defaultNow(),
+  updatedAt: timestamp55("updated_at").defaultNow()
 });
-var campaigns22 = pgTable57("campaigns", {
+var campaigns22 = pgTable58("campaigns", {
   id: text45("id").primaryKey(),
   userId: text45("user_id").notNull(),
   templateId: text45("template_id"),
-  completedAt: timestamp54("completed_at")
+  completedAt: timestamp55("completed_at")
 });
-var reports5 = pgTable57("reports", {
+var reports5 = pgTable58("reports", {
   id: text45("id").primaryKey(),
   campaignId: text45("campaign_id").notNull(),
   sentCount: integer29("sent_count").default(0),
@@ -18023,10 +18336,10 @@ var reports5 = pgTable57("reports", {
   failedCount: integer29("failed_count").default(0),
   clickCount: integer29("click_count").default(0)
 });
-function getDb65() {
+function getDb67() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle65(neon65(dbUrl));
+  return drizzle67(neon67(dbUrl));
 }
 function getSupabaseAdmin37() {
   const url = process.env.SUPABASE_URL;
@@ -18102,7 +18415,7 @@ async function syncBizChatTemplateStatuses(db, templateIds) {
       await db.update(templates11).set({
         status: localStatus,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq55(templates11.id, bct.id.toString()));
+      }).where(eq56(templates11.id, bct.id.toString()));
     }
     console.log(`[Templates] Synced ${statusMap.size} template statuses from BizChat`);
   } catch (error) {
@@ -18163,11 +18476,11 @@ var createTemplateSchema = z5.object({
   message: "RCS \uBA54\uC2DC\uC9C0\uC758 \uACBD\uC6B0 \uC77C\uBC18(LMS) \uBA54\uC2DC\uC9C0\uB3C4 \uD544\uC218\uB85C \uC785\uB825\uD574\uC8FC\uC138\uC694",
   path: ["lmsContent"]
 });
-async function handler79(req, res) {
+async function handler81(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   const auth = await verifyAuth33(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
-  const db = getDb65();
+  const db = getDb67();
   const userId = auth.userId;
   if (req.method === "GET") {
     try {
@@ -18175,16 +18488,16 @@ async function handler79(req, res) {
         console.error("[Templates] Background sync error:", err);
       });
       const SYSTEM_USER_ID = "system";
-      const templateList = await db.select().from(templates11).where(or8(eq55(templates11.userId, userId), eq55(templates11.userId, SYSTEM_USER_ID))).orderBy(desc18(templates11.createdAt));
+      const templateList = await db.select().from(templates11).where(or8(eq56(templates11.userId, userId), eq56(templates11.userId, SYSTEM_USER_ID))).orderBy(desc18(templates11.createdAt));
       await Promise.race([syncPromise, new Promise((resolve) => setTimeout(resolve, 3e3))]);
-      const updatedTemplateList = await db.select().from(templates11).where(or8(eq55(templates11.userId, userId), eq55(templates11.userId, SYSTEM_USER_ID))).orderBy(desc18(templates11.createdAt));
+      const updatedTemplateList = await db.select().from(templates11).where(or8(eq56(templates11.userId, userId), eq56(templates11.userId, SYSTEM_USER_ID))).orderBy(desc18(templates11.createdAt));
       const templatesWithStats = await Promise.all(
         updatedTemplateList.map(async (template) => {
-          const templateCampaigns = await db.select().from(campaigns22).where(and15(eq55(campaigns22.templateId, template.id), eq55(campaigns22.userId, userId)));
+          const templateCampaigns = await db.select().from(campaigns22).where(and15(eq56(campaigns22.templateId, template.id), eq56(campaigns22.userId, userId)));
           let totalSent = 0, totalDelivered = 0;
           let lastSentAt = null;
           for (const c of templateCampaigns) {
-            const reportResult = await db.select().from(reports5).where(eq55(reports5.campaignId, c.id));
+            const reportResult = await db.select().from(reports5).where(eq56(reports5.campaignId, c.id));
             const report = reportResult[0];
             if (report) {
               totalSent += report.sentCount || 0;
@@ -18247,16 +18560,16 @@ async function handler79(req, res) {
 // src/handlers/transactions/index.ts
 var transactions_exports2 = {};
 __export(transactions_exports2, {
-  default: () => handler80
+  default: () => handler82
 });
 import { createClient as createClient41 } from "@supabase/supabase-js";
-import { neon as neon66, neonConfig as neonConfig23 } from "@neondatabase/serverless";
+import { neon as neon68, neonConfig as neonConfig23 } from "@neondatabase/serverless";
 import { createHmac as createHmac24 } from "crypto";
-import { drizzle as drizzle66 } from "drizzle-orm/neon-http";
-import { eq as eq56, desc as desc19 } from "drizzle-orm";
-import { pgTable as pgTable58, text as text46, timestamp as timestamp55 } from "drizzle-orm/pg-core";
+import { drizzle as drizzle68 } from "drizzle-orm/neon-http";
+import { eq as eq57, desc as desc19 } from "drizzle-orm";
+import { pgTable as pgTable59, text as text46, timestamp as timestamp56 } from "drizzle-orm/pg-core";
 neonConfig23.fetchConnectionCache = true;
-var transactions14 = pgTable58("transactions", {
+var transactions14 = pgTable59("transactions", {
   id: text46("id").primaryKey(),
   userId: text46("user_id").notNull(),
   type: text46("type").notNull(),
@@ -18265,12 +18578,12 @@ var transactions14 = pgTable58("transactions", {
   description: text46("description"),
   paymentMethod: text46("payment_method"),
   stripeSessionId: text46("stripe_session_id"),
-  createdAt: timestamp55("created_at").defaultNow()
+  createdAt: timestamp56("created_at").defaultNow()
 });
-function getDb66() {
+function getDb68() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error("DATABASE_URL is not set");
-  return drizzle66(neon66(dbUrl));
+  return drizzle68(neon68(dbUrl));
 }
 function getSupabaseAdmin38() {
   const url = process.env.SUPABASE_URL;
@@ -18312,14 +18625,14 @@ async function verifyAuth34(req) {
     return null;
   }
 }
-async function handler80(req, res) {
+async function handler82(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   const auth = await verifyAuth34(req);
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const db = getDb66();
-    const result = await db.select().from(transactions14).where(eq56(transactions14.userId, auth.userId)).orderBy(desc19(transactions14.createdAt));
+    const db = getDb68();
+    const result = await db.select().from(transactions14).where(eq57(transactions14.userId, auth.userId)).orderBy(desc19(transactions14.createdAt));
     return res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching transactions:", error);
@@ -18358,6 +18671,7 @@ var routes = [
   { segments: ["admin", "agencies"], handler: agencies_exports },
   { segments: ["admin", "announcements"], handler: announcements_exports },
   { segments: ["admin", "campaigns"], handler: campaigns_exports },
+  { segments: ["admin", "funnel"], handler: funnel_exports },
   { segments: ["admin", "login"], handler: login_exports },
   { segments: ["admin", "logs"], handler: logs_exports },
   { segments: ["admin", "me"], handler: me_exports },
@@ -18386,6 +18700,7 @@ var routes = [
   { segments: ["credits", "policy"], handler: policy_exports },
   { segments: ["credits", "summary"], handler: summary_exports },
   { segments: ["dashboard", "stats"], handler: stats_exports4 },
+  { segments: ["events"], handler: events_exports },
   { segments: ["kispg", "auth"], handler: auth_exports },
   { segments: ["kispg", "callback"], handler: callback_exports },
   { segments: ["maptics", "geofences"], handler: geofences_exports },
@@ -18436,7 +18751,7 @@ function getPath(req) {
   if (i !== -1) return u.substring(i + 5).split("?")[0].split("/").filter(Boolean);
   return [];
 }
-async function handler81(req, res) {
+async function handler83(req, res) {
   const ps = getPath(req);
   const m = matchRoute(ps);
   if (!m) return res.status(404).json({ error: "Not found", path: ps.join("/") });
@@ -18452,5 +18767,5 @@ async function handler81(req, res) {
   }
 }
 export {
-  handler81 as default
+  handler83 as default
 };
