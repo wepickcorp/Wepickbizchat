@@ -101,7 +101,7 @@ const LOCAL_DEFAULT_USER_ID = "local-92063146aaba48a8d4ea5ee0";
 
 const CREDIT_PRODUCT_PRICES: Record<string, number> = {
   light: 100_000,
-  topup: 100_000,
+  topup: 150_000,
   booster: 500_000,
   enterprise: 1_000_000,
 };

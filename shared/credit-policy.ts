@@ -11,10 +11,10 @@ export const CREDIT_PRODUCTS = {
   topup: {
     productType: "topup",
     name: "추가 충전",
-    priceKrw: 100_000,
-    credits: 1_200,
-    messageCount: 600,
-    unitPriceKrw: 166.6667,
+    priceKrw: 150_000,
+    credits: 2_000,
+    messageCount: 1_000,
+    unitPriceKrw: 150,
     monthlyLimitCount: null,
   },
   booster: {

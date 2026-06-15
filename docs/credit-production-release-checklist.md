@@ -13,7 +13,7 @@ Use this checklist before enabling or deploying the credit-based campaign flow i
   - Light package can be purchased once per KST month.
 - Products:
   - Light: 100,000 KRW, 2,000C, monthly limit 1.
-  - Topup: 100,000 KRW, 1,200C.
+  - Topup: 150,000 KRW, 2,000C.
   - Booster: 500,000 KRW, 7,000C.
   - Enterprise: 1,000,000 KRW, 16,000C.
 - Existing sender-number policy is unchanged.

@@ -35,10 +35,10 @@ var CREDIT_PRODUCTS = {
   topup: {
     productType: "topup",
     name: "\uCD94\uAC00 \uCDA9\uC804",
-    priceKrw: 1e5,
-    credits: 1200,
-    messageCount: 600,
-    unitPriceKrw: 166.6667,
+    priceKrw: 15e4,
+    credits: 2e3,
+    messageCount: 1e3,
+    unitPriceKrw: 150,
     monthlyLimitCount: null
   },
   booster: {
