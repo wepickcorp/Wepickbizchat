@@ -19,6 +19,13 @@ const BIZCHAT_PROD_URL = process.env.BIZCHAT_PROD_API_URL || 'https://gw.bizchat
 const CALLBACK_BASE_URL = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : 'https://wepickbizchat-new.vercel.app';
+const DEBUG_BIZCHAT_LOGS = process.env.DEBUG_BIZCHAT_LOGS === 'true';
+
+function debugBizchatLog(message: string, ...args: unknown[]) {
+  if (DEBUG_BIZCHAT_LOGS) {
+    console.log(message, ...args);
+  }
+}
 
 // 지역명 → hcode 매핑 (BizChat API 규격 v0.29.0)
 const REGION_HCODE_MAP: Record<string, string> = {
@@ -105,7 +112,7 @@ function convertLegacySndMosuQuery(queryStr: string): { query: string; desc: str
       }
 
       const newQuery = { [operator]: validatedConditions };
-      console.log('[Submit] Validated sndMosuQuery:', JSON.stringify(newQuery));
+      debugBizchatLog('[Submit] Validated sndMosuQuery:', JSON.stringify(newQuery));
       return { query: JSON.stringify(newQuery), desc: descParts.join(', ') };
     }
 
@@ -213,7 +220,7 @@ function convertLegacySndMosuQuery(queryStr: string): { query: string; desc: str
     // BizChat API 규격: 루트 객체는 항상 $and 컨테이너여야 함
     const newQuery = { '$and': conditions };
     const result = JSON.stringify(newQuery);
-    console.log('[Submit] Converted legacy sndMosuQuery:', result);
+    debugBizchatLog('[Submit] Converted legacy sndMosuQuery:', result);
     return { query: result, desc: descParts.join(', ') };
   } catch (e) {
     console.error('[Submit] Failed to convert sndMosuQuery:', e);
@@ -465,8 +472,9 @@ async function createBizChatGeofence(
   const tid = generateTid();
 
   try {
-    console.log(`[Submit] Creating BizChat geofence: ${name}`);
-    console.log(`[Submit] Geofence targets:`, JSON.stringify(targets, null, 2));
+    console.log('[Submit] Creating BizChat geofence');
+    debugBizchatLog(`[Submit] Geofence name: ${name}`);
+    debugBizchatLog(`[Submit] Geofence targets:`, JSON.stringify(targets, null, 2));
 
     const response = await fetch(`${baseUrl}/api/v1/maptics/geofences/save?tid=${tid}`, {
       method: 'POST',
@@ -478,7 +486,7 @@ async function createBizChatGeofence(
     });
 
     const result = await response.json();
-    console.log(`[Submit] BizChat geofence create response:`, JSON.stringify(result));
+    debugBizchatLog(`[Submit] BizChat geofence create response:`, JSON.stringify(result));
 
     if (result.code === 'S000001' && result.data?.id) {
       console.log(`[Submit] BizChat geofence created successfully: ${result.data.id}`);
@@ -777,8 +785,8 @@ async function callATSMosuAPI(
   const tid = generateTid();
   const url = `${baseUrl}/api/v1/ats/mosu?tid=${tid}`;
 
-  console.log(`[ATS Mosu] POST ${url}`);
-  console.log(`[ATS Mosu] Payload:`, JSON.stringify(filterPayload, null, 2));
+  debugBizchatLog(`[ATS Mosu] POST ${url}`);
+  debugBizchatLog(`[ATS Mosu] Payload:`, JSON.stringify(filterPayload, null, 2));
 
   try {
     const response = await fetch(url, {
@@ -791,12 +799,12 @@ async function callATSMosuAPI(
     });
 
     const responseText = await response.text();
-    console.log(`[ATS Mosu] Response: ${response.status} - ${responseText.substring(0, 1000)}`);
+    debugBizchatLog(`[ATS Mosu] Response: ${response.status} - ${responseText.substring(0, 1000)}`);
 
     const data = JSON.parse(responseText);
 
     if (data.code === 'S000001' && data.data?.query) {
-      console.log(`[ATS Mosu] Success - query: ${data.data.query.substring(0, 200)}...`);
+      debugBizchatLog(`[ATS Mosu] Success - query: ${data.data.query.substring(0, 200)}...`);
       return {
         success: true,
         query: data.data.query, // SQL 형식의 query 문자열
@@ -959,7 +967,7 @@ async function callBizChatAPI(
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
 
-  console.log(`[BizChat] ${method} ${url}`);
+  debugBizchatLog(`[BizChat] ${method} ${url}`);
 
   const options: RequestInit = {
     method,
@@ -971,14 +979,13 @@ async function callBizChatAPI(
 
   if (body && method === 'POST') {
     options.body = JSON.stringify(body);
-    // 전체 Request body 로깅 (truncation 없이)
-    console.log(`[BizChat] Request body:`, JSON.stringify(body, null, 2));
+    debugBizchatLog(`[BizChat] Request body:`, JSON.stringify(body, null, 2));
   }
 
   const response = await fetch(url, options);
   const responseText = await response.text();
 
-  console.log(`[BizChat] Response: ${response.status} - ${responseText.substring(0, 500)}`);
+  debugBizchatLog(`[BizChat] Response: ${response.status} - ${responseText.substring(0, 500)}`);
 
   let data;
   try {
@@ -1391,14 +1398,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (isRcs) {
         console.log(`[Submit] RCS campaign MMS fallback mode: ${useLmsFallback ? 'SEPARATE (lms* fields)' : 'UNIFIED (using RCS fields as fallback)'}`);
-        console.log(`[Submit] MMS fallback details: lmsContent=${hasLmsContent}, fallbackContent length=${fallbackContent.length}, mmsImageFileId=${mmsImageFileId}, mmsUrlLinks=${mmsUrlList.length} urls`);
+        debugBizchatLog(`[Submit] MMS fallback details: lmsContent=${hasLmsContent}, fallbackContent length=${fallbackContent.length}, mmsImageFileId=${mmsImageFileId}, mmsUrlLinks=${mmsUrlList.length} urls`);
       }
 
       // 사용자가 작성한 본문을 그대로 전송 (안내 멘트 자동 합성 없음 - 폼 디폴트로 이동)
       const mmsMsg = fallbackContent;
-      console.log(`[Submit] MMS title: ${mmsTitle}`);
-      console.log(`[Submit] MMS msg (first 200 chars): ${mmsMsg.substring(0, 200)}`);
-      console.log(`[Submit] MMS msg (last 200 chars): ${mmsMsg.substring(mmsMsg.length - 200)}`);
+      debugBizchatLog(`[Submit] MMS title: ${mmsTitle}`);
+      debugBizchatLog(`[Submit] MMS msg (first 200 chars): ${mmsMsg.substring(0, 200)}`);
+      debugBizchatLog(`[Submit] MMS msg (last 200 chars): ${mmsMsg.substring(mmsMsg.length - 200)}`);
 
       const mmsObject: Record<string, unknown> = {
         title: mmsTitle,
@@ -1775,7 +1782,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           atsQuery: campaignTargetingForAts.atsQuery,
         });
         filterPayload = payload;
-        console.log('[Submit] Built ATS filter from targeting:', JSON.stringify(filterPayload, null, 2));
+        debugBizchatLog('[Submit] Built ATS filter from targeting:', JSON.stringify(filterPayload, null, 2));
       } else if (campaign.sndMosuQuery) {
         // fallback: campaign.sndMosuQuery 사용
         console.log('[Submit] Using campaign.sndMosuQuery as fallback...');
@@ -1800,7 +1807,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (hasFilterConditions) {
         console.log('[Submit] Calling ATS mosu API to get SQL query...');
-        console.log('[Submit] Filter payload:', JSON.stringify(filterPayload, null, 2));
+        debugBizchatLog('[Submit] Filter payload:', JSON.stringify(filterPayload, null, 2));
 
         // ATS mosu API 호출하여 SQL 형식의 query 획득
         const atsResult = await callATSMosuAPI(filterPayload, useProduction);
@@ -1809,7 +1816,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // ATS API 응답의 SQL query를 sndMosuQuery로 사용
           createPayload.sndMosuQuery = atsResult.query;
           atsFilterStr = atsResult.filterStr;
-          console.log('[Submit] sndMosuQuery (SQL from ATS):', atsResult.query.substring(0, 200) + '...');
+          debugBizchatLog('[Submit] sndMosuQuery (SQL from ATS):', atsResult.query.substring(0, 200) + '...');
           console.log('[Submit] ATS count:', atsResult.count);
         } else {
           // ATS API 실패 시 에러 반환
@@ -1831,7 +1838,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         createPayload.sndMosuDesc = isHtml
           ? desc
           : `<html><body><p>${desc}</p></body></html>`;
-        console.log('[Submit] sndMosuDesc:', createPayload.sndMosuDesc?.toString().substring(0, 200) + '...');
+        debugBizchatLog('[Submit] sndMosuDesc:', createPayload.sndMosuDesc?.toString().substring(0, 200) + '...');
       }
 
       // 10분 단위로 조정된 발송 시간 적용 (ATS 캠페인에서만 - Maptics는 collStartDate 사용)
@@ -1891,7 +1898,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       console.log('[Submit] Creating campaign in BizChat...');
-      console.log('[Submit] Full createPayload:', JSON.stringify(createPayload, null, 2));
+      debugBizchatLog('[Submit] Full createPayload:', JSON.stringify(createPayload, null, 2));
       const createResult = await callBizChatAPI('/api/v1/cmpn/create', 'POST', createPayload, useProduction);
 
       if (createResult.data.code !== 'S000001') {
@@ -2477,7 +2484,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           atsQuery: updateCampaignTargeting.atsQuery,
         });
         updateFilterPayload = payload;
-        console.log('[Submit Update] Built ATS filter from targeting:', JSON.stringify(updateFilterPayload, null, 2));
+        debugBizchatLog('[Submit Update] Built ATS filter from targeting:', JSON.stringify(updateFilterPayload, null, 2));
       } else if (campaign.sndMosuQuery) {
         // fallback: campaign.sndMosuQuery 사용
         console.log('[Submit Update] Using campaign.sndMosuQuery as fallback...');
@@ -2509,14 +2516,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (updateHasConditions) {
         console.log('[Submit Update] Calling ATS mosu API to get SQL query...');
-        console.log('[Submit Update] Filter payload:', JSON.stringify(updateFilterPayload, null, 2));
+        debugBizchatLog('[Submit Update] Filter payload:', JSON.stringify(updateFilterPayload, null, 2));
 
         const atsResult = await callATSMosuAPI(updateFilterPayload, useProduction);
 
         if (atsResult.success && atsResult.query) {
           updatePayload.sndMosuQuery = atsResult.query;
           updateAtsFilterStr = atsResult.filterStr;
-          console.log('[Submit Update] sndMosuQuery (SQL from ATS):', atsResult.query.substring(0, 200) + '...');
+          debugBizchatLog('[Submit Update] sndMosuQuery (SQL from ATS):', atsResult.query.substring(0, 200) + '...');
         } else {
           console.error('[Submit Update] ATS mosu API failed:', atsResult.error);
           return res.status(400).json({
@@ -2535,7 +2542,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       console.log('[Submit] Updating existing BizChat campaign...');
-      console.log('[Submit] Update payload:', JSON.stringify(updatePayload, null, 2));
+      debugBizchatLog('[Submit] Update payload:', JSON.stringify(updatePayload, null, 2));
 
       const updateResult = await callBizChatAPI(
         `/api/v1/cmpn/update?id=${campaign.bizchatCampaignId}`,

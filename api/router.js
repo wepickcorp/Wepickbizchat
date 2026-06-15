@@ -5038,6 +5038,12 @@ neonConfig9.fetchConnectionCache = true;
 var BIZCHAT_DEV_URL3 = process.env.BIZCHAT_DEV_API_URL || "https://gw-dev.bizchat1.co.kr:8443";
 var BIZCHAT_PROD_URL3 = process.env.BIZCHAT_PROD_API_URL || "https://gw.bizchat1.co.kr";
 var CALLBACK_BASE_URL = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://wepickbizchat-new.vercel.app";
+var DEBUG_BIZCHAT_LOGS = process.env.DEBUG_BIZCHAT_LOGS === "true";
+function debugBizchatLog(message, ...args) {
+  if (DEBUG_BIZCHAT_LOGS) {
+    console.log(message, ...args);
+  }
+}
 var REGION_HCODE_MAP = {
   "\uC11C\uC6B8": "11",
   "\uACBD\uAE30": "41",
@@ -5079,7 +5085,7 @@ function convertLegacySndMosuQuery(queryStr) {
         }
       }
       const newQuery2 = { [operator]: validatedConditions };
-      console.log("[Submit] Validated sndMosuQuery:", JSON.stringify(newQuery2));
+      debugBizchatLog("[Submit] Validated sndMosuQuery:", JSON.stringify(newQuery2));
       return { query: JSON.stringify(newQuery2), desc: descParts2.join(", ") };
     }
     if (parsed.metaType && parsed.dataType) {
@@ -5160,7 +5166,7 @@ function convertLegacySndMosuQuery(queryStr) {
     }
     const newQuery = { "$and": conditions };
     const result = JSON.stringify(newQuery);
-    console.log("[Submit] Converted legacy sndMosuQuery:", result);
+    debugBizchatLog("[Submit] Converted legacy sndMosuQuery:", result);
     return { query: result, desc: descParts.join(", ") };
   } catch (e) {
     console.error("[Submit] Failed to convert sndMosuQuery:", e);
@@ -5372,8 +5378,9 @@ async function createBizChatGeofence(name, targets, useProduction) {
   }
   const tid = generateTid();
   try {
-    console.log(`[Submit] Creating BizChat geofence: ${name}`);
-    console.log(`[Submit] Geofence targets:`, JSON.stringify(targets, null, 2));
+    console.log("[Submit] Creating BizChat geofence");
+    debugBizchatLog(`[Submit] Geofence name: ${name}`);
+    debugBizchatLog(`[Submit] Geofence targets:`, JSON.stringify(targets, null, 2));
     const response = await fetch(`${baseUrl}/api/v1/maptics/geofences/save?tid=${tid}`, {
       method: "POST",
       headers: {
@@ -5383,7 +5390,7 @@ async function createBizChatGeofence(name, targets, useProduction) {
       body: JSON.stringify({ name, target: targets })
     });
     const result = await response.json();
-    console.log(`[Submit] BizChat geofence create response:`, JSON.stringify(result));
+    debugBizchatLog(`[Submit] BizChat geofence create response:`, JSON.stringify(result));
     if (result.code === "S000001" && result.data?.id) {
       console.log(`[Submit] BizChat geofence created successfully: ${result.data.id}`);
       return { success: true, geofenceId: result.data.id };
@@ -5571,8 +5578,8 @@ async function callATSMosuAPI(filterPayload, useProduction = false) {
   }
   const tid = generateTid();
   const url = `${baseUrl}/api/v1/ats/mosu?tid=${tid}`;
-  console.log(`[ATS Mosu] POST ${url}`);
-  console.log(`[ATS Mosu] Payload:`, JSON.stringify(filterPayload, null, 2));
+  debugBizchatLog(`[ATS Mosu] POST ${url}`);
+  debugBizchatLog(`[ATS Mosu] Payload:`, JSON.stringify(filterPayload, null, 2));
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -5583,10 +5590,10 @@ async function callATSMosuAPI(filterPayload, useProduction = false) {
       body: JSON.stringify(filterPayload)
     });
     const responseText = await response.text();
-    console.log(`[ATS Mosu] Response: ${response.status} - ${responseText.substring(0, 1e3)}`);
+    debugBizchatLog(`[ATS Mosu] Response: ${response.status} - ${responseText.substring(0, 1e3)}`);
     const data = JSON.parse(responseText);
     if (data.code === "S000001" && data.data?.query) {
-      console.log(`[ATS Mosu] Success - query: ${data.data.query.substring(0, 200)}...`);
+      debugBizchatLog(`[ATS Mosu] Success - query: ${data.data.query.substring(0, 200)}...`);
       return {
         success: true,
         query: data.data.query,
@@ -5710,7 +5717,7 @@ async function callBizChatAPI(endpoint, method = "POST", body, useProduction = f
   const tid = generateTid();
   const separator = endpoint.includes("?") ? "&" : "?";
   const url = `${baseUrl}${endpoint}${separator}tid=${tid}`;
-  console.log(`[BizChat] ${method} ${url}`);
+  debugBizchatLog(`[BizChat] ${method} ${url}`);
   const options = {
     method,
     headers: {
@@ -5720,11 +5727,11 @@ async function callBizChatAPI(endpoint, method = "POST", body, useProduction = f
   };
   if (body && method === "POST") {
     options.body = JSON.stringify(body);
-    console.log(`[BizChat] Request body:`, JSON.stringify(body, null, 2));
+    debugBizchatLog(`[BizChat] Request body:`, JSON.stringify(body, null, 2));
   }
   const response = await fetch(url, options);
   const responseText = await response.text();
-  console.log(`[BizChat] Response: ${response.status} - ${responseText.substring(0, 500)}`);
+  debugBizchatLog(`[BizChat] Response: ${response.status} - ${responseText.substring(0, 500)}`);
   let data;
   try {
     data = JSON.parse(responseText);
@@ -6032,12 +6039,12 @@ async function handler22(req, res) {
       const mmsImageFileId = isRcs ? useLmsFallback ? lmsImageFileIdResolved : imageFileId : imageFileId;
       if (isRcs) {
         console.log(`[Submit] RCS campaign MMS fallback mode: ${useLmsFallback ? "SEPARATE (lms* fields)" : "UNIFIED (using RCS fields as fallback)"}`);
-        console.log(`[Submit] MMS fallback details: lmsContent=${hasLmsContent}, fallbackContent length=${fallbackContent.length}, mmsImageFileId=${mmsImageFileId}, mmsUrlLinks=${mmsUrlList.length} urls`);
+        debugBizchatLog(`[Submit] MMS fallback details: lmsContent=${hasLmsContent}, fallbackContent length=${fallbackContent.length}, mmsImageFileId=${mmsImageFileId}, mmsUrlLinks=${mmsUrlList.length} urls`);
       }
       const mmsMsg = fallbackContent;
-      console.log(`[Submit] MMS title: ${mmsTitle}`);
-      console.log(`[Submit] MMS msg (first 200 chars): ${mmsMsg.substring(0, 200)}`);
-      console.log(`[Submit] MMS msg (last 200 chars): ${mmsMsg.substring(mmsMsg.length - 200)}`);
+      debugBizchatLog(`[Submit] MMS title: ${mmsTitle}`);
+      debugBizchatLog(`[Submit] MMS msg (first 200 chars): ${mmsMsg.substring(0, 200)}`);
+      debugBizchatLog(`[Submit] MMS msg (last 200 chars): ${mmsMsg.substring(mmsMsg.length - 200)}`);
       const mmsObject = {
         title: mmsTitle,
         msg: mmsMsg,
@@ -6295,7 +6302,7 @@ async function handler22(req, res) {
           atsQuery: campaignTargetingForAts.atsQuery
         });
         filterPayload = payload;
-        console.log("[Submit] Built ATS filter from targeting:", JSON.stringify(filterPayload, null, 2));
+        debugBizchatLog("[Submit] Built ATS filter from targeting:", JSON.stringify(filterPayload, null, 2));
       } else if (campaign.sndMosuQuery) {
         console.log("[Submit] Using campaign.sndMosuQuery as fallback...");
         const queryString = typeof campaign.sndMosuQuery === "string" ? campaign.sndMosuQuery : JSON.stringify(campaign.sndMosuQuery);
@@ -6311,12 +6318,12 @@ async function handler22(req, res) {
       const hasFilterConditions = filterPayload["$and"] && filterPayload["$and"].length > 0;
       if (hasFilterConditions) {
         console.log("[Submit] Calling ATS mosu API to get SQL query...");
-        console.log("[Submit] Filter payload:", JSON.stringify(filterPayload, null, 2));
+        debugBizchatLog("[Submit] Filter payload:", JSON.stringify(filterPayload, null, 2));
         const atsResult = await callATSMosuAPI(filterPayload, useProduction);
         if (atsResult.success && atsResult.query) {
           createPayload.sndMosuQuery = atsResult.query;
           atsFilterStr = atsResult.filterStr;
-          console.log("[Submit] sndMosuQuery (SQL from ATS):", atsResult.query.substring(0, 200) + "...");
+          debugBizchatLog("[Submit] sndMosuQuery (SQL from ATS):", atsResult.query.substring(0, 200) + "...");
           console.log("[Submit] ATS count:", atsResult.count);
         } else {
           console.error("[Submit] ATS mosu API failed:", atsResult.error);
@@ -6332,7 +6339,7 @@ async function handler22(req, res) {
         const desc20 = atsFilterStr || campaign.sndMosuDesc || "";
         const isHtml = desc20.startsWith("<html>") || desc20.includes("<body>") || desc20.includes("<table>");
         createPayload.sndMosuDesc = isHtml ? desc20 : `<html><body><p>${desc20}</p></body></html>`;
-        console.log("[Submit] sndMosuDesc:", createPayload.sndMosuDesc?.toString().substring(0, 200) + "...");
+        debugBizchatLog("[Submit] sndMosuDesc:", createPayload.sndMosuDesc?.toString().substring(0, 200) + "...");
       }
       if (adjustedSendDate && !isMapticsCampaign) {
         const adjustedTimestamp = toUnixTimestamp(
@@ -6366,7 +6373,7 @@ async function handler22(req, res) {
         }
       }
       console.log("[Submit] Creating campaign in BizChat...");
-      console.log("[Submit] Full createPayload:", JSON.stringify(createPayload, null, 2));
+      debugBizchatLog("[Submit] Full createPayload:", JSON.stringify(createPayload, null, 2));
       const createResult = await callBizChatAPI("/api/v1/cmpn/create", "POST", createPayload, useProduction);
       if (createResult.data.code !== "S000001") {
         console.error("[Submit] BizChat API error:", createResult.data);
@@ -6782,7 +6789,7 @@ async function handler22(req, res) {
           atsQuery: updateCampaignTargeting.atsQuery
         });
         updateFilterPayload = payload;
-        console.log("[Submit Update] Built ATS filter from targeting:", JSON.stringify(updateFilterPayload, null, 2));
+        debugBizchatLog("[Submit Update] Built ATS filter from targeting:", JSON.stringify(updateFilterPayload, null, 2));
       } else if (campaign.sndMosuQuery) {
         console.log("[Submit Update] Using campaign.sndMosuQuery as fallback...");
         const queryString = typeof campaign.sndMosuQuery === "string" ? campaign.sndMosuQuery : JSON.stringify(campaign.sndMosuQuery);
@@ -6805,12 +6812,12 @@ async function handler22(req, res) {
       const updateHasConditions = updateFilterPayload["$and"] && updateFilterPayload["$and"].length > 0;
       if (updateHasConditions) {
         console.log("[Submit Update] Calling ATS mosu API to get SQL query...");
-        console.log("[Submit Update] Filter payload:", JSON.stringify(updateFilterPayload, null, 2));
+        debugBizchatLog("[Submit Update] Filter payload:", JSON.stringify(updateFilterPayload, null, 2));
         const atsResult = await callATSMosuAPI(updateFilterPayload, useProduction);
         if (atsResult.success && atsResult.query) {
           updatePayload.sndMosuQuery = atsResult.query;
           updateAtsFilterStr = atsResult.filterStr;
-          console.log("[Submit Update] sndMosuQuery (SQL from ATS):", atsResult.query.substring(0, 200) + "...");
+          debugBizchatLog("[Submit Update] sndMosuQuery (SQL from ATS):", atsResult.query.substring(0, 200) + "...");
         } else {
           console.error("[Submit Update] ATS mosu API failed:", atsResult.error);
           return res.status(400).json({
@@ -6827,7 +6834,7 @@ async function handler22(req, res) {
         updatePayload.sndMosuDesc = isHtml ? desc20 : `<html><body><p>${desc20}</p></body></html>`;
       }
       console.log("[Submit] Updating existing BizChat campaign...");
-      console.log("[Submit] Update payload:", JSON.stringify(updatePayload, null, 2));
+      debugBizchatLog("[Submit] Update payload:", JSON.stringify(updatePayload, null, 2));
       const updateResult = await callBizChatAPI(
         `/api/v1/cmpn/update?id=${campaign.bizchatCampaignId}`,
         "POST",
